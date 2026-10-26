@@ -1,0 +1,1 @@
+ALTER TABLE users MODIFY (username VARCHAR2(320 CHAR));

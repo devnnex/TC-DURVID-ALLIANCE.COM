@@ -1,0 +1,12 @@
+node_modules/
+dist/
+admin/
+.env
+.env.*
+!.env.example
+*.log
+wallet/
+exports/
+test-results/
+playwright-report/
+.tools/

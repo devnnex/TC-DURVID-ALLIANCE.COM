@@ -1,0 +1,11 @@
+import { cp,mkdir,readFile,writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { resolve,join,sep } from 'node:path';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const target=resolve(root,'admin'),source=resolve(root,'dist/admin');
+if(!target.startsWith(resolve(root)+sep)||target===resolve(root))throw new Error('Destino de frontend inválido.');
+await readFile(join(source,'index.html'));
+await mkdir(target,{recursive:true});
+await cp(source,target,{recursive:true});
+await writeFile(join(target,'.alliance-generated'),'Frontend compilado. Edita apps/web; npm run build actualiza esta carpeta.\n');
+console.log('Frontend preparado: abre index.html con Live Server y entra a Centro operativo.');

@@ -1,0 +1,4 @@
+DECLARE n NUMBER;BEGIN SELECT char_length INTO n FROM user_tab_columns WHERE table_name='USERS' AND column_name='USERNAME';IF n<320 THEN EXECUTE IMMEDIATE 'ALTER TABLE users MODIFY (username VARCHAR2(320 CHAR))';END IF;END;
+/
+DECLARE n NUMBER;BEGIN SELECT char_length INTO n FROM user_tab_columns WHERE table_name='ALLIANCE_AUTH_CHALLENGES' AND column_name='USERNAME';IF n<320 THEN EXECUTE IMMEDIATE 'ALTER TABLE alliance_auth_challenges MODIFY (username VARCHAR2(320 CHAR))';END IF;SELECT data_length INTO n FROM user_tab_columns WHERE table_name='ALLIANCE_AUTH_CHALLENGES' AND column_name='MESSAGE';IF n<4000 THEN EXECUTE IMMEDIATE 'ALTER TABLE alliance_auth_challenges MODIFY (message VARCHAR2(4000 BYTE))';END IF;END;
+/

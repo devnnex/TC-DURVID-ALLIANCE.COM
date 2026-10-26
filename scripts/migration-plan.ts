@@ -1,0 +1,11 @@
+import { readFile,writeFile } from 'node:fs/promises';
+import { z } from 'zod';
+import { uuid } from '../packages/shared/domain.js';
+const args=process.argv.slice(2);const arg=(key:string)=>args[args.indexOf(key)+1];
+const input=arg('--input'),business=uuid.parse(arg('--business')),location=uuid.parse(arg('--location'));
+if(!input)throw new Error('Usa --input export.json --business UUID --location UUID');
+const raw=JSON.parse(await readFile(input,'utf8'));
+const data=z.object({source:z.string().min(1),products:z.array(z.object({id:uuid,name:z.string().min(1).max(160),price:z.string().regex(/^\d+(\.\d{1,2})?$/),category:z.string().min(1).max(80)}).strict())}).strict().parse(raw);
+if(new Set(data.products.map(p=>p.id)).size!==data.products.length)throw new Error('IDs duplicados en el export.');
+const products=data.products.map(p=>{const [whole,fraction='']=p.price.split('.');return {...p,price_minor:(BigInt(whole)*100n+BigInt(fraction.padEnd(2,'0'))).toString()};});
+const output=input+'.plan.json';await writeFile(output,JSON.stringify({mode:'DRY_RUN',source:data.source,business_id:business,location_id:location,products,warnings:['Asignar SKU y unidades antes de importar.','No contiene usuarios ni datos financieros.','Revisar colisiones entre fuentes.']},null,2));console.log(`Plan sin escrituras: ${output}`);

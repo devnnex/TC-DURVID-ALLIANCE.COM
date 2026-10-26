@@ -1,0 +1,1885 @@
+{
+  "source": "Recetas Jespresso Oliva.xlsx",
+  "sheets": [
+    "DESGRANADOS",
+    "Salsa Tartara",
+    "MASA PARA EMPANADAS",
+    "PAN DE BONO",
+    "PIZZETAS",
+    "BURRITOS",
+    "EMPANADAS",
+    "HELADOS",
+    "SYRUP SIMPLE",
+    "SYRUP",
+    "COCKTAIL",
+    "PIÑA COLADA DE CAFE",
+    "LIMONADA COCO",
+    "LIMONADA CEREZADA",
+    "MOCKTAIL",
+    "DEDITOS DE QUESO",
+    "DEDITOS DE SALCHICHA",
+    "PARTFAIT",
+    "FRESAS CON CREMA",
+    "LATTE . LATTE VAINILLA ",
+    "MOCKA",
+    "CAPUCHINO",
+    "CHOCOLATE",
+    "AMERICANO",
+    "FRAPUCHINOS",
+    "MALTEADAS",
+    "MANTEQUILLA"
+  ],
+  "rows": [
+    {
+      "sheet": "DESGRANADOS",
+      "variant": "DESGRANADOS",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 1920,
+      "quantity": 600,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "DESGRANADOS",
+      "variant": "DESGRANADOS",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 13900,
+      "quantity": 1000,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "DESGRANADOS",
+      "variant": "DESGRANADOS",
+      "cell": "L8",
+      "formula": "(K8/J8)*I8",
+      "cached": 3200,
+      "quantity": 2,
+      "purchaseQuantity": 10,
+      "unit": "unit"
+    },
+    {
+      "sheet": "DESGRANADOS",
+      "variant": "DESGRANADOS",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 4400,
+      "quantity": 200,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "DESGRANADOS",
+      "variant": "DESGRANADOS",
+      "cell": "L10",
+      "formula": "(K10/1000)*I10",
+      "cached": 1200,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "DESGRANADOS",
+      "variant": "DESGRANADOS",
+      "cell": "L11",
+      "formula": "(K11/1000)*I11",
+      "cached": 3800,
+      "quantity": 200,
+      "purchaseQuantity": 1000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "DESGRANADOS",
+      "variant": "DESGRANADOS",
+      "cell": "L12",
+      "formula": "(K12/1000)*I12",
+      "cached": 17500,
+      "quantity": 700,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "DESGRANADOS",
+      "variant": "DESGRANADOS",
+      "cell": "L13",
+      "formula": "(K13/1000)*I13",
+      "cached": 3052.5,
+      "quantity": 75,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "DESGRANADOS",
+      "variant": "DESGRANADOS",
+      "cell": "L14",
+      "formula": "K14",
+      "cached": 4392,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "Salsa Tartara",
+      "variant": "Salsa Tartara",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 13020,
+      "quantity": 280,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "Salsa Tartara",
+      "variant": "Salsa Tartara",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 436.8,
+      "quantity": 13,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "Salsa Tartara",
+      "variant": "Salsa Tartara",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 1508,
+      "quantity": 65,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "Salsa Tartara",
+      "variant": "Salsa Tartara",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 255,
+      "quantity": 17,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "Salsa Tartara",
+      "variant": "Salsa Tartara",
+      "cell": "L10",
+      "formula": "(K10/1000)*I10",
+      "cached": 144,
+      "quantity": 12,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "Salsa Tartara",
+      "variant": "Salsa Tartara",
+      "cell": "L11",
+      "formula": "(K11/1000)*I11",
+      "cached": 198,
+      "quantity": 44,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "Salsa Tartara",
+      "variant": "Salsa Tartara",
+      "cell": "L12",
+      "formula": "(K12/1000)*I12",
+      "cached": 270,
+      "quantity": 18,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "Salsa Tartara",
+      "variant": "Salsa Tartara",
+      "cell": "L13",
+      "formula": "(K13/1000)*I13",
+      "cached": 118.80000000000001,
+      "quantity": 27,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MASA PARA EMPANADAS",
+      "variant": "MASA PARA EMPANADAS",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 5000,
+      "quantity": 1000,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MASA PARA EMPANADAS",
+      "variant": "MASA PARA EMPANADAS",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 1800,
+      "quantity": 200,
+      "purchaseQuantity": 1000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "MASA PARA EMPANADAS",
+      "variant": "MASA PARA EMPANADAS",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 1400,
+      "quantity": 200,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MASA PARA EMPANADAS",
+      "variant": "MASA PARA EMPANADAS",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 40,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MASA PARA EMPANADAS",
+      "variant": "MASA PARA EMPANADAS",
+      "cell": "L10",
+      "formula": "(K10/1000)*I10",
+      "cached": 500,
+      "quantity": 100,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MASA PARA EMPANADAS",
+      "variant": "MASA PARA EMPANADAS",
+      "cell": "L11",
+      "formula": "(K11/J11)*I11",
+      "cached": 1133.3333333333333,
+      "quantity": 2,
+      "purchaseQuantity": 30,
+      "unit": "unit"
+    },
+    {
+      "sheet": "PAN DE BONO",
+      "variant": "PAN DE BONO",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 12600,
+      "quantity": 1000,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PAN DE BONO",
+      "variant": "PAN DE BONO",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 10000,
+      "quantity": 500,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PAN DE BONO",
+      "variant": "PAN DE BONO",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 10000,
+      "quantity": 500,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PAN DE BONO",
+      "variant": "PAN DE BONO",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 1750,
+      "quantity": 250,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PAN DE BONO",
+      "variant": "PAN DE BONO",
+      "cell": "L10",
+      "formula": "(K10/1000)*I10",
+      "cached": 240,
+      "quantity": 12,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIZZETAS",
+      "variant": "PIZZETAS",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 1875,
+      "quantity": 75,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIZZETAS",
+      "variant": "PIZZETAS",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 123,
+      "quantity": 40,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIZZETAS",
+      "variant": "PIZZETAS",
+      "cell": "L8",
+      "formula": "K8/(I8/J8)",
+      "cached": 2166.6666666666665,
+      "quantity": 250,
+      "purchaseQuantity": 1500,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIZZETAS",
+      "variant": "PIZZETAS",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 200,
+      "quantity": 20,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIZZETAS",
+      "variant": "PIZZETAS",
+      "cell": "L10",
+      "formula": "K10*J10",
+      "cached": 832.5,
+      "quantity": 0.333,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "PIZZETAS",
+      "variant": "PIZZETAS",
+      "cell": "L11",
+      "formula": "(I11/1000)*K11",
+      "cached": 4000,
+      "quantity": 200,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIZZETAS",
+      "variant": "PIZZETAS",
+      "cell": "L12",
+      "formula": "(K12/J12)*I12",
+      "cached": 3463.157894736842,
+      "quantity": 7,
+      "purchaseQuantity": 95,
+      "unit": "unit"
+    },
+    {
+      "sheet": "PIZZETAS",
+      "variant": "PIZZETAS",
+      "cell": "L13",
+      "formula": "K13",
+      "cached": 1000,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "PIZZETAS",
+      "variant": "PIZZETAS",
+      "cell": "L14",
+      "formula": "K14/J14",
+      "cached": 340,
+      "quantity": 1,
+      "purchaseQuantity": 50,
+      "unit": "unit"
+    },
+    {
+      "sheet": "BURRITOS",
+      "variant": "BURRITOS",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 1750,
+      "quantity": 70,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "BURRITOS",
+      "variant": "BURRITOS",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 123,
+      "quantity": 40,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "BURRITOS",
+      "variant": "BURRITOS",
+      "cell": "L8",
+      "formula": "K8/J8",
+      "cached": 875,
+      "quantity": 1,
+      "purchaseQuantity": 8,
+      "unit": "unit"
+    },
+    {
+      "sheet": "BURRITOS",
+      "variant": "BURRITOS",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 200,
+      "quantity": 20,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "BURRITOS",
+      "variant": "BURRITOS",
+      "cell": "L10",
+      "formula": "K10/J10*I10",
+      "cached": 1250,
+      "quantity": 40,
+      "purchaseQuantity": 80,
+      "unit": "unit"
+    },
+    {
+      "sheet": "BURRITOS",
+      "variant": "BURRITOS",
+      "cell": "L11",
+      "formula": "(K11/J11)*I11",
+      "cached": 333.3333333333333,
+      "quantity": 1,
+      "purchaseQuantity": 30,
+      "unit": "unit"
+    },
+    {
+      "sheet": "BURRITOS",
+      "variant": "BURRITOS",
+      "cell": "L12",
+      "formula": "(K12/J12)*I12",
+      "cached": 494.7368421052632,
+      "quantity": 1,
+      "purchaseQuantity": 95,
+      "unit": "unit"
+    },
+    {
+      "sheet": "EMPANADAS",
+      "variant": "EMPANADAS",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 750,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "EMPANADAS",
+      "variant": "EMPANADAS",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 30.75,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "EMPANADAS",
+      "variant": "EMPANADAS",
+      "cell": "L8",
+      "formula": "K8/J8",
+      "cached": 641.75,
+      "quantity": 1,
+      "purchaseQuantity": 20,
+      "unit": "unit"
+    },
+    {
+      "sheet": "HELADOS",
+      "variant": "HELADOS",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 5400,
+      "quantity": 1000,
+      "purchaseQuantity": 1000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "HELADOS",
+      "variant": "HELADOS",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 1900,
+      "quantity": 100,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "HELADOS",
+      "variant": "HELADOS",
+      "cell": "L8",
+      "formula": "J8*K8",
+      "cached": 10500,
+      "quantity": 3,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "HELADOS",
+      "variant": "HELADOS",
+      "cell": "L12",
+      "formula": "K12/J12",
+      "cached": 760,
+      "quantity": 1,
+      "purchaseQuantity": 15,
+      "unit": "unit"
+    },
+    {
+      "sheet": "HELADOS",
+      "variant": "HELADOS",
+      "cell": "L13",
+      "formula": "(K13/1000)*I13",
+      "cached": 132,
+      "quantity": 12,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "HELADOS",
+      "variant": "HELADOS",
+      "cell": "L14",
+      "formula": "(K14/1000)*I14",
+      "cached": 600,
+      "quantity": 40,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "HELADOS",
+      "variant": "HELADOS",
+      "cell": "L15",
+      "formula": "(K15/1000)*I15",
+      "cached": 400,
+      "quantity": 20,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "HELADOS",
+      "variant": "HELADOS",
+      "cell": "L16",
+      "formula": null,
+      "cached": 252,
+      "quantity": 12,
+      "purchaseQuantity": 1,
+      "unit": "unit",
+      "manualCost": 252
+    },
+    {
+      "sheet": "SYRUP SIMPLE",
+      "variant": "SYRUP SIMPLE",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 1560,
+      "quantity": 13,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "SYRUP SIMPLE",
+      "variant": "SYRUP SIMPLE",
+      "cell": "L7",
+      "formula": "(K7/2500)*I7",
+      "cached": 880.0000000000001,
+      "quantity": 200,
+      "purchaseQuantity": 2500,
+      "unit": "g"
+    },
+    {
+      "sheet": "SYRUP SIMPLE",
+      "variant": "SYRUP SIMPLE",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 1000,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "SYRUP SIMPLE",
+      "variant": "SYRUP SIMPLE",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 1200,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "SYRUP",
+      "variant": "SYRUP",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 11500,
+      "quantity": 500,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "SYRUP",
+      "variant": "SYRUP",
+      "cell": "L7",
+      "formula": "(K7/2500)*I7",
+      "cached": 880.0000000000001,
+      "quantity": 200,
+      "purchaseQuantity": 2500,
+      "unit": "g"
+    },
+    {
+      "sheet": "COCKTAIL",
+      "variant": "COCKTAIL",
+      "cell": "L6",
+      "formula": "(K6/2500)*I6",
+      "cached": 341.99999999999994,
+      "quantity": 150,
+      "purchaseQuantity": 2500,
+      "unit": "ml"
+    },
+    {
+      "sheet": "COCKTAIL",
+      "variant": "COCKTAIL",
+      "cell": "L7",
+      "formula": "(K7/5000)*I7",
+      "cached": 120,
+      "quantity": 120,
+      "purchaseQuantity": 5000,
+      "unit": "g"
+    },
+    {
+      "sheet": "COCKTAIL",
+      "variant": "COCKTAIL",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 1125,
+      "quantity": 75,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "COCKTAIL",
+      "variant": "COCKTAIL",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 355.2,
+      "quantity": 30,
+      "purchaseQuantity": 1000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "COCKTAIL",
+      "variant": "COCKTAIL",
+      "cell": "L10",
+      "formula": "(K10/2000)*I10",
+      "cached": 435,
+      "quantity": 60,
+      "purchaseQuantity": 2000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "COCKTAIL",
+      "variant": "COCKTAIL",
+      "cell": "L11",
+      "formula": "(K11/1000)*I11",
+      "cached": 2229,
+      "quantity": 30,
+      "purchaseQuantity": 1000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "COCKTAIL",
+      "variant": "COCKTAIL",
+      "cell": "L12",
+      "formula": "(K12/1000)*I12",
+      "cached": 1245,
+      "quantity": 30,
+      "purchaseQuantity": 1000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "COCKTAIL",
+      "variant": "COCKTAIL",
+      "cell": "L13",
+      "formula": "(K13/1000)*I13",
+      "cached": 75,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "COCKTAIL",
+      "variant": "COCKTAIL",
+      "cell": "L14",
+      "formula": "(K14/1000)*I14",
+      "cached": 150,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIÑA COLADA DE CAFE",
+      "variant": "PIÑA COLADA DE CAFE",
+      "cell": "L6",
+      "formula": "(K6/2500)*I6",
+      "cached": 180,
+      "quantity": 50,
+      "purchaseQuantity": 2500,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIÑA COLADA DE CAFE",
+      "variant": "PIÑA COLADA DE CAFE",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 660,
+      "quantity": 60,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIÑA COLADA DE CAFE",
+      "variant": "PIÑA COLADA DE CAFE",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 357,
+      "quantity": 30,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIÑA COLADA DE CAFE",
+      "variant": "PIÑA COLADA DE CAFE",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 950,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PIÑA COLADA DE CAFE",
+      "variant": "PIÑA COLADA DE CAFE",
+      "cell": "L10",
+      "formula": "(K10/2000)*I10",
+      "cached": 1590,
+      "quantity": 60,
+      "purchaseQuantity": 2000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "PIÑA COLADA DE CAFE",
+      "variant": "PIÑA COLADA DE CAFE",
+      "cell": "L11",
+      "formula": "(K11/165)*I11",
+      "cached": 696.969696969697,
+      "quantity": 5,
+      "purchaseQuantity": 165,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA COCO",
+      "variant": "LIMONADA COCO",
+      "cell": "L6",
+      "formula": "(K6/1200)*I6",
+      "cached": 500,
+      "quantity": 20,
+      "purchaseQuantity": 1200,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA COCO",
+      "variant": "LIMONADA COCO",
+      "cell": "L7",
+      "formula": "(K7/5000)*I7",
+      "cached": 160,
+      "quantity": 200,
+      "purchaseQuantity": 5000,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA COCO",
+      "variant": "LIMONADA COCO",
+      "cell": "L8",
+      "formula": "(K8/2000)*I8",
+      "cached": 326.25,
+      "quantity": 45,
+      "purchaseQuantity": 2000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "LIMONADA COCO",
+      "variant": "LIMONADA COCO",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 110,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA COCO",
+      "variant": "LIMONADA COCO",
+      "cell": "L10",
+      "formula": "(K10/1000)*I10",
+      "cached": 75,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA COCO",
+      "variant": "LIMONADA COCO",
+      "cell": "L11",
+      "formula": "(K11/1000)*I11",
+      "cached": 150,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA COCO",
+      "variant": "LIMONADA COCO",
+      "cell": "L12",
+      "formula": "(K12/1000)*I12",
+      "cached": 950,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA COCO",
+      "variant": "LIMONADA COCO",
+      "cell": "L13",
+      "formula": "(K13/1000)*I13",
+      "cached": 570,
+      "quantity": 150,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA CEREZADA",
+      "variant": "LIMONADA CEREZADA",
+      "cell": "L6",
+      "formula": "(K6/2400)*I6",
+      "cached": 2875,
+      "quantity": 60,
+      "purchaseQuantity": 2400,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA CEREZADA",
+      "variant": "LIMONADA CEREZADA",
+      "cell": "L7",
+      "formula": "(K7/5000)*I7",
+      "cached": 160,
+      "quantity": 200,
+      "purchaseQuantity": 5000,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA CEREZADA",
+      "variant": "LIMONADA CEREZADA",
+      "cell": "L8",
+      "formula": "(K8/2000)*I8",
+      "cached": 435,
+      "quantity": 60,
+      "purchaseQuantity": 2000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "LIMONADA CEREZADA",
+      "variant": "LIMONADA CEREZADA",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 110,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA CEREZADA",
+      "variant": "LIMONADA CEREZADA",
+      "cell": "L10",
+      "formula": "(K10/1000)*I10",
+      "cached": 75,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "LIMONADA CEREZADA",
+      "variant": "LIMONADA CEREZADA",
+      "cell": "L11",
+      "formula": "(K11/1000)*I11",
+      "cached": 150,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MOCKTAIL",
+      "variant": "MOCKTAIL",
+      "cell": "L6",
+      "formula": "(K6/2500)*I6",
+      "cached": 341.99999999999994,
+      "quantity": 150,
+      "purchaseQuantity": 2500,
+      "unit": "ml"
+    },
+    {
+      "sheet": "MOCKTAIL",
+      "variant": "MOCKTAIL",
+      "cell": "L7",
+      "formula": "(K7/5000)*I7",
+      "cached": 96,
+      "quantity": 120,
+      "purchaseQuantity": 5000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MOCKTAIL",
+      "variant": "MOCKTAIL",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 1125,
+      "quantity": 75,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MOCKTAIL",
+      "variant": "MOCKTAIL",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 355.2,
+      "quantity": 30,
+      "purchaseQuantity": 1000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "MOCKTAIL",
+      "variant": "MOCKTAIL",
+      "cell": "L10",
+      "formula": "(K10/2000)*I10",
+      "cached": 435,
+      "quantity": 60,
+      "purchaseQuantity": 2000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "MOCKTAIL",
+      "variant": "MOCKTAIL",
+      "cell": "L11",
+      "formula": "(K11/1000)*I11",
+      "cached": 75,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MOCKTAIL",
+      "variant": "MOCKTAIL",
+      "cell": "L12",
+      "formula": "(K12/1000)*I12",
+      "cached": 150,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "DEDITOS DE QUESO",
+      "variant": "DEDITOS DE QUESO",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 1000,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "DEDITOS DE QUESO",
+      "variant": "DEDITOS DE QUESO",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 170,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "DEDITOS DE SALCHICHA",
+      "variant": "DEDITOS DE SALCHICHA",
+      "cell": "L6",
+      "formula": "K6/J6",
+      "cached": 1595,
+      "quantity": 1,
+      "purchaseQuantity": 10,
+      "unit": "unit"
+    },
+    {
+      "sheet": "DEDITOS DE SALCHICHA",
+      "variant": "DEDITOS DE SALCHICHA",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 170,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PARTFAIT",
+      "variant": "PARTFAIT",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 4500,
+      "quantity": 150,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PARTFAIT",
+      "variant": "PARTFAIT",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 320,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PARTFAIT",
+      "variant": "PARTFAIT",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 1350,
+      "quantity": 150,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "PARTFAIT",
+      "variant": "PARTFAIT",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 1200,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRESAS CON CREMA",
+      "variant": "FRESAS CON CREMA",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 840,
+      "quantity": 70,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRESAS CON CREMA",
+      "variant": "FRESAS CON CREMA",
+      "cell": "L7",
+      "formula": "(K7/900)*I7",
+      "cached": 1688.888888888889,
+      "quantity": 80,
+      "purchaseQuantity": 900,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRESAS CON CREMA",
+      "variant": "FRESAS CON CREMA",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 500,
+      "quantity": 100,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRESAS CON CREMA",
+      "variant": "FRESAS CON CREMA",
+      "cell": "L9",
+      "formula": "K9/J9",
+      "cached": 791.6666666666666,
+      "quantity": 1,
+      "purchaseQuantity": 12,
+      "unit": "unit"
+    },
+    {
+      "sheet": "LATTE . LATTE VAINILLA ",
+      "variant": "LATTE . LATTE VAINILLA",
+      "cell": "L6",
+      "formula": "(K6/2500)*I6",
+      "cached": 456,
+      "quantity": 10,
+      "purchaseQuantity": 2500,
+      "unit": "g"
+    },
+    {
+      "sheet": "LATTE . LATTE VAINILLA ",
+      "variant": "LATTE . LATTE VAINILLA",
+      "cell": "L7",
+      "formula": "K7/J7",
+      "cached": 35,
+      "quantity": 1,
+      "purchaseQuantity": 200,
+      "unit": "unit"
+    },
+    {
+      "sheet": "LATTE . LATTE VAINILLA ",
+      "variant": "LATTE . LATTE VAINILLA",
+      "cell": "L8",
+      "formula": "(K8/900)*I8",
+      "cached": 822.2222222222222,
+      "quantity": 200,
+      "purchaseQuantity": 900,
+      "unit": "ml"
+    },
+    {
+      "sheet": "LATTE . LATTE VAINILLA ",
+      "variant": "LATTE . LATTE VAINILLA",
+      "cell": "L9",
+      "formula": "K9/J9",
+      "cached": 316.6666666666667,
+      "quantity": 1,
+      "purchaseQuantity": 30,
+      "unit": "unit"
+    },
+    {
+      "sheet": "LATTE . LATTE VAINILLA ",
+      "variant": "LATTE . LATTE VAINILLA",
+      "cell": "L10",
+      "formula": "K10/J10",
+      "cached": 190,
+      "quantity": 1,
+      "purchaseQuantity": 100,
+      "unit": "unit"
+    },
+    {
+      "sheet": "LATTE . LATTE VAINILLA ",
+      "variant": "LATTE . LATTE VAINILLA",
+      "cell": "L11",
+      "formula": "K11/J11",
+      "cached": 14,
+      "quantity": 1,
+      "purchaseQuantity": 500,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MOCKA",
+      "variant": "MOCKA",
+      "cell": "L6",
+      "formula": "(K6/2500)*I6",
+      "cached": 456,
+      "quantity": 10,
+      "purchaseQuantity": 2500,
+      "unit": "g"
+    },
+    {
+      "sheet": "MOCKA",
+      "variant": "MOCKA",
+      "cell": "L7",
+      "formula": "K7/J7",
+      "cached": 35,
+      "quantity": 1,
+      "purchaseQuantity": 200,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MOCKA",
+      "variant": "MOCKA",
+      "cell": "L8",
+      "formula": "(K8/900)*I8",
+      "cached": 822.2222222222222,
+      "quantity": 200,
+      "purchaseQuantity": 900,
+      "unit": "ml"
+    },
+    {
+      "sheet": "MOCKA",
+      "variant": "MOCKA",
+      "cell": "L9",
+      "formula": "K9/J9",
+      "cached": 316.6666666666667,
+      "quantity": 1,
+      "purchaseQuantity": 30,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MOCKA",
+      "variant": "MOCKA",
+      "cell": "L10",
+      "formula": "K10/J10",
+      "cached": 190,
+      "quantity": 1,
+      "purchaseQuantity": 100,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MOCKA",
+      "variant": "MOCKA",
+      "cell": "L11",
+      "formula": "K11/J11",
+      "cached": 14,
+      "quantity": 1,
+      "purchaseQuantity": 500,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MOCKA",
+      "variant": "MOCKA",
+      "cell": "L12",
+      "formula": "(K12/1000)*I12",
+      "cached": 160,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "CAPUCHINO",
+      "variant": "CAPUCHINO",
+      "cell": "L6",
+      "formula": "(K6/2500)*I6",
+      "cached": 456,
+      "quantity": 10,
+      "purchaseQuantity": 2500,
+      "unit": "g"
+    },
+    {
+      "sheet": "CAPUCHINO",
+      "variant": "CAPUCHINO",
+      "cell": "L7",
+      "formula": "K7/J7",
+      "cached": 35,
+      "quantity": 1,
+      "purchaseQuantity": 200,
+      "unit": "unit"
+    },
+    {
+      "sheet": "CAPUCHINO",
+      "variant": "CAPUCHINO",
+      "cell": "L8",
+      "formula": "(K8/900)*I8",
+      "cached": 822.2222222222222,
+      "quantity": 200,
+      "purchaseQuantity": 900,
+      "unit": "ml"
+    },
+    {
+      "sheet": "CAPUCHINO",
+      "variant": "CAPUCHINO",
+      "cell": "L9",
+      "formula": "K9/J9",
+      "cached": 316.6666666666667,
+      "quantity": 1,
+      "purchaseQuantity": 30,
+      "unit": "unit"
+    },
+    {
+      "sheet": "CAPUCHINO",
+      "variant": "CAPUCHINO",
+      "cell": "L10",
+      "formula": "K10/J10",
+      "cached": 190,
+      "quantity": 1,
+      "purchaseQuantity": 100,
+      "unit": "unit"
+    },
+    {
+      "sheet": "CAPUCHINO",
+      "variant": "CAPUCHINO",
+      "cell": "L11",
+      "formula": "K11/J11",
+      "cached": 14,
+      "quantity": 1,
+      "purchaseQuantity": 500,
+      "unit": "unit"
+    },
+    {
+      "sheet": "CHOCOLATE",
+      "variant": "CHOCOLATE",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 224,
+      "quantity": 7,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "CHOCOLATE",
+      "variant": "CHOCOLATE",
+      "cell": "L7",
+      "formula": "K7/J7",
+      "cached": 35,
+      "quantity": 1,
+      "purchaseQuantity": 200,
+      "unit": "unit"
+    },
+    {
+      "sheet": "CHOCOLATE",
+      "variant": "CHOCOLATE",
+      "cell": "L8",
+      "formula": "(K8/900)*I8",
+      "cached": 822.2222222222222,
+      "quantity": 200,
+      "purchaseQuantity": 900,
+      "unit": "ml"
+    },
+    {
+      "sheet": "CHOCOLATE",
+      "variant": "CHOCOLATE",
+      "cell": "L9",
+      "formula": "K9/J9",
+      "cached": 316.6666666666667,
+      "quantity": 1,
+      "purchaseQuantity": 30,
+      "unit": "unit"
+    },
+    {
+      "sheet": "CHOCOLATE",
+      "variant": "CHOCOLATE",
+      "cell": "L10",
+      "formula": "K10/J10",
+      "cached": 190,
+      "quantity": 1,
+      "purchaseQuantity": 100,
+      "unit": "unit"
+    },
+    {
+      "sheet": "CHOCOLATE",
+      "variant": "CHOCOLATE",
+      "cell": "L11",
+      "formula": "K11/J11",
+      "cached": 14,
+      "quantity": 1,
+      "purchaseQuantity": 500,
+      "unit": "unit"
+    },
+    {
+      "sheet": "AMERICANO",
+      "variant": "AMERICANO",
+      "cell": "L6",
+      "formula": "(K6/2500)*I6",
+      "cached": 912,
+      "quantity": 20,
+      "purchaseQuantity": 2500,
+      "unit": "g"
+    },
+    {
+      "sheet": "AMERICANO",
+      "variant": "AMERICANO",
+      "cell": "L7",
+      "formula": "K7/J7",
+      "cached": 35,
+      "quantity": 1,
+      "purchaseQuantity": 200,
+      "unit": "unit"
+    },
+    {
+      "sheet": "AMERICANO",
+      "variant": "AMERICANO",
+      "cell": "L9",
+      "formula": "K9/J9",
+      "cached": 316.6666666666667,
+      "quantity": 1,
+      "purchaseQuantity": 30,
+      "unit": "unit"
+    },
+    {
+      "sheet": "AMERICANO",
+      "variant": "AMERICANO",
+      "cell": "L10",
+      "formula": "K10/J10",
+      "cached": 190,
+      "quantity": 1,
+      "purchaseQuantity": 100,
+      "unit": "unit"
+    },
+    {
+      "sheet": "AMERICANO",
+      "variant": "AMERICANO",
+      "cell": "L11",
+      "formula": "K11/J11",
+      "cached": 14,
+      "quantity": 1,
+      "purchaseQuantity": 500,
+      "unit": "unit"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Brownie",
+      "cell": "L6",
+      "formula": "(K6/900)*I6",
+      "cached": 822.2222222222222,
+      "quantity": 200,
+      "purchaseQuantity": 900,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Brownie",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 1330,
+      "quantity": 70,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Brownie",
+      "cell": "L8",
+      "formula": "(K8/170)*I8",
+      "cached": 405.88235294117646,
+      "quantity": 3,
+      "purchaseQuantity": 170,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Brownie",
+      "cell": "L9",
+      "formula": "I9*(K9/J9)",
+      "cached": 1146.6666666666667,
+      "quantity": 2,
+      "purchaseQuantity": 15,
+      "unit": "unit"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Brownie",
+      "cell": "L10",
+      "formula": "(K10/650)*I10",
+      "cached": 410.76923076923083,
+      "quantity": 12,
+      "purchaseQuantity": 650,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Brownie",
+      "cell": "L11",
+      "formula": "(K11/1000)*I11",
+      "cached": 85,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Oreo",
+      "cell": "S6",
+      "formula": "(R6/900)*P6",
+      "cached": 822.2222222222222,
+      "quantity": 200,
+      "purchaseQuantity": 900,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Oreo",
+      "cell": "S7",
+      "formula": "(R7/1000)*P7",
+      "cached": 1330,
+      "quantity": 70,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Oreo",
+      "cell": "S8",
+      "formula": "(R8/170)*P8",
+      "cached": 405.88235294117646,
+      "quantity": 3,
+      "purchaseQuantity": 170,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Oreo",
+      "cell": "S9",
+      "formula": "P9*(R9/Q9)",
+      "cached": 708.3333333333334,
+      "quantity": 3,
+      "purchaseQuantity": 72,
+      "unit": "unit"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Oreo",
+      "cell": "S10",
+      "formula": "(R10/650)*P10",
+      "cached": 410.76923076923083,
+      "quantity": 12,
+      "purchaseQuantity": 650,
+      "unit": "g"
+    },
+    {
+      "sheet": "FRAPUCHINOS",
+      "variant": "FRAPUCHINO · Oreo",
+      "cell": "S11",
+      "formula": "(R11/1000)*P11",
+      "cached": 85,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MALTEADAS",
+      "variant": "MALTEADAS",
+      "cell": "L6",
+      "formula": "(K6/900)*I6",
+      "cached": 1233.3333333333333,
+      "quantity": 300,
+      "purchaseQuantity": 900,
+      "unit": "ml"
+    },
+    {
+      "sheet": "MALTEADAS",
+      "variant": "MALTEADAS",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 1330,
+      "quantity": 70,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MALTEADAS",
+      "variant": "MALTEADAS",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 800,
+      "quantity": 40,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MALTEADAS",
+      "variant": "MALTEADAS",
+      "cell": "L9",
+      "formula": "(K9/650)*I9",
+      "cached": 410.76923076923083,
+      "quantity": 12,
+      "purchaseQuantity": 650,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla OLIVA de la CASA",
+      "cell": "L6",
+      "formula": "(K6/1000)*I6",
+      "cached": 17498,
+      "quantity": 673,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla OLIVA de la CASA",
+      "cell": "L7",
+      "formula": "(K7/1000)*I7",
+      "cached": 2250,
+      "quantity": 150,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla OLIVA de la CASA",
+      "cell": "L8",
+      "formula": "(K8/1000)*I8",
+      "cached": 1000,
+      "quantity": 100,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla OLIVA de la CASA",
+      "cell": "L9",
+      "formula": "(K9/1000)*I9",
+      "cached": 360,
+      "quantity": 15,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla OLIVA de la CASA",
+      "cell": "L10",
+      "formula": "K10",
+      "cached": 1000,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla OLIVA de la CASA",
+      "cell": "L11",
+      "formula": "K11",
+      "cached": 50,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S6",
+      "formula": "(R6/1000)*P6",
+      "cached": 6500,
+      "quantity": 250,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S7",
+      "formula": "(R7/1000)*P7",
+      "cached": 1020,
+      "quantity": 30,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S8",
+      "formula": "(R8/1000)*P8",
+      "cached": 3825,
+      "quantity": 45,
+      "purchaseQuantity": 1000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S9",
+      "formula": "(R9/1000)*P9",
+      "cached": 119,
+      "quantity": 7,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S10",
+      "formula": "(R10/1000)*P10",
+      "cached": 450,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S11",
+      "formula": "(R11/1000)*P11",
+      "cached": 200,
+      "quantity": 4,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S12",
+      "formula": "(R12/1000)*P12",
+      "cached": 500,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "ml"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S13",
+      "formula": "(R13/1000)*P13",
+      "cached": 100,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S14",
+      "formula": "R14",
+      "cached": 1000,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla ARANDANOS",
+      "cell": "S15",
+      "formula": "R15",
+      "cached": 50,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES ROJAS",
+      "cell": "Z6",
+      "formula": "(Y6/1000)*W6",
+      "cached": 13000,
+      "quantity": 500,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES ROJAS",
+      "cell": "Z7",
+      "formula": "(Y7/1000)*W7",
+      "cached": 300,
+      "quantity": 4,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES ROJAS",
+      "cell": "Z8",
+      "formula": "(Y8/1000)*W8",
+      "cached": 192,
+      "quantity": 4,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES ROJAS",
+      "cell": "Z9",
+      "formula": "(Y9/1000)*W9",
+      "cached": 165,
+      "quantity": 15,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES ROJAS",
+      "cell": "Z10",
+      "formula": "(Y10/1000)*W10",
+      "cached": 180,
+      "quantity": 15,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES ROJAS",
+      "cell": "Z14",
+      "formula": "Y14",
+      "cached": 1000,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES ROJAS",
+      "cell": "Z15",
+      "formula": "Y15",
+      "cached": 50,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES BLANCAS",
+      "cell": "AG6",
+      "formula": "(AF6/1000)*AD6",
+      "cached": 13000,
+      "quantity": 500,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES BLANCAS",
+      "cell": "AG7",
+      "formula": "(AF7/1000)*AD7",
+      "cached": 320,
+      "quantity": 10,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES BLANCAS",
+      "cell": "AG8",
+      "formula": "(AF8/1000)*AD8",
+      "cached": 45,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES BLANCAS",
+      "cell": "AG9",
+      "formula": "(AF9/1000)*AD9",
+      "cached": 160,
+      "quantity": 5,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES BLANCAS",
+      "cell": "AG10",
+      "formula": "(AF10/1000)*AD10",
+      "cached": 400,
+      "quantity": 50,
+      "purchaseQuantity": 1000,
+      "unit": "g"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES BLANCAS",
+      "cell": "AG14",
+      "formula": "AF14",
+      "cached": 1000,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    },
+    {
+      "sheet": "MANTEQUILLA",
+      "variant": "Mantequilla CARNES BLANCAS",
+      "cell": "AG15",
+      "formula": "AF15",
+      "cached": 50,
+      "quantity": 1,
+      "purchaseQuantity": 1,
+      "unit": "unit"
+    }
+  ]
+}

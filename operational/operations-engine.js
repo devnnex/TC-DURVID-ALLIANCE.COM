@@ -1,0 +1,77 @@
+/* Pure rules shared by demonstration and the durable offline queue. servicio seguro validates independently. */
+globalThis.AllianceOperationsEngine=(()=>{
+  const collections=['suppliers','ingredients','recipes','purchases','customers','debts','settlements','cashSessions','cashMovements','tickets','customerPayments','materialMovements','cashReviews'];
+  const empty=()=>Object.fromEntries([...collections.map(k=>[k,[]]),['settings',{cashRequired:false,allowNegative:false}]]);
+  const clone=v=>structuredClone(v),money=n=>Math.round(n*100)/100;
+  function fail(message,code='INVALID_INPUT'){const e=new Error(message);e.code=code;throw e;}
+  function num(v,name,min=0,max=1e12){if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)fail(name+': revisa el valor.');return v;}
+  function text(v,name,max=160){if(typeof v!=='string'||!v.trim()||v.length>max)fail('Completa '+name+'.');return v.trim();}
+  function validDate(value){return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number(value.slice(0,4))>=1900&&Number(value.slice(0,4))<=9999&&Number.isFinite(Date.parse(value+'T12:00:00Z'))&&new Date(value+'T12:00:00Z').toISOString().slice(0,10)===value;}
+  function suggestedPaymentDate(customer,debts,today){
+    const pending=debts.filter(d=>d.customerId===customer?.id&&!d.voided&&d.total>d.paid&&d.dueDate>=today).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+    const anchor=customer?.paymentDate,frequency=customer?.paymentFrequency||'once';
+    if(!validDate(anchor))return pending[0]?.dueDate||'';
+    if(anchor>=today)return anchor;
+    if(frequency==='once')return pending[0]?.dueDate||'';
+    if(frequency==='monthly'){
+      const day=Number(anchor.slice(8)),year=Number(today.slice(0,4)),month=Number(today.slice(5,7))-1;
+      const occurrence=(y,m)=>new Date(Date.UTC(y,m,Math.min(day,new Date(Date.UTC(y,m+1,0)).getUTCDate()),12)).toISOString().slice(0,10);
+      const current=occurrence(year,month);return current>=today?current:occurrence(year,month+1);
+    }
+    const interval=frequency==='weekly'?7:15,start=Date.parse(anchor+'T12:00:00Z'),elapsed=(Date.parse(today+'T12:00:00Z')-start)/86400000;
+    return new Date(start+Math.ceil(elapsed/interval)*interval*86400000).toISOString().slice(0,10);
+  }
+  function find(s,k,id){const row=s[k].find(r=>r.id===id);if(!row)fail('El registro ya no está disponible. Actualiza la sección.','NOT_FOUND');return row;}
+  function unit(unit,units){const row=units.find(r=>r.id===(unit==='unit'?'u':unit));if(!row)fail('Unidad no disponible.');return row;}
+  function convert(q,from,to,units){const a=unit(from,units),b=unit(to,units);if(a.dimension!==b.dimension)fail('No se pueden mezclar peso, volumen y unidades.');return q*a.factor/b.factor;}
+  function expected(s,session){return money(session.opening+s.cashMovements.filter(m=>m.sessionId===session.id).reduce((a,m)=>a+m.amount,0));}
+  function cash(s,amount,reference,method,meta){if(method!=='cash'||!amount)return;const session=s.cashSessions.find(r=>r.status==='open');if(!session){if(s.settings.cashRequired)fail('Abre la caja antes de registrar efectivo.','REGISTER_NOT_OPEN');return;}if(amount<0&&expected(s,session)+amount<0)fail('La caja no tiene ese efectivo disponible.');s.cashMovements.push({...meta,id:meta.id+':cash',sessionId:session.id,amount:money(amount),reference,kind:amount>0?'in':'out'});}
+  function move(s,ingredient,delta,kind,reference,meta){delta=Math.round(delta*1e8)/1e8;const after=Math.round((ingredient.quantity+delta)*1e8)/1e8;if(after<0&&!s.settings.allowNegative)fail('No alcanza '+ingredient.name+'. Disponible: '+ingredient.quantity+' '+ingredient.unit+'.','INSUFFICIENT_STOCK');s.materialMovements.push({...meta,id:meta.id+':'+ingredient.id,ingredientId:ingredient.id,name:ingredient.name,delta,before:ingredient.quantity,after,unitCost:ingredient.unitCost,kind,reference});ingredient.quantity=after;ingredient.revision=(ingredient.revision||1)+1;}
+  function apply(input,command,actor,units,at=new Date().toISOString(),catalog=[]){
+    const s=clone(input),p=command.payload||{},meta={id:command.id,at,occurredAt:at,actorId:actor.id,actorName:actor.full_name||actor.name},kind=command.command;
+    function save(k,fields){const id=text(p.id,'identificador',80),old=s[k].find(r=>r.id===id);if((old?.revision||0)!==p.revision)fail('Alguien modificó este registro. Actualiza antes de guardar.','VERSION_CONFLICT');const row={...old,...fields,...meta,...(!old?{createdById:actor.id,createdByName:meta.actorName,createdAt:at}:{}),id,revision:(old?.revision||0)+1};s[k]=s[k].filter(r=>r.id!==id);s[k].push(row);return row;}
+    if(kind==='policy_save'){if(actor.role!=='boss')fail('Solo el jefe decide esta opción.');if(!p.allowNegative&&(s.ingredients.some(i=>i.quantity<0)||s.goods?.some(i=>i.stock<0)))fail('Reconcilia los saldos negativos antes de desactivar esta opción.');s.settings.allowNegative=!!p.allowNegative;}
+    else if(kind==='cash_shift_update'){
+      const session=find(s,'cashSessions',p.sessionId);if(session.status!=='open'||(session.revision||1)!==p.revision)fail('El turno cambió. Actualiza antes de guardar.','VERSION_CONFLICT');
+      if(!['replace','add','schedule'].includes(p.action))fail('Elige la operación del turno.');
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(p.date)||new Date(p.date+'T12:00:00Z').toISOString().slice(0,10)!==p.date)fail('Revisa la fecha del turno.');
+      if(![p.startTime,p.endTime].every(t=>/^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/.test(t))||p.startTime===p.endTime)fail('Revisa las horas del turno.');
+      const base=num(p.opening,'Base del turno'),before=session.opening,after=p.action==='add'?money(before+base):p.action==='replace'?base:before;
+      if(after+s.cashMovements.filter(m=>m.sessionId===session.id).reduce((n,m)=>n+m.amount,0)<0)fail('La base dejaría el efectivo esperado en negativo.');
+      session.openedBy??=session.actorName;session.openedById??=session.actorId;session.openedAt??=session.at;session.initialOpening??=before;session.opening=after;session.date=p.date;session.startTime=p.startTime;session.endTime=p.endTime;session.revision=(session.revision||1)+1;session.baseChanges||=[];session.baseChanges.push({...meta,before,after,action:p.action});
+    }else if(kind==='cash_count_review'){const session=find(s,'cashSessions',p.sessionId);if(session.status!=='closed')fail('Actualiza la caja antes de revisar el conteo.');s.cashReviews||=[];s.cashReviews.push({...meta,sessionId:session.id,actual:num(p.actual,'Conteo'),expected:session.expected,difference:money(p.actual-session.actual),notes:String(p.notes||'')});}
+    else if(kind==='supplier_save')save('suppliers',{name:text(p.name,'proveedor'),phone:String(p.phone||''),document:String(p.document||''),active:p.active!==false});
+    else if(kind==='ingredient_save'){const old=s.ingredients.find(r=>r.id===p.id);if(old&&old.unit!==p.unit)fail('Conserva la unidad base del insumo con movimientos.');unit(p.unit,units);save('ingredients',{name:text(p.name,'insumo'),unit:p.unit,quantity:old?.quantity||0,unitCost:old?.unitCost||0,minStock:num(p.minStock,'Alerta de existencias')});}
+    else if(kind==='ingredient_adjust'){const ingredient=find(s,'ingredients',p.ingredientId);num(p.quantity,'Cantidad',0.00000001);text(p.reason,'motivo',300);if(!['waste','in','out'].includes(p.kind))fail('Ajuste no disponible.');if(p.kind==='in')ingredient.unitCost=(Math.max(ingredient.quantity,0)*ingredient.unitCost+num(p.totalCost,'Costo real de la entrada'))/(Math.max(ingredient.quantity,0)+p.quantity);move(s,ingredient,p.quantity*(p.kind==='in'?1:-1),p.kind,p.reason,meta);}
+    else if(kind==='purchase_record'){
+      if(Object.keys(p).some(k=>!['id','name','quantity','total'].includes(k)))fail('La compra solo admite nombre, cantidad y valor total.');
+      const id=text(p.id,'identificador',80),name=text(p.name,'nombre del producto'),quantity=num(p.quantity,'Cantidad comprada',0.000001),total=money(num(p.total,'Valor total'));
+      if(s.purchases.some(r=>r.id===id))fail('Esta compra ya existe.','DUPLICATE_OPERATION');
+      s.purchases.push({...meta,id,kind:'simple',name,quantity,total,unitPrice:total/quantity});
+    }
+    else if(kind==='purchase_add'){
+      const supplier=find(s,'suppliers',p.supplierId);if(!supplier.active)fail('El proveedor está deshabilitado.');if(!p.lines?.length||p.lines.length>100)fail('Agrega los insumos comprados.');let total=0;
+      const lines=p.lines.map((l,i)=>{const q=num(l.quantity,'Cantidad comprada',0.000001),t=money(num(l.total,'Total de la línea')),yieldRate=num(l.yieldPercent,'Rendimiento',0.000001,100)/100;
+        if(l.productId){if(l.ingredientId||s.recipes.some(r=>r.productId===l.productId))fail('Compra los ingredientes de los productos preparados.');const product=s.goods?.find(r=>r.productId===l.productId);if(!product)fail('Registra el producto y su inventario antes de comprarlo.');const base=units.some(u=>u.id===product.unit)?product.unit:'u',usable=convert(q,l.unit,base,units)*yieldRate;product.costPrice=(Math.max(product.stock,0)*product.costPrice+t)/(Math.max(product.stock,0)+usable);product.stock+=usable;product.version=(product.version||1)+1;total+=t;return {...l,name:product.name,usable,baseUnit:base,unitPrice:t/q};}
+        const ingredient=find(s,'ingredients',l.ingredientId),usable=convert(q,l.unit,ingredient.unit,units)*yieldRate;ingredient.unitCost=(Math.max(ingredient.quantity,0)*ingredient.unitCost+t)/(Math.max(ingredient.quantity,0)+usable);move(s,ingredient,usable,'purchase',p.id,{...meta,id:meta.id+':'+i});total+=t;return {...l,name:ingredient.name,usable,baseUnit:ingredient.unit,unitPrice:t/q};});
+      const paid=money(num(p.paid,'Pago',0,money(total)));if(!['cash','transfer','card','other'].includes(p.method))fail('Elige el medio de pago.');cash(s,-paid,p.id,p.method,meta);s.purchases.push({...meta,id:p.id,supplierId:supplier.id,supplierName:supplier.name,reference:text(p.reference,'referencia',100),lines,total:money(total),paid,dueDate:p.dueDate||'',method:p.method});
+    }else if(kind==='purchase_pay'||kind==='debt_pay'){
+      const record=find(s,kind==='purchase_pay'?'purchases':'debts',p.recordId);if(record.kind==='simple')fail('Esta compra es un registro de costo por unidad y no utiliza abonos de proveedor.');const balance=money(record.total-record.paid);const amount=money(num(p.amount,'Abono',0.01,balance));if(!['cash','transfer','card','other'].includes(p.method))fail('Elige el medio de pago.');cash(s,kind==='purchase_pay'?-amount:amount,record.id,p.method,meta);record.paid=money(record.paid+amount);s.settlements.push({...meta,recordId:record.id,type:kind,amount,method:p.method,reference:String(p.reference||'')});
+    }else if(kind==='customer_save'){
+      const old=s.customers.find(c=>c.id===p.id),paymentFrequency=p.paymentFrequency??old?.paymentFrequency??'once',paymentDate=p.paymentDate??old?.paymentDate??'';
+      if(!['once','weekly','fortnightly','monthly'].includes(paymentFrequency)||paymentDate&&!validDate(paymentDate)||paymentFrequency!=='once'&&!paymentDate)fail('Revisa la frecuencia y la fecha de pago.');
+      for(const expected of p.rescheduleDebts||[]){const debt=find(s,'debts',expected.id);if(debt.customerId!==p.id||debt.voided||debt.paid>=debt.total||debt.dueDate!==expected.dueDate||debt.paid!==expected.paid||debt.total!==expected.total)fail('El saldo o su fecha cambió. Actualiza antes de guardar.','VERSION_CONFLICT');if(!validDate(paymentDate))fail('Selecciona la nueva fecha de pago.');debt.dueDateChanges||=[];debt.dueDateChanges.push({...meta,previousDate:debt.dueDate,newDate:paymentDate});debt.dueDate=paymentDate;}
+      save('customers',{name:text(p.name,'cliente'),phone:String(p.phone||''),document:String(p.document||''),contactConsent:!!p.contactConsent,allowCredit:true,creditLimit:num(p.creditLimit,'Límite de crédito'),active:p.active!==false,paymentFrequency,paymentDate});
+    }
+    else if(kind==='debt_add'){const customer=find(s,'customers',p.customerId);if(!customer.active)fail('Este cliente no tiene crédito habilitado.');const total=money(num(p.total,'Saldo',0.01));const owed=s.debts.filter(r=>r.customerId===customer.id&&!r.voided).reduce((a,r)=>a+r.total-r.paid,0);if(customer.creditLimit>0&&owed+total>customer.creditLimit)fail('El saldo excede el límite de crédito.');s.debts.push({...meta,id:p.id,customerId:customer.id,customerName:customer.name,total,paid:0,dueDate:text(p.dueDate,'vencimiento',10),reference:text(p.reference,'origen del saldo',160),source:'opening'});}
+    else if(kind==='cash_open'){if(s.cashSessions.some(r=>r.status==='open'))fail('La caja ya está abierta.','REGISTER_ALREADY_OPEN');s.cashSessions.push({...meta,revision:1,date:p.date||at.slice(0,10),id:p.id,status:'open',opening:money(num(p.opening,'Base de caja')),name:text(p.name,'nombre del turno',80),...(p.startTime||p.endTime?{startTime:p.startTime,endTime:p.endTime}:{})});if((p.startTime||p.endTime)&&(!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(p.startTime)||!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(p.endTime)))fail('Revisa las horas del turno.');s.settings.cashRequired=true;}
+    else if(kind==='cash_move'){const session=find(s,'cashSessions',p.sessionId);if(session.status!=='open')fail('La caja ya está cerrada.');const amount=money(num(p.amount,'Movimiento',0.01));if(!['in','out'].includes(p.kind))fail('Movimiento no disponible.');if(p.kind==='out'&&expected(s,session)<amount)fail('La caja no tiene ese efectivo disponible.');s.cashMovements.push({...meta,sessionId:session.id,amount:p.kind==='out'?-amount:amount,kind:p.kind,reference:text(p.reason,'motivo',160)});}
+    else if(kind==='cash_close'){const session=find(s,'cashSessions',p.sessionId);if(session.status!=='open')fail('La caja ya está cerrada.');const value=expected(s,session);if(money(p.expected)!==value)fail('La caja cambió mientras contabas. Revisa el nuevo esperado.','CASH_CHANGED');session.expected=value;session.actual=money(num(p.actual,'Efectivo contado'));session.difference=money(session.actual-value);session.status='closed';session.closedAt=at;session.closedBy=meta.actorName;session.notes=String(p.notes||'');}
+    else if(kind==='recipe_link'){if(s.recipes.some(r=>r.productId===p.productId&&r.managed))fail('Actualiza esta receta desde la macro de insumos.');const product=catalog.find(r=>r.id===p.productId);if(!product)fail('Elige un producto del menú.');const recipe=p.recipe;if(!recipe?.lines?.length)fail('La receta necesita ingredientes.');s.recipes=s.recipes.filter(r=>r.productId!==p.productId);s.recipes.push({...meta,id:p.productId,productId:p.productId,name:product.name,recipeId:p.recipeId,lines:clone(recipe.lines)});}
+    else if(kind==='ticket_send'){if(!p.items?.length)fail('Agrega productos a la comanda.');s.tickets.push({...meta,id:p.id,sessionId:p.sessionId,table:p.table,sentBy:meta.actorName,sentById:meta.actorId,status:'queued',notes:String(p.notes||''),items:clone(p.items)});}
+    else if(kind==='ticket_status'){const ticket=find(s,'tickets',p.ticketId),transitions={queued:['preparing','cancelled'],preparing:['ready','cancelled'],ready:['delivered','cancelled'],delivered:[],cancelled:[]};if(!transitions[ticket.status].includes(p.status))fail('La comanda cambió. Actualiza la cocina.');ticket.status=p.status;ticket.updatedAt=at;ticket.updatedBy=meta.actorName;}
+    else fail('Operación no disponible.');
+    return s;
+  }
+  return {empty,apply,convert,expected,move,cash,money,find,collections,validDate,suggestedPaymentDate};
+})();

@@ -1,0 +1,68 @@
+{
+  "name": "tc-durvid-alliance",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "build": "npm run typecheck && npm run build -w apps/web && npm run build -w apps/api && tsx scripts/build-team-panel.ts && tsx scripts/package-site.ts && tsx scripts/prepare-live-server.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:check": "tsx scripts/check-oracle.ts",
+    "oracle:prepare": "tsx scripts/configure-env.ts --initialize",
+    "api:oracle": "tsx scripts/require-oracle.ts && npm run start -w apps/api",
+    "api:url": "tsx scripts/set-api-url.ts",
+    "ords:install": "tsx scripts/install-ords.ts --apply",
+    "ords:package": "tsx scripts/install-ords.ts",
+    "ords:test": "tsx scripts/test-ords-live.ts",
+    "stage": "tsx scripts/require-oracle.ts && concurrently -k -n api,web \"npm run start -w apps/api\" \"npm run preview -w apps/web\"",
+    "migration:plan": "tsx scripts/migration-plan.ts",
+    "preview": "npm run preview -w apps/web",
+    "ords:test:pos": "tsx scripts/test-pos-live.ts --browser",
+    "ords:test:costing": "tsx scripts/test-costing-live.ts",
+    "ords:test:activity": "tsx scripts/test-activity-live.ts",
+    "ords:test:operations": "tsx scripts/test-operations-live.ts",
+    "ords:test:orders": "tsx scripts/test-orders-live.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.0",
+    "@fastify/cors": "^11.0.0",
+    "@fastify/jwt": "^9.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/dm-serif-display": "^5.3.0",
+    "dexie": "^4.0.0",
+    "dexie-react-hooks": "^1.1.7",
+    "dotenv": "^16.4.0",
+    "fastify": "^5.0.0",
+    "lucide-react": "^0.468.0",
+    "oracledb": "^6.9.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^22.0.0",
+    "@types/oracledb": "^6.6.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.1.0",
+    "fake-indexeddb": "^6.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vite-plugin-pwa": "^0.21.0",
+    "vitest": "^3.0.0"
+  }
+}

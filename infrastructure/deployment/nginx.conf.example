@@ -1,0 +1,17 @@
+# Replace domain, document root and TLS configuration before use.
+server {
+    listen 443 ssl;
+    server_name alliance.example;
+    root /srv/alliance/dist;
+    # ssl_certificate /path/to/fullchain.pem;
+    # ssl_certificate_key /path/to/privkey.pem;
+    location /api/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /admin/sw.js { add_header Cache-Control "no-cache"; }
+    location /admin/assets/ { try_files $uri =404; }
+    location /admin/ { try_files $uri $uri/ /admin/index.html; }
+    location / { try_files $uri $uri/ =404; }
+}

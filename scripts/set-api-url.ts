@@ -1,0 +1,10 @@
+import { readFile,writeFile } from 'node:fs/promises';
+import { apiBaseUrl } from '../apps/web/src/api-url.js';
+const value=process.argv[2];
+if(!value)throw new Error('Indica la URL: npm run api:url -- https://TU-SERVICIO/api/v1');
+const url=new URL(value);
+const validated=apiBaseUrl(value,{hostname:url.hostname,protocol:url.protocol});
+const file=new URL('../api-config.js',import.meta.url);
+const original=await readFile(file,'utf8');
+await writeFile(file,original.replace(/^const API_URL = .*;$/m,`const API_URL = ${JSON.stringify(validated)};`));
+console.log('API_URL actualizada. Ejecuta npm run build antes de publicar.');

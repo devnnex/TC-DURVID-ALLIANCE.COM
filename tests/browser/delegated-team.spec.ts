@@ -1,0 +1,11 @@
+import {test,expect} from '@playwright/test';
+import {backend,ready,branch,user,business} from './helpers/operational-backend';
+import {roleTemplates,sections} from '../../packages/shared/administration';
+for(const role of ['ADMIN','WORKER'])test('acceso delegado conserva el rol y sus límites: '+role,async({page})=>{
+ const server=await backend(page),ctx=server.context as any;ctx.is_owner=false;ctx.roles={[branch]:[role]};ctx.permissions[branch]=role==='ADMIN'?['home.read','products.read','locations.read','administration.manage']:['products.read','locations.read','supplies.read','supplies.write'];
+ await page.route(/\/api\/v1\/rpc$/,async route=>{const r=route.request().postDataJSON();if(r.path==='/admin/overview')await route.fulfill({contentType:'application/json',body:JSON.stringify({status:200,data:{users:[],locations:[{id:branch,business_id:business,slug:'cocteleria',name:'Negocio',active:true}],roles:roleTemplates,sections}})});else await route.fallback();});
+ await ready(page);expect(await page.evaluate(()=>(window as any).OracleDb.user().role)).toBe(role==='ADMIN'?'admin':'worker');await expect(page.locator('.admin-sidebar [href="#income"]')).toBeHidden();await expect(page.locator('[data-reset-section="income"]')).toBeHidden();
+ if(role==='ADMIN'){await page.locator('.admin-sidebar [href="#users"]').click();await expect(page.locator('.team-quick-form')).toBeVisible();await expect(page.locator('.team-quick-form [name=role] option')).toHaveText(['Administrador','Trabajador','Mesero']);await page.locator('.team-quick-form [name=role]').selectOption('WORKER');await expect(page.locator('.team-section-choices')).toBeVisible();await expect(page.locator('.team-section-choices').getByRole('checkbox',{name:'Marca',exact:true})).toHaveCount(0);}
+ else{await expect(page.locator('.admin-sidebar [href="#users"]')).toBeHidden();await page.locator('.admin-sidebar [href="#supplies"]').click();await expect(page.getByRole('button',{name:'Agregar compra',exact:true})).toBeVisible();await expect(page.locator('.admin-sidebar a:visible')).toHaveCount(1);}
+ expect(await page.evaluate(async()=>{try{await (window as any).AllianceOffline.execute('order_cancel',{ticketId:'x'});return false;}catch{return true;}})).toBe(true);
+});

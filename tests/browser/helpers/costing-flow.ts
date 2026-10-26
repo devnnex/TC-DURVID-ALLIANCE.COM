@@ -1,0 +1,39 @@
+import {expect,type Page,type Locator} from '@playwright/test';
+
+// The same real controls are exercised offline and against an isolated Oracle business.
+export async function exerciseCostingForms(page:Page){
+  const tab=(value:string)=>page.locator(`[data-tab=${value}]`);
+  const saved=async(form:Locator)=>{await form.locator('button[type=submit]').click();await expect(page.locator('#costingStatus')).toContainText(/Guardado local|Guardado y auditado/,{timeout:30000});await expect(form.locator('.cost-form-feedback')).not.toHaveClass(/cost-error/);};
+  await tab('ingredients').click();
+  for(const [name,price] of [['Queso','20000'],['Tomate','5000'],['Harina','10000']]){
+    const f=page.locator('#costEditor');await f.locator('[name=name]').fill(name);await f.locator('[name=quantity]').fill('1');await f.locator('[name=purchasePrice]').fill(price);await saved(f);
+  }
+  await tab('recipes').click();let f=page.locator('#costEditor');
+  await f.locator('[name=name]').fill('Pizza');await f.locator('[name=size]').fill('Grande');await f.locator('[name=currentPrice]').fill('10000');await f.locator('[name=targetPercent]').fill('100');
+  await f.locator('.cost-advanced summary').click();await f.locator('[name=category]').fill('Pizza');await f.locator('[name=wastePercent]').fill('10');await f.locator('[name=minutes]').fill('60');await f.locator('[name=monthlyUnits]').fill('50');
+  for(const ingredient of ['Queso','Tomate','Harina']){
+    await f.locator('[data-add-line]').click();const line=f.locator('.cost-line').last();await line.locator('[name=ingredientId]').selectOption({label:ingredient});await line.locator('[name=quantity]').fill('1');await expect(line.locator('[name=unit]')).not.toContainText('ml');
+  }
+  await f.locator('[name=newChannelName]').fill('efectivo');
+  await f.locator('button[type=submit]').click();await expect(f.locator('[name=targetPercent]')).toBeFocused();await expect(f.locator('.cost-field-error')).toContainText('menor que 100');await expect(f.locator('.cost-form-feedback')).toContainText('No se guardó');
+  await expect(f.locator('[name=name]')).toHaveValue('Pizza');await expect(f.locator('.cost-line')).toHaveCount(3);await expect(page.locator('.cost-table')).toHaveCount(0);
+  await f.locator('[name=targetPercent]').fill('30');await saved(f);await expect(page.locator('.cost-table')).toContainText('Pizza');
+  // Editing with a 100% markup is valid; switching back to a margin must explain the difference.
+  await page.locator('tr').filter({hasText:'Pizza'}).getByRole('button',{name:'Editar',exact:true}).click();f=page.locator('#costEditor');await f.locator('.cost-advanced summary').click();await f.locator('[name=marginMode]').selectOption('markup');await f.locator('[name=targetPercent]').fill('100');await saved(f);
+  await tab('analysis').click();await expect(page.locator('[name=liveTarget]')).toHaveAttribute('max','1000');await expect(page.locator('#costCalculated .metric-card').nth(1)).toContainText('77.778');
+  await tab('recipes').click();await page.locator('tr').filter({hasText:'Pizza'}).getByRole('button',{name:'Editar',exact:true}).click();f=page.locator('#costEditor');await f.locator('.cost-advanced summary').click();await f.locator('[name=marginMode]').selectOption('margin');await f.locator('[name=targetPercent]').fill('30');await saved(f);
+  await tab('expenses').click();f=page.locator('#costEditor');await f.locator('[name=name]').fill('Alquiler');await f.locator('[name=amount]').fill('100000');await f.locator('[name=periodMonths]').fill('0');await f.locator('button[type=submit]').click();await expect(f.locator('[name=periodMonths]')).toBeFocused();await expect(f.locator('.cost-field-error')).toContainText('mayor que cero');await f.locator('[name=periodMonths]').fill('1');await saved(f);
+  await f.locator('[name=name]').fill('Alquiler');await f.locator('[name=amount]').fill('100000');await f.locator('button[type=submit]').click();await expect(f.locator('.cost-form-feedback')).toContainText('ya está registrado');await expect(page.locator('.cost-table tbody tr')).toHaveCount(1);await f.locator('[name=name]').fill('Caja');await f.locator('[name=amount]').fill('500');await f.locator('[name=kind]').selectOption('unit');await saved(f);
+  await page.locator('tr').filter({hasText:'Caja'}).getByRole('button',{name:'Editar',exact:true}).click();f=page.locator('#costEditor');await f.locator('[name=amount]').fill('700');await saved(f);
+  const settings=page.locator('#costSettings');await settings.locator('[name=monthlyUnits]').fill('100');await settings.locator('.cost-advanced summary').click();await settings.locator('[name=monthlyMinutes]').fill('0');await settings.locator('.cost-advanced summary').click();await settings.locator('button[type=submit]').click();await expect(settings.locator('.cost-advanced')).toHaveAttribute('open','');await expect(settings.locator('[name=monthlyMinutes]')).toBeFocused();await settings.locator('[name=monthlyMinutes]').fill('');await saved(settings);
+  await tab('analysis').click();const cards=page.locator('#costCalculated .metric-card');await expect(cards.first()).toContainText('40.589');
+  await page.locator('[name=liveTarget]').fill('');await expect(page.locator('#costCalculated')).toContainText('Completa');await expect(cards).toHaveCount(0);await expect(page.locator('#costingSave')).toBeDisabled();await expect(page.locator('#costingExcel')).toBeDisabled();
+  await page.locator('[name=liveTarget]').fill('100');await expect(page.locator('.cost-live-inputs .cost-field-error')).toContainText('menor que 100');
+  await page.locator('[name=liveTarget]').fill('40');await page.locator('[name=livePrice]').fill('50000');await expect(cards.nth(1)).toContainText('67.649');await expect(cards.nth(2)).toContainText('9.411');await page.locator('#costingSave').click();await expect(page.locator('#costingStatus')).toContainText(/Guardado local|Guardado y auditado/,{timeout:30000});
+  await page.locator('.cost-channels > summary').click();const channel=page.locator('#costChannel');await channel.locator('[name=name]').fill('Domicilio');await channel.locator('[name=salesPercent]').fill('10');await channel.locator('[name=paymentPercent]').fill('2');await channel.locator('.cost-advanced summary').click();await channel.locator('[name=flatFee]').fill('100');await saved(channel);
+  await page.locator('[name=liveChannel]').selectOption({label:'Domicilio'});await expect(cards.nth(1)).toContainText('84.769');await expect(cards.nth(2)).toContainText('3.311');await page.locator('#costingSave').click();await expect(page.locator('#costingStatus')).toContainText(/Guardado local|Guardado y auditado/,{timeout:30000});
+  // Removal updates all views and persists; dependencies are explained instead of silently ignored.
+  await tab('ingredients').click();const flour=page.locator('tr').filter({hasText:'Harina'});await flour.getByRole('button',{name:'Eliminar',exact:true}).click();await page.locator('#systemMessageDialog [value=accept]').click();await expect(flour.locator('.cost-form-feedback')).toContainText('pertenece a una receta');
+  await tab('expenses').click();await page.locator('tr').filter({hasText:'Caja'}).getByRole('button',{name:'Eliminar',exact:true}).click();await page.locator('#systemMessageDialog [value=accept]').click();await expect(page.locator('#costingStatus')).toContainText(/Guardado local|Guardado y auditado/,{timeout:30000});
+  await page.reload();await expect(page.locator('#costingStatus')).toContainText(/Demostración|Datos confirmados/,{timeout:30000});await tab('analysis').click();await expect(page.locator('[name=livePrice]')).toHaveValue('$50.000');await expect(page.locator('[name=liveTarget]')).toHaveValue('40');await expect(page.locator('[name=liveChannel]')).toContainText('Domicilio');await expect(page.locator('#costCalculated .metric-card').first()).toContainText('39.889');
+}

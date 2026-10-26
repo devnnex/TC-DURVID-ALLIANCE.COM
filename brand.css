@@ -1,0 +1,24 @@
+body[data-system="gcobarf"]{--system-accent:#5e9dff;--system-accent-rgb:94,157,255;--system-deep:#071637}
+body[data-system="cocteleria"]{--system-accent:#d3ae74;--system-accent-rgb:211,174,116;--system-deep:#21160f}
+body[data-system="cafeteria"]{--system-accent:#d7a36c;--system-accent-rgb:215,163,108;--system-deep:#3a2115}
+body[data-system] .admin-login{background:radial-gradient(ellipse at 50% 18%,rgba(var(--system-accent-rgb),.22),transparent 48%),#090b0e}
+body[data-system] .admin-login::before{background:radial-gradient(circle at center,rgba(var(--system-accent-rgb),.14),transparent 48%);filter:none;opacity:1}
+body[data-system] .admin-login::after{background:linear-gradient(120deg,transparent 30%,rgba(var(--system-accent-rgb),.06) 50%,transparent 70%)}
+body[data-system] .admin-login-card{width:min(440px,100%);padding:34px;border-radius:26px;border:1px solid rgba(var(--system-accent-rgb),.28);background:linear-gradient(145deg,rgba(34,35,39,.91),rgba(12,13,16,.95));box-shadow:0 28px 90px #0009,0 0 70px rgba(var(--system-accent-rgb),.08);gap:13px;color:#f8f4ee}
+body[data-system] .admin-login-card .login-back{font-size:12px;color:#d0c7b8;text-decoration:none;display:inline-flex;width:max-content;align-items:center;margin-bottom:18px}
+body[data-system] .admin-login-card .login-back:hover,body[data-system] .admin-login-card .login-back:focus-visible{color:#fff;text-decoration:underline;text-underline-offset:4px}
+body[data-system] .admin-login-card .system-login-name{font-family:Georgia,serif;font-size:clamp(27px,7vw,39px);line-height:1.1;color:var(--system-accent);max-width:290px;letter-spacing:-.035em}
+body[data-system] .admin-login-card .admin-login-logo{top:33px;right:33px;width:58px;height:58px;border-radius:15px;clip-path:none}
+body[data-system] .admin-login-card>svg{display:none}
+body[data-system] .admin-login-card .eyebrow{font-size:10px;letter-spacing:.18em;color:var(--system-accent)}
+body[data-system] .admin-login-card h1{font-family:Georgia,serif;font-size:30px;font-weight:400;letter-spacing:-.03em}
+body[data-system] .admin-login-card p{color:#b8b6b5;line-height:1.5}
+body[data-system] .admin-login-card label{font-size:12px;letter-spacing:.04em;color:#ddd5c9}
+body[data-system] .admin-login-card input{min-height:49px;border-radius:11px;background:#f8f7f4;border:1px solid #fff9;color:#15171b;font-size:15px;padding:0 14px}
+body[data-system] .admin-login-card input:focus{outline:0;border-color:var(--system-accent);box-shadow:0 0 0 4px rgba(var(--system-accent-rgb),.18)}
+body[data-system] .admin-login-card .primary{min-height:51px;margin-top:6px;color:#111318;background:var(--system-accent);border-radius:11px;text-shadow:none;font-size:12px;letter-spacing:.12em;box-shadow:0 12px 25px rgba(var(--system-accent-rgb),.18)}
+body[data-system] .admin-login-card .primary:hover,body[data-system] .admin-login-card .primary:focus-visible{background:#f4e4c9;color:#161514;box-shadow:0 15px 38px rgba(var(--system-accent-rgb),.25)}
+body[data-system] .admin-login-card .primary::before,body[data-system] .admin-login-card .primary::after{display:none}
+body[data-system] .admin-login-card small{font-size:12px}
+body[data-system] .admin-sidebar{background:var(--system-deep)}
+@media(max-width:480px){body[data-system] .admin-login-card{padding:25px;border-radius:21px}body[data-system] .admin-login-card .admin-login-logo{top:24px;right:24px;width:49px;height:49px}}

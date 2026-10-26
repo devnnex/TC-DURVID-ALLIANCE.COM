@@ -1,0 +1,30 @@
+CREATE OR REPLACE PACKAGE alliance_customer_payments AUTHID DEFINER AS
+  FUNCTION collect_payment(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T;
+END;
+/
+CREATE OR REPLACE PACKAGE BODY alliance_customer_payments AS
+  FUNCTION collect_payment(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
+    id_value VARCHAR2(80);customer_id VARCHAR2(80);customer JSON_OBJECT_T;receipt JSON_OBJECT_T;old JSON_OBJECT_T;debt JSON_OBJECT_T;allocation JSON_OBJECT_T;pay JSON_OBJECT_T;settlement JSON_OBJECT_T;turn JSON_OBJECT_T;settings JSON_OBJECT_T;seen JSON_OBJECT_T:=JSON_OBJECT_T();allocations JSON_ARRAY_T;payments JSON_ARRAY_T;amount NUMBER;total NUMBER:=0;paid NUMBER:=0;stamp_value VARCHAR2(30):=alliance_activity.occurred_at;actor VARCHAR2(160);method_seen JSON_OBJECT_T:=JSON_OBJECT_T();cash_total NUMBER:=0;
+  BEGIN
+    alliance_security.require_location(u,b,l,'sales.write');alliance_security.require_location(u,b,l,'customers.read');alliance_pos_store.lock_scope(b,l);
+    alliance_security.keys_only(p,'id,customerId,allocations,payments,reference,number,createdAt,cashReceived,changeDue');id_value:=alliance_security.text_value(p,'id',80,'^[a-zA-Z0-9_-]+$');customer_id:=alliance_security.text_value(p,'customerId',80);customer:=alliance_operations.checked(b,l,'customers',customer_id);allocations:=p.get_array('allocations');payments:=p.get_array('payments');
+    IF allocations IS NULL OR allocations.get_size<1 OR allocations.get_size>300 OR payments IS NULL OR payments.get_size<1 OR payments.get_size>4 THEN alliance_security.fail(400,'INVALID_INPUT','Completa los saldos y medios de pago.');END IF;
+    old:=alliance_operations.get_row(b,l,'customerPayments',id_value);IF old IS NOT NULL THEN IF old.get_array('allocations').to_string<>allocations.to_string OR old.get_array('payments').to_string<>payments.to_string OR old.get_string('customerId')<>customer_id THEN alliance_security.fail(409,'IDEMPOTENCY_REUSE','El recibo ya tiene otros datos.');END IF;RETURN old;END IF;
+    FOR i IN 0..allocations.get_size-1 LOOP
+      allocation:=TREAT(allocations.get(i) AS JSON_OBJECT_T);alliance_security.keys_only(allocation,'debtId,amount,expectedPaid');debt:=alliance_operations.checked(b,l,'debts',allocation.get_string('debtId'));
+      IF seen.has(debt.get_string('id')) OR NVL(debt.get_string('customerId'),'-')<>customer_id OR debt.get_boolean('voided') THEN alliance_security.fail(409,'DEBT_CHANGED','Saldo no disponible para este cliente.');END IF;seen.put(debt.get_string('id'),TRUE);
+      amount:=ROUND(alliance_operations.numeric_value(allocation,'amount',0.01)*100);IF ROUND(alliance_operations.numeric_value(allocation,'expectedPaid')*100)<>ROUND(debt.get_number('paid')*100) OR amount>ROUND((debt.get_number('total')-debt.get_number('paid'))*100) THEN alliance_security.fail(409,'DEBT_CHANGED','El saldo cambió en otro equipo. Actualiza la cartera antes de cobrar.');END IF;total:=total+amount;
+    END LOOP;
+    FOR i IN 0..payments.get_size-1 LOOP pay:=TREAT(payments.get(i) AS JSON_OBJECT_T);alliance_security.keys_only(pay,'method,amount');IF NVL(pay.get_string('method'),'-') NOT IN('cash','transfer','breb','card') OR method_seen.has(pay.get_string('method')) THEN alliance_security.fail(400,'INVALID_PAYMENT','Elige efectivo, transferencia, Bre-B o tarjeta.');END IF;method_seen.put(pay.get_string('method'),TRUE);paid:=paid+ROUND(alliance_operations.numeric_value(pay,'amount')*100);IF pay.get_string('method')='cash' THEN cash_total:=ROUND(pay.get_number('amount')*100);END IF;END LOOP;
+    IF total<>paid THEN alliance_security.fail(400,'INVALID_PAYMENT','Los pagos no coinciden con el saldo a cobrar.');END IF;
+    IF p.has('cashReceived') AND NOT p.get('cashReceived').is_null THEN IF ROUND(alliance_operations.numeric_value(p,'cashReceived')*100)<cash_total OR ROUND((p.get_number('cashReceived')-cash_total/100)*100)<>ROUND(NVL(p.get_number('changeDue'),0)*100) THEN alliance_security.fail(400,'INVALID_PAYMENT','Revisa el efectivo recibido y el cambio.');END IF;END IF;
+    turn:=alliance_operations.open_cash(b,l);settings:=alliance_operations.get_row(b,l,'settings','primary');IF turn IS NULL AND settings IS NOT NULL AND settings.get_boolean('cashRequired') THEN alliance_security.fail(409,'REGISTER_NOT_OPEN','Abre el turno antes de cobrar.');END IF;
+    FOR i IN 0..allocations.get_size-1 LOOP allocation:=TREAT(allocations.get(i) AS JSON_OBJECT_T);debt:=alliance_operations.checked(b,l,'debts',allocation.get_string('debtId'));amount:=ROUND(allocation.get_number('amount'),2);debt.put('paid',ROUND(debt.get_number('paid')+amount,2));alliance_operations.put_row(u,b,l,'debts',debt.get_string('id'),debt);
+      settlement:=JSON_OBJECT_T();settlement.put('type','debt_pay');settlement.put('recordId',debt.get_string('id'));settlement.put('amount',amount);settlement.put('method',CASE WHEN payments.get_size>1 THEN 'mixed' ELSE TREAT(payments.get(0) AS JSON_OBJECT_T).get_string('method') END);settlement.put('reference',NVL(p.get_string('reference'),'Pago de cartera'));settlement.put('paymentId',id_value);alliance_operations.put_row(u,b,l,'settlements',id_value||'-'||TO_CHAR(i),settlement);
+    END LOOP;
+    FOR i IN 0..payments.get_size-1 LOOP pay:=TREAT(payments.get(i) AS JSON_OBJECT_T);alliance_operations.cash_entry(u,b,l,id_value||'-cash-'||TO_CHAR(i),pay.get_number('amount'),pay.get_string('method'),id_value);END LOOP;
+    receipt:=JSON_OBJECT_T(p.to_clob);receipt.put('recordType','collection');receipt.put('customerName',customer.get_string('name'));receipt.put('total',total/100);receipt.put('createdAt',stamp_value);IF turn IS NOT NULL THEN receipt.put('cashSessionId',turn.get_string('id'));END IF;alliance_operations.put_row(u,b,l,'customerPayments',id_value,receipt);
+    alliance_pos_store.audit(u,b,'CUSTOMER_PAYMENT',id_value,NULL,receipt.to_clob);alliance_activity.record_event(u,b,l,'customers','CUSTOMER_PAYMENT','Registró un pago de cartera: '||customer.get_string('name'),id_value);RETURN receipt;
+  END;
+END;
+/
