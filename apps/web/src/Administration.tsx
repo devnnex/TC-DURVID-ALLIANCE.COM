@@ -5,7 +5,7 @@ import type { Context, Location } from '../../../packages/shared/domain';
 import { effectivePermissions, roleTemplates, sections, sectionGroups, sectionOverrides, type Access, type Administration, type LocationInput, type ManagedUser } from '../../../packages/shared/administration';
 import { api } from './api';
 import './team.css';
-import { accessMessage } from './share-access';
+import { accessMessage, accessPortalUrl } from './share-access';
 
 const memberEditable=(context:Context,member:ManagedUser,locationId?:string)=>!member.protected&&(context.is_owner||member.access.filter(a=>!locationId||a.location_id===locationId).every(a=>!a.roles.includes('BOSS')||context.permissions[a.location_id]?.includes('sales.manage')));
 const message=(e:unknown)=>e instanceof Error?e.message:'No se pudo guardar el cambio.';
@@ -56,10 +56,8 @@ export function AdministrationPage({context,demo,onContext,selectedLocation,embe
     const saved=shareable.current.find(u=>(member.id&&u.id===member.id)||u.username===member.username);
     const access=member.access.find(a=>a.location_id===selectedLocation)||member.access[0];
     const target=data?.locations.find(l=>l.id===access?.location_id)||data?.locations.find(l=>l.id===selectedLocation);
-    const waiter=access?.roles.includes('WAITER'),entry=waiter?'index.html':'admin.html';
-    const url=embedded?new URL('./'+entry,window.location.href):target?new URL('../negocios/'+encodeURIComponent(target.slug)+'/'+entry,window.location.href):new URL('../index.html',window.location.href);
-    if(target)url.searchParams.set('branch',target.slug);
-    await navigator.clipboard.writeText(accessMessage({name:member.name,username:member.username,password:saved?.password,branch:target?.name||branchName||'TC-DURVID',url:url.href}));
+    const url=accessPortalUrl({currentUrl:window.location.href,embedded,branch:target,roles:access?.roles});
+    await navigator.clipboard.writeText(accessMessage({name:member.name,username:member.username,password:saved?.password,branch:target?.name||branchName||'TC-DURVID',url}));
     const key=member.id||member.username;setCopied(key);setTimeout(()=>setCopied(current=>current===key?'':current),2000);
   }catch{setError('No se pudo copiar el acceso. Permite el acceso al portapapeles y vuelve a intentarlo.');}};
   const visible=data?.users.filter(u=>(all||!selectedLocation||u.protected||u.access.some(a=>a.location_id===selectedLocation))&&[u.name,u.username].join(' ').toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')))||[];

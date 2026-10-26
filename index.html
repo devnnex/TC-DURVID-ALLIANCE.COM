@@ -36,21 +36,21 @@
     <section class="systems" aria-label="Sistemas disponibles">
       <div class="section-heading"><span>01 / SISTEMAS</span><span>ELIGE TU DESTINO <span aria-hidden="true">↘</span></span></div>
       <div class="systems-grid">
-        <a class="system-card system-gcobarf" href="negocios/gcobarf/admin.html" aria-label="Ingresar a GCOBARF Nutripet's">
+        <a class="system-card system-gcobarf" data-branch="gcobarf" href="negocios/gcobarf/admin.html" aria-label="Ingresar a GCOBARF Nutripet's">
           <span class="card-index">01 <span aria-hidden="true">/</span> NUTRICIÓN ANIMAL</span>
           <span class="card-art card-art-pet" aria-hidden="true"><span class="orbit orbit-a"></span><span class="orbit orbit-b"></span><span class="art-star">✦</span></span>
           <span class="card-content"><span class="card-monogram">G</span><span class="card-title">GCOBARF</span><span class="card-subtitle">NUTRIPET’S</span></span>
           <span class="card-bottom"><span>ENTRAR AL SISTEMA</span><span class="arrow" aria-hidden="true">↗</span></span>
         </a>
 
-        <a class="system-card system-cocktail" href="negocios/cocteleria/admin.html" aria-label="Ingresar a Jespresso Olivia Coctelería">
+        <a class="system-card system-cocktail" data-branch="cocteleria" href="negocios/cocteleria/admin.html" aria-label="Ingresar a Jespresso Olivia Coctelería">
           <span class="card-index">02 <span aria-hidden="true">/</span> COCTELERÍA</span>
           <span class="card-art card-art-cocktail" aria-hidden="true"><span class="glass-stem"></span><span class="glass-bowl"></span><span class="glass-liquid"></span><span class="glass-glint">✦</span></span>
           <span class="card-content"><span class="card-script">Jespresso</span><span class="card-script card-script-second">Olivia</span><span class="card-subtitle">COCTELERÍA</span></span>
           <span class="card-bottom"><span>ENTRAR AL SISTEMA</span><span class="arrow" aria-hidden="true">↗</span></span>
         </a>
 
-        <a class="system-card system-coffee" href="negocios/cafeteria/admin.html" aria-label="Ingresar a Jespresso Olivia Cafetería">
+        <a class="system-card system-coffee" data-branch="cafeteria" href="negocios/cafeteria/admin.html" aria-label="Ingresar a Jespresso Olivia Cafetería">
           <span class="card-index">03 <span aria-hidden="true">/</span> CAFETERÍA</span>
           <span class="card-art card-art-coffee" aria-hidden="true"><span class="steam steam-one"></span><span class="steam steam-two"></span><span class="coffee-cup"></span><span class="coffee-handle"></span></span>
           <span class="card-content"><span class="card-script">Jespresso</span><span class="card-script card-script-second">Olivia</span><span class="card-subtitle">CAFETERÍA</span></span>
@@ -70,7 +70,42 @@
     <footer class="portal-footer"><span>© TC-DURVID ALLIANCE S.A.S.</span><a class="central-access" href="admin/index.html">CENTRO OPERATIVO <span aria-hidden="true">↗</span></a><span>OPERACIÓN CONECTADA <span class="live-dot" aria-hidden="true"></span></span></footer>
   </main>
 <script>
-(()=>{const update=()=>{const waiter=document.querySelector('[name=portalMode]:checked').value==='waiter';document.querySelectorAll('a.system-card').forEach(card=>{card.setAttribute('href',card.getAttribute('href').replace(/\/(admin|index)\.html/,waiter?'/index.html':'/admin.html'));card.querySelector('.card-bottom>span').textContent=waiter?'TOMAR PEDIDOS':'ENTRAR AL SISTEMA';});document.querySelector('#portalModeHelp').textContent=waiter?'Elige el negocio donde vas a tomar pedidos. Entra con tu usuario de mesero.':'Elige tu negocio para entrar a su panel.';};if(new URLSearchParams(location.search).get('mode')==='waiter')document.querySelector('[name=portalMode][value=waiter]').checked=true;document.querySelectorAll('[name=portalMode]').forEach(input=>input.addEventListener('change',update));update();})();
+(() => {
+  const params = new URLSearchParams(location.search), branch = params.get('branch'), mode = params.get('mode');
+  const scoped = /^[a-z0-9-]{3,80}$/.test(branch || '') && ['waiter', 'panel'].includes(mode);
+  const update = () => {
+    const waiter = document.querySelector('[name=portalMode]:checked').value === 'waiter';
+    document.querySelectorAll('a.system-card').forEach(card => {
+      card.setAttribute('href', card.getAttribute('href').replace(/\/(admin|index)\.html/, waiter ? '/index.html' : '/admin.html'));
+      card.querySelector('.card-bottom>span').textContent = waiter ? 'TOMAR PEDIDOS' : 'ENTRAR AL SISTEMA';
+    });
+    document.querySelector('#portalModeHelp').textContent = waiter ? 'Elige el negocio donde vas a tomar pedidos. Entra con tu usuario de mesero.' : 'Elige tu negocio para entrar a su panel.';
+  };
+  if (mode === 'waiter') document.querySelector('[name=portalMode][value=waiter]').checked = true;
+  if (scoped) {
+    document.body.classList.add('portal-assigned');
+    document.querySelector('.portal-mode').hidden = true;
+    let card = Array.from(document.querySelectorAll('a.system-card')).find(card => card.dataset.branch === branch);
+    if (!card) {
+      card = document.querySelector('.system-coffee').cloneNode(true);
+      card.dataset.branch = branch;
+      const name = params.get('name')?.trim().slice(0, 160) || branch;
+      card.setAttribute('aria-label', 'Ingresar a ' + name);
+      card.querySelector('.card-index').textContent = '01 / SUCURSAL';
+      card.querySelector('.card-content').textContent = name;
+      card.querySelector('.card-content').classList.add('card-branch-name');
+      document.querySelector('.systems-grid').append(card);
+    }
+    document.querySelectorAll('.system-card').forEach(other => { if (other !== card) other.remove(); });
+    const folder = ['gcobarf', 'cocteleria', 'cafeteria'].includes(branch) ? branch : 'sucursal';
+    card.setAttribute('href', 'negocios/' + folder + '/admin.html?branch=' + encodeURIComponent(branch));
+    document.querySelector('.hero-description').textContent = mode === 'waiter' ? 'Tu negocio está listo. Entra con tu usuario de mesero para tomar pedidos.' : 'Tu negocio está listo. Entra con tus credenciales para trabajar.';
+    document.querySelector('.section-heading>span').textContent = '01 / TU NEGOCIO';
+    document.querySelector('.section-heading>span:last-child').textContent = 'TU ACCESO ASIGNADO';
+  }
+  document.querySelectorAll('[name=portalMode]').forEach(input => input.addEventListener('change', update));
+  update();
+})();
 </script>
 <script src="operational/dialogs.js" defer></script></body>
 </html>

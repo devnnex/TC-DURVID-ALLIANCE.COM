@@ -113,3 +113,14 @@ html,body{min-height:100%;height:auto;overflow-x:clip;overflow-y:auto}
 .portal-mode{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;border:0;padding:12px 0 30px;margin:0}.portal-mode legend{text-align:center;font-size:15px;color:#b9bdc6;margin-bottom:15px}.portal-mode label{display:flex;align-items:center;gap:9px;padding:12px 18px;border:1px solid #343841;border-radius:40px;color:#d8dbe1;cursor:pointer;background:#1a1c22;font-size:14px}.portal-mode label:has(input:checked){background:#e9e2d8;border-color:#e9e2d8;color:#27231d}.portal-mode input{accent-color:#9b7448}.portal-mode p{width:100%;text-align:center;font-size:13px;color:#969ba6;margin:8px 0 0}@media(max-width:480px){.portal-mode{gap:8px}.portal-mode label{padding:11px 13px;font-size:12px}.portal-mode p{font-size:12px;padding:0 8px}}
 /* Temporarily hide these portal actions while keeping their existing functionality. */
 .portal-install,.portal-footer .central-access{display:none!important}
+/* Shared access links show the assigned business at a comfortable card width. */
+.portal-assigned .portal-mode[hidden]{display:none}
+.portal-assigned .systems{width:min(100%,380px);margin:0 auto;padding:12px 0 24px}
+.portal-assigned .systems-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;justify-content:center}
+.portal-assigned .system-card{min-height:300px}
+.portal-assigned .card-title{font-size:46px}
+.portal-assigned .card-script{font-size:64px}
+.portal-assigned .card-monogram{font-size:56px}
+.portal-assigned .card-index,.portal-assigned .card-bottom{font-size:10px}
+.portal-assigned .card-subtitle{font-size:16px}
+.portal-assigned .card-branch-name{font-family:'DM Serif Display',Georgia,serif;font-size:36px;line-height:1.2;overflow-wrap:anywhere}
