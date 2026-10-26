@@ -59,5 +59,7 @@ test('una venta de otro dispositivo actualiza Ventas sin recargar la página',as
   await expect(page.locator('#incomeRecords')).toContainText('OTRO-EQUIPO',{timeout:20000});
   await page.locator('.admin-sidebar [href="#movements"]').click();
   await expect(page.locator('#inventoryMovementList')).toContainText('OTRO-EQUIPO',{timeout:20000});
+  await page.locator('.admin-sidebar [href="#inventory"]').click();
+  await expect(page.locator('#inventoryList')).toContainText('4.999',{timeout:10000});
  }finally{await second.close();}
 });
