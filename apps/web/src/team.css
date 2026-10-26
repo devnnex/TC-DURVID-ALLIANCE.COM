@@ -95,3 +95,5 @@
 .team-centre .team-toolbar .team-more-options,.team-centre .team-tabs button.selected{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
 .team-centre .team-toolbar .team-more-options:hover:not(:disabled),.team-centre .team-tabs button.selected:hover{filter:brightness(.96)}
 .team-centre .team-toolbar .team-more-options:focus-visible,.team-centre .team-tabs button.selected:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 40%,transparent);outline-offset:3px}
+
+.team-save-notice{flex-wrap:wrap}.team-save-notice>span{flex:1;min-width:180px;overflow-wrap:anywhere}.team-save-notice small{display:block;margin-top:4px;line-height:1.5}.team-save-notice .team-copy{margin:0 0 0 auto;flex-shrink:0}.team-save-notice>svg{flex-shrink:0}
