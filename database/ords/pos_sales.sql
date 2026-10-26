@@ -3,6 +3,26 @@ CREATE OR REPLACE PACKAGE alliance_pos_finance AUTHID DEFINER AS
 END;
 /
 CREATE OR REPLACE PACKAGE BODY alliance_pos_finance AS
+  -- One output-product movement, with its immutable ingredient breakdown. Never debit stock here.
+  PROCEDURE recipe_entries(u VARCHAR2,b VARCHAR2,l VARCHAR2,invoice JSON_OBJECT_T,reversing BOOLEAN DEFAULT FALSE) IS
+    lines JSON_ARRAY_T:=invoice.get_array('items');parts JSON_ARRAY_T;line JSON_OBJECT_T;part JSON_OBJECT_T;ingredient JSON_OBJECT_T;detail JSON_OBJECT_T;entries JSON_OBJECT_T;entry JSON_OBJECT_T;ingredients JSON_ARRAY_T;keys JSON_KEY_LIST;
+    event_id VARCHAR2(160);ingredient_id VARCHAR2(80);quantity_value NUMBER;body CLOB:=lines.to_clob;n NUMBER;reference_value VARCHAR2(160):=SUBSTR(invoice.get_string('number'),1,160);session_value VARCHAR2(80):=invoice.get_string('sessionId');movement_delta NUMBER;movement_kind VARCHAR2(40);
+  BEGIN
+    FOR x IN(SELECT product_key,SUM(qty) qty,SUM(qty*unit_cost)/SUM(qty) cost FROM JSON_TABLE(body,'$[*]' COLUMNS(product_key VARCHAR2(36) PATH '$.menu_item_id',recipe_key VARCHAR2(80) PATH '$.recipeId',qty NUMBER PATH '$.quantity',unit_cost NUMBER PATH '$.unit_cost')) WHERE product_key IS NOT NULL AND recipe_key IS NOT NULL GROUP BY product_key) LOOP
+      event_id:=CASE WHEN reversing THEN alliance_security.new_id ELSE 'SALE-'||invoice.get_string('id')||'-'||x.product_key END;
+      SELECT COUNT(*) INTO n FROM alliance_pos_movements WHERE business_id=b AND location_id=l AND id=event_id;IF n>0 THEN CONTINUE;END IF;
+      entries:=JSON_OBJECT_T();
+      FOR i IN 0..lines.get_size-1 LOOP line:=TREAT(lines.get(i) AS JSON_OBJECT_T);IF line.get_string('menu_item_id')=x.product_key AND line.has('recipeConsumption') THEN
+        parts:=line.get_array('recipeConsumption');FOR j IN 0..parts.get_size-1 LOOP part:=TREAT(parts.get(j) AS JSON_OBJECT_T);ingredient_id:=part.get_string('ingredientId');ingredient:=alliance_operations.raw_item(b,l,ingredient_id);
+          quantity_value:=alliance_operations.convert_quantity(part.get_number('quantity'),part.get_string('unit'),ingredient.get_string('unit'))*line.get_number('quantity');
+          IF entries.has(ingredient_id) THEN entry:=entries.get_object(ingredient_id);quantity_value:=quantity_value+entry.get_number('quantity');ELSE entry:=JSON_OBJECT_T();entry.put('ingredientId',ingredient_id);entry.put('name',ingredient.get_string('name'));entry.put('unit',ingredient.get_string('unit'));END IF;entry.put('quantity',quantity_value);entries.put(ingredient_id,entry);
+        END LOOP;END IF;END LOOP;
+      ingredients:=JSON_ARRAY_T();keys:=entries.get_keys;FOR i IN 1..keys.COUNT LOOP ingredients.append(entries.get_object(keys(i)));END LOOP;detail:=JSON_OBJECT_T();detail.put('movementId',event_id);detail.put('ingredients',ingredients);
+      movement_delta:=CASE WHEN reversing THEN x.qty ELSE -x.qty END;movement_kind:=CASE WHEN reversing THEN 'DEVOLUCION_VENTA_RECETA' ELSE 'SALIDA_VENTA_RECETA' END;
+      INSERT INTO alliance_pos_movements(business_id,location_id,id,product_id,actor_user_id,delta,stock_before,stock_after,cost_minor,kind,reference,session_id,allow_negative)VALUES(b,l,event_id,x.product_key,u,movement_delta,0,0,ROUND(NVL(x.cost,0)*100),movement_kind,reference_value,session_value,0);
+      alliance_pos_store.put_document(b,l,'op_movementdetail',alliance_security.hash_text(event_id),detail);
+    END LOOP;
+  END;
   FUNCTION save_sale(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_invoice JSON_OBJECT_T,p_edit BOOLEAN DEFAULT FALSE,p_expected JSON_OBJECT_T DEFAULT NULL) RETURN JSON_OBJECT_T IS
     r JSON_OBJECT_T:=JSON_OBJECT_T();invoice JSON_OBJECT_T:=JSON_OBJECT_T(p_invoice.to_clob);lines JSON_ARRAY_T;line JSON_OBJECT_T;totals JSON_OBJECT_T;payments JSON_ARRAY_T;pay JSON_OBJECT_T;session_json JSON_OBJECT_T;old_invoice JSON_OBJECT_T;
     sale_id VARCHAR2(80);session_value VARCHAR2(80);product_value VARCHAR2(36);fingerprint VARCHAR2(64);previous_hash VARCHAR2(64);json_text CLOB;old_text CLOB;n NUMBER;quantity_value NUMBER;price_value NUMBER;cost_value NUMBER;subtotal_value NUMBER:=0;cost_total NUMBER:=0;payment_total NUMBER:=0;total_value NUMBER;discount_value NUMBER;tax_value NUMBER;fee_value NUMBER;tip_value NUMBER;already_adjusted NUMBER;delta_value NUMBER;kind_value VARCHAR2(40);void_value NUMBER;effective_user VARCHAR2(160);stored_line JSON_OBJECT_T;seen_lines JSON_OBJECT_T:=JSON_OBJECT_T();line_id VARCHAR2(80);table_sale BOOLEAN:=FALSE;
@@ -21,7 +41,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_finance AS
       IF n<>1 THEN alliance_security.fail(404,'NOT_FOUND','Venta no disponible.');END IF;
       SELECT invoice_json,voided INTO old_text,void_value FROM alliance_pos_sales WHERE business_id=p_business AND location_id=p_location AND id=sale_id;IF void_value=1 THEN alliance_security.fail(409,'VOIDED','La venta esta anulada.');END IF;
       old_invoice:=JSON_OBJECT_T(old_text);alliance_operations_sales.reverse_sale(p_user,p_business,p_location,old_invoice);lines:=old_invoice.get_array('items');
-      FOR i IN 0..lines.get_size-1 LOOP line:=TREAT(lines.get(i) AS JSON_OBJECT_T);product_value:=line.get_string('menu_item_id');IF product_value IS NOT NULL AND line.get_string('recipeId') IS NULL THEN alliance_pos_store.movement(p_user,p_business,p_location,alliance_security.new_id,product_value,line.get_number('quantity'),'DEVOLUCION_CORRECCION',sale_id,session_value);END IF;END LOOP;
+      FOR i IN 0..lines.get_size-1 LOOP line:=TREAT(lines.get(i) AS JSON_OBJECT_T);product_value:=line.get_string('menu_item_id');IF product_value IS NOT NULL AND line.get_string('recipeId') IS NULL THEN alliance_pos_store.movement(p_user,p_business,p_location,alliance_security.new_id,product_value,line.get_number('quantity'),'DEVOLUCION_CORRECCION',sale_id,session_value);END IF;END LOOP;recipe_entries(p_user,p_business,p_location,old_invoice,TRUE);
     ELSE
       session_json:=alliance_pos_store.document(p_business,p_location,'table_sessions',session_value);
       IF session_json IS NOT NULL THEN
@@ -58,12 +78,12 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_finance AS
     END LOOP;IF payment_total<>total_value THEN alliance_security.fail(400,'INVALID_PAYMENT','Los pagos no coinciden con el total.');END IF;
     -- Aggregate by product so a duplicate line cannot debit the same stock twice.
     json_text:=lines.to_clob;
-    FOR x IN(SELECT product_key,SUM(qty) quantity_sum FROM JSON_TABLE(json_text,'$[*]' COLUMNS(product_key VARCHAR2(36) PATH '$.menu_item_id',qty NUMBER PATH '$.quantity')) WHERE product_key IS NOT NULL GROUP BY product_key) LOOP
+    FOR x IN(SELECT product_key,SUM(qty) quantity_sum,SUM(qty*unit_cost)/SUM(qty) unit_cost FROM JSON_TABLE(json_text,'$[*]' COLUMNS(product_key VARCHAR2(36) PATH '$.menu_item_id',qty NUMBER PATH '$.quantity',unit_cost NUMBER PATH '$.unit_cost')) WHERE product_key IS NOT NULL GROUP BY product_key) LOOP
       product_value:=x.product_key;quantity_value:=x.quantity_sum;already_adjusted:=0;IF NOT p_edit THEN SELECT NVL(-SUM(delta),0) INTO already_adjusted FROM alliance_pos_movements WHERE business_id=p_business AND location_id=p_location AND product_id=product_value AND session_id=session_value AND kind IN('CONSUMO_MESA','DEVOLUCION_CONSUMO');END IF;
       delta_value:=GREATEST(0,already_adjusted)-quantity_value;kind_value:=CASE WHEN delta_value<=0 THEN 'SALIDA_VENTA' ELSE 'DEVOLUCION_VENTA' END;
       IF delta_value<>0 AND alliance_operations_sales.recipe_for(p_business,p_location,product_value) IS NULL THEN alliance_pos_store.movement(p_user,p_business,p_location,CASE WHEN p_edit THEN alliance_security.new_id ELSE 'SALE-'||sale_id||'-'||product_value END,product_value,delta_value,kind_value,invoice.get_string('number'),session_value);END IF;
     END LOOP;
-    alliance_operations_sales.after_sale(p_user,p_business,p_location,invoice);lines:=invoice.get_array('items');
+    alliance_operations_sales.after_sale(p_user,p_business,p_location,invoice);lines:=invoice.get_array('items');recipe_entries(p_user,p_business,p_location,invoice);
     SELECT full_name INTO effective_user FROM users WHERE business_id=p_business AND id=p_user;invoice.put('soldByUserId',p_user);invoice.put('waiterName',effective_user);invoice.put('items',lines);json_text:=invoice.to_clob;
     IF p_edit THEN UPDATE alliance_pos_sales SET invoice_json=json_text,total_minor=total_value,subtotal_minor=subtotal_value,cost_minor=cost_total WHERE business_id=p_business AND location_id=p_location AND id=sale_id;
     ELSE INSERT INTO alliance_pos_sales(business_id,location_id,id,session_id,actor_user_id,invoice_json,total_minor,subtotal_minor,cost_minor)VALUES(p_business,p_location,sale_id,session_value,p_user,json_text,total_value,subtotal_value,cost_total);END IF;
@@ -88,17 +108,17 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_finance AS
     IF p_action='delete_sale' THEN
       alliance_pos_store.lock_scope(p_business,p_location);alliance_security.require_location(p_user,p_business,p_location,'sales.write');IF NOT alliance_security.location_owner(p_user,p_business,p_location) THEN alliance_security.fail(403,'FORBIDDEN','Solo el propietario puede anular ventas.');END IF;
       sale_id:=p_payload.get_string('saleId');BEGIN SELECT invoice_json,voided INTO json_text,n FROM alliance_pos_sales WHERE business_id=p_business AND location_id=p_location AND id=sale_id;EXCEPTION WHEN NO_DATA_FOUND THEN alliance_security.fail(404,'NOT_FOUND','Venta no disponible.');END;
-      IF n=0 THEN invoice:=JSON_OBJECT_T(json_text);alliance_operations_sales.reverse_sale(p_user,p_business,p_location,invoice);lines:=invoice.get_array('items');FOR i IN 0..lines.get_size-1 LOOP line:=TREAT(lines.get(i) AS JSON_OBJECT_T);IF line.get_string('menu_item_id') IS NOT NULL AND line.get_string('recipeId') IS NULL THEN alliance_pos_store.movement(p_user,p_business,p_location,'VOID-'||sale_id||'-'||TO_CHAR(i),line.get_string('menu_item_id'),line.get_number('quantity'),'DEVOLUCION_VENTA',sale_id,invoice.get_string('sessionId'));END IF;END LOOP;
+      IF n=0 THEN invoice:=JSON_OBJECT_T(json_text);alliance_operations_sales.reverse_sale(p_user,p_business,p_location,invoice);lines:=invoice.get_array('items');FOR i IN 0..lines.get_size-1 LOOP line:=TREAT(lines.get(i) AS JSON_OBJECT_T);IF line.get_string('menu_item_id') IS NOT NULL AND line.get_string('recipeId') IS NULL THEN alliance_pos_store.movement(p_user,p_business,p_location,'VOID-'||sale_id||'-'||TO_CHAR(i),line.get_string('menu_item_id'),line.get_number('quantity'),'DEVOLUCION_VENTA',sale_id,invoice.get_string('sessionId'));END IF;END LOOP;recipe_entries(p_user,p_business,p_location,invoice,TRUE);
         UPDATE alliance_pos_sales SET voided=1 WHERE business_id=p_business AND location_id=p_location AND id=sale_id;alliance_pos_store.audit(p_user,p_business,'POS_SALE_VOID',sale_id,json_text,p_payload.to_clob);
       END IF;r.put('ok',TRUE);r.put('saleId',sale_id);r.put('items',alliance_pos_store.inventory(p_business,p_location));RETURN r;
     END IF;
     IF p_action='get_inventory_movements' THEN
       alliance_security.require_location(p_user,p_business,p_location,'movements.read');
       IF p_payload.has('cursor') AND NOT p_payload.get('cursor').is_null THEN cursor_json:=p_payload.get_object('cursor');cursor_id:=cursor_json.get_string('id');BEGIN cursor_stamp:=FROM_TZ(TO_TIMESTAMP(cursor_json.get_string('at'),'YYYY-MM-DD"T"HH24:MI:SS.FF9"Z"'),'UTC');EXCEPTION WHEN OTHERS THEN alliance_security.fail(400,'INVALID_INPUT','Revisa la página de movimientos.');END;END IF;
-      FOR x IN(SELECT m.*,p.name,u.full_name,s.code FROM alliance_pos_movements m JOIN products p ON p.id=m.product_id AND p.business_id=m.business_id JOIN users u ON u.id=m.actor_user_id AND u.business_id=m.business_id LEFT JOIN alliance_pos_stock s ON s.business_id=m.business_id AND s.location_id=m.location_id AND s.product_id=m.product_id WHERE m.business_id=p_business AND m.location_id=p_location AND (movement_cutoff IS NULL OR m.created_at>movement_cutoff) AND (cursor_stamp IS NULL OR m.created_at<cursor_stamp OR (m.created_at=cursor_stamp AND m.id<cursor_id)) ORDER BY m.created_at DESC,m.id DESC FETCH FIRST 801 ROWS ONLY) LOOP
+      FOR x IN(SELECT m.*,p.name,u.full_name,s.code,d.data_json movement_detail FROM alliance_pos_movements m JOIN products p ON p.id=m.product_id AND p.business_id=m.business_id JOIN users u ON u.id=m.actor_user_id AND u.business_id=m.business_id LEFT JOIN alliance_pos_stock s ON s.business_id=m.business_id AND s.location_id=m.location_id AND s.product_id=m.product_id LEFT JOIN alliance_pos_documents d ON d.business_id=m.business_id AND d.location_id=m.location_id AND d.entity='op_movementdetail' AND d.id=alliance_security.hash_text(m.id) WHERE m.business_id=p_business AND m.location_id=p_location AND (movement_cutoff IS NULL OR m.created_at>movement_cutoff) AND (cursor_stamp IS NULL OR m.created_at<cursor_stamp OR (m.created_at=cursor_stamp AND m.id<cursor_id)) ORDER BY m.created_at DESC,m.id DESC FETCH FIRST 801 ROWS ONLY) LOOP
         IF arr.get_size=800 THEN has_more:=TRUE;EXIT;END IF;next_json:=JSON_OBJECT_T();next_json.put('id',x.id);next_json.put('at',TO_CHAR(x.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF9"Z"'));
-        record_json:=JSON_OBJECT_T();record_json.put('movementId',x.id);record_json.put('productId',x.product_id);record_json.put('code',x.code);record_json.put('product',x.name);record_json.put('type',x.kind);record_json.put('delta',x.delta);record_json.put('before',x.stock_before);record_json.put('after',x.stock_after);record_json.put('unitCost',x.cost_minor/100);record_json.put('reference',x.reference);record_json.put('sessionId',x.session_id);record_json.put('date',TO_CHAR(x.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));record_json.put('user',x.full_name);arr.append(record_json);
-      END LOOP;r.put('ok',TRUE);r.put('movements',arr);r.put('hasMore',has_more);IF has_more THEN r.put('nextCursor',next_json);ELSE r.put_null('nextCursor');END IF;r.put('revision','oracle-pos-v1');RETURN r;
+        record_json:=JSON_OBJECT_T();record_json.put('movementId',x.id);record_json.put('productId',x.product_id);record_json.put('code',x.code);record_json.put('product',x.name);record_json.put('type',x.kind);record_json.put('delta',x.delta);record_json.put('before',x.stock_before);record_json.put('after',x.stock_after);record_json.put('unitCost',x.cost_minor/100);record_json.put('reference',x.reference);record_json.put('sessionId',x.session_id);record_json.put('date',TO_CHAR(x.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));record_json.put('user',x.full_name);IF x.kind IN('SALIDA_VENTA_RECETA','DEVOLUCION_VENTA_RECETA') THEN record_json.put('stockBasis','recipe');record_json.put_null('before');record_json.put_null('after');IF x.movement_detail IS NOT NULL THEN invoice:=JSON_OBJECT_T(x.movement_detail);record_json.put('ingredients',invoice.get_array('ingredients'));END IF;END IF;arr.append(record_json);
+      END LOOP;r.put('ok',TRUE);r.put('movements',arr);r.put('hasMore',has_more);IF has_more THEN r.put('nextCursor',next_json);ELSE r.put_null('nextCursor');END IF;r.put('revision',alliance_pos_store.report_revision(p_business,p_location));RETURN r;
     END IF;
     IF p_action<>'get_income_report' THEN alliance_security.fail(400,'INVALID_INPUT','Accion no permitida.');END IF;
     alliance_security.require_location(p_user,p_business,p_location,'sales.read');from_value:=NVL(p_payload.get_string('dateFrom'),TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'America/Bogota','YYYY-MM-DD'));to_value:=NVL(p_payload.get_string('dateTo'),from_value);
@@ -140,7 +160,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_finance AS
         END IF;
       END LOOP;
     END IF;
-    IF NOT r.has('records') THEN r.put('records',JSON_ARRAY_T());END IF;r.put('ok',TRUE);r.put('totals',totals);r.put('hasMore',FALSE);r.put_null('nextCursor');r.put('revision','oracle-pos-v1');r.put('generatedAt',alliance_pos_store.stamp);RETURN r;
+    IF NOT r.has('records') THEN r.put('records',JSON_ARRAY_T());END IF;r.put('ok',TRUE);r.put('totals',totals);r.put('hasMore',FALSE);r.put_null('nextCursor');r.put('revision',alliance_pos_store.report_revision(p_business,p_location));r.put('generatedAt',alliance_pos_store.stamp);RETURN r;
   END;
 END;
 /

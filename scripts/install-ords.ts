@@ -7,7 +7,7 @@ const pieces:string[]=[],publishPieces:string[]=[];
 for(const name of files){
   const sql=await readFile(new URL(name,root),'utf8');
   for(const statement of sql.split(/^\/\s*$/m).filter(s=>s.trim())){
-    if(Buffer.byteLength(statement)>32000||statement.includes("!'"))throw new Error('Revisa el tamaño o delimitador del bloque '+name);
+    if(Buffer.byteLength(statement)>32700||statement.includes("!'"))throw new Error('Revisa el tamaño o delimitador del bloque '+name);
     (name==='publish.sql'?publishPieces:pieces).push(`  EXECUTE IMMEDIATE q'!${statement.trim()}!';`);
   }
 }

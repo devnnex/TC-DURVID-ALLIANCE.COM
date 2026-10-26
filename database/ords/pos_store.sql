@@ -1,5 +1,6 @@
 CREATE OR REPLACE PACKAGE alliance_pos_store AUTHID DEFINER AS
   FUNCTION stamp RETURN VARCHAR2;
+  FUNCTION report_revision(b VARCHAR2,l VARCHAR2) RETURN VARCHAR2;
   PROCEDURE lock_scope(p_business VARCHAR2,p_location VARCHAR2);
   PROCEDURE audit(p_user VARCHAR2,p_business VARCHAR2,p_action VARCHAR2,p_id VARCHAR2,p_before CLOB,p_after CLOB);
   FUNCTION document(p_business VARCHAR2,p_location VARCHAR2,p_entity VARCHAR2,p_id VARCHAR2) RETURN JSON_OBJECT_T;
@@ -32,6 +33,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
   END IF;
   sync_value:=document(b,l,'op_ordersync','primary');IF sync_value IS NULL THEN sync_value:=JSON_OBJECT_T('{"revision":0}');END IF;sync_value.put('revision',sync_value.get_number('revision')+1);put_document(b,l,'op_ordersync','primary',sync_value);
   END;
+  FUNCTION report_revision(b VARCHAR2,l VARCHAR2) RETURN VARCHAR2 IS n NUMBER;
+  BEGIN SELECT NVL(MAX(version),0) INTO n FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_reportsync' AND id='primary';RETURN 'oracle-'||TO_CHAR(n);END;
   FUNCTION stamp RETURN VARCHAR2 IS BEGIN RETURN TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"');END;
   PROCEDURE lock_scope(p_business VARCHAR2,p_location VARCHAR2) IS n VARCHAR2(36);
   BEGIN SELECT id INTO n FROM locations WHERE business_id=p_business AND id=p_location AND active=1 FOR UPDATE;
@@ -182,7 +185,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
   FUNCTION stock_action(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_action VARCHAR2,p_payload JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
   r JSON_OBJECT_T:=JSON_OBJECT_T();items JSON_ARRAY_T;item JSON_OBJECT_T;row_json JSON_OBJECT_T;id_value VARCHAR2(36);event_value VARCHAR2(160);code_value VARCHAR2(64);unit_value VARCHAR2(80);cost_value NUMBER;min_value NUMBER;stock_value NUMBER;before_value NUMBER;n NUMBER;cost_current NUMBER;entity VARCHAR2(36);search_value VARCHAR2(160);ctx JSON_OBJECT_T;pa JSON_ARRAY_T;can_read_cost BOOLEAN:=FALSE;
   BEGIN
-  IF p_action IN('get_inventory','status','bootstrap') THEN alliance_security.require_location(p_user,p_business,p_location,'products.read');ctx:=alliance_security.context_for(p_user);pa:=ctx.get_object('permissions').get_array(p_location);FOR i IN 0..pa.get_size-1 LOOP IF pa.get_string(i)='inventory.read' THEN can_read_cost:=TRUE;END IF;END LOOP;items:=inventory(p_business,p_location);IF NOT can_read_cost THEN FOR i IN 0..items.get_size-1 LOOP item:=TREAT(items.get(i) AS JSON_OBJECT_T);item.put('costPrice',0);items.put(i,item,TRUE);END LOOP;END IF;r.put('items',items);r.put('everInitialized',TRUE);r.put('timezone','America/Bogota');r.put('syncedAt',stamp);r.put('ok',TRUE);RETURN r;END IF;
+  IF p_action IN('get_inventory','status','bootstrap') THEN alliance_security.require_location(p_user,p_business,p_location,'products.read');ctx:=alliance_security.context_for(p_user);pa:=ctx.get_object('permissions').get_array(p_location);FOR i IN 0..pa.get_size-1 LOOP IF pa.get_string(i)='inventory.read' THEN can_read_cost:=TRUE;END IF;END LOOP;items:=inventory(p_business,p_location);IF NOT can_read_cost THEN FOR i IN 0..items.get_size-1 LOOP item:=TREAT(items.get(i) AS JSON_OBJECT_T);item.put('costPrice',0);items.put(i,item,TRUE);END LOOP;END IF;r.put('items',items);r.put('everInitialized',TRUE);r.put('timezone','America/Bogota');r.put('syncedAt',stamp);r.put('historyRevision',report_revision(p_business,p_location));r.put('movementRevision',report_revision(p_business,p_location));r.put('ok',TRUE);RETURN r;END IF;
   lock_scope(p_business,p_location);alliance_security.require_location(p_user,p_business,p_location,'inventory.write');
   IF p_action IN('upsert_inventory','sync_inventory') THEN
     IF p_action='upsert_inventory' THEN items:=JSON_ARRAY_T();items.append(p_payload.get_object('item'));ELSE items:=p_payload.get_array('items');END IF;

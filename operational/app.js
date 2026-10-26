@@ -4587,7 +4587,9 @@ const App = (() => {
     const movementMarkup = visibleMovements.length ? visibleMovements.map((movement) => {
       const delta = Number(movement.delta ?? movement.quantityChange ?? 0);
       const kind = delta >= 0 ? "entry" : "exit";
-      return `<article class="movement-row ${kind}"><span class="movement-direction">${icon(kind === "entry" ? "arrow-down-left" : "arrow-up-right", 20)}</span><div class="movement-product"><strong>${escapeHTML(movement.product || "Producto")}</strong><small>${escapeHTML(movement.code || "")}${movement.reference ? ` · ${escapeHTML(movement.reference)}` : ""}</small></div><div><small>Movimiento</small><strong>${escapeHTML(String(movement.type || (kind === "entry" ? "ENTRADA" : "SALIDA")).replaceAll("_", " "))}</strong></div><div><small>Existencia</small><strong>${Number(movement.before || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })} → ${Number(movement.after || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong></div><strong class="movement-delta">${delta > 0 ? "+" : ""}${delta.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong><div class="movement-audit"><strong>${escapeHTML(movement.user || "Sistema")}</strong><small>${escapeHTML(prettyDateTime(movement.date))}</small></div></article>`;
+      const ingredients=Array.isArray(movement.ingredients)?movement.ingredients:[];
+      const breakdown=ingredients.length?`<details class="movement-breakdown"><summary>Ver desglose de insumos · ${ingredients.length}</summary><div class="movement-breakdown-list">${ingredients.map(ingredient=>`<div><strong>${escapeHTML(ingredient.name||'Insumo')}</strong><span>${delta<0?'−':'+'}${Number(ingredient.quantity||0).toLocaleString('es-CO',{maximumFractionDigits:3})} ${escapeHTML(['u','unit'].includes(ingredient.unit)?'unidades':ingredient.unit||'')}</span></div>`).join('')}</div></details>`:'';
+      return `<article class="movement-row ${kind}"><span class="movement-direction">${icon(kind === "entry" ? "arrow-down-left" : "arrow-up-right", 20)}</span><div class="movement-product"><strong>${escapeHTML(movement.product || "Producto")}</strong><small>${escapeHTML(movement.code || "")}${movement.reference ? ` · ${escapeHTML(movement.reference)}` : ""}</small></div><div><small>Movimiento</small><strong>${escapeHTML(({SALIDA_VENTA_RECETA:"SALIDA POR VENTA",DEVOLUCION_VENTA_RECETA:"DEVOLUCIÓN DE VENTA"})[movement.type] || String(movement.type || (kind === "entry" ? "ENTRADA" : "SALIDA")).replaceAll("_", " "))}</strong></div><div><small>Existencia</small><strong>${movement.stockBasis==='recipe'?'Según insumos':`${Number(movement.before || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })} → ${Number(movement.after || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })}`}</strong></div><strong class="movement-delta">${delta > 0 ? "+" : ""}${delta.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong><div class="movement-audit"><strong>${escapeHTML(movement.user || "Sistema")}</strong><small>${escapeHTML(prettyDateTime(movement.date))}</small></div>${breakdown}</article>`;
     }).join("") : appendOnly ? "" : emptyState("Sin movimientos", query ? "No hay coincidencias para este filtro." : "Las entradas y salidas apareceran aqui con su responsable.", "arrow-left-right");
     if (appendOnly) list.insertAdjacentHTML("beforeend", movementMarkup);
     else list.innerHTML = movementMarkup;
@@ -5437,10 +5439,10 @@ const App = (() => {
       const historyRevision = String(status.historyRevision || "");
       const movementRevision = String(status.movementRevision || "");
       const updates = [];
-      if (canCheckIncome && !state.incomeLoading && (!state.incomeReport || (hasIncomeRevision && state.incomeRevision !== historyRevision))) {
+      if (canCheckIncome && !state.incomeLoading && (force || !state.incomeReport || (hasIncomeRevision && state.incomeRevision !== historyRevision))) {
         updates.push(loadIncomeReport({ background: Boolean(state.incomeReport) }));
       }
-      if ((canCheckMovements || canCheckPurchases) && !state.movementLoading && (!state.movementLoaded || (hasMovementRevision && state.movementRevision !== movementRevision))) {
+      if ((canCheckMovements || canCheckPurchases) && !state.movementLoading && (force || !state.movementLoaded || (hasMovementRevision && state.movementRevision !== movementRevision))) {
         updates.push(loadInventoryMovements({ background: state.movementLoaded || Boolean(state.inventoryMovements.length) }));
       }
       if (canCheckInventory && state.activeAdminSection === "inventory" && hasMovementRevision
@@ -5459,6 +5461,40 @@ const App = (() => {
       state.backgroundReportSyncBusy = false;
     }
   };
+
+  // The durable local snapshot is committed before this event. Keep all views on that same state.
+  let liveSnapshotTimer=null,liveSnapshot=null,liveInventorySignature='',liveMovementSignature='',liveSalesSignature='',liveAccountSignature='',liveViewUser='';
+  document.addEventListener('alliance-operations-updated',event=>{
+    if(state.page!=='admin'||!state.currentUser||!event.detail?.docs)return;
+    if(liveViewUser!==state.currentUser.id){liveViewUser=state.currentUser.id;liveInventorySignature=liveMovementSignature=liveSalesSignature=liveAccountSignature='';}
+    liveSnapshot={...event.detail,viewUser:state.currentUser.id};if(liveSnapshotTimer!==null)return;
+    liveSnapshotTimer=window.setTimeout(()=>{
+      liveSnapshotTimer=null;const data=liveSnapshot;liveSnapshot=null;if(!state.currentUser||!data||data.viewUser!==state.currentUser.id)return;
+      const inventorySignature=JSON.stringify(data.inventory),accountSignature=JSON.stringify([data.docs.table_sessions,data.docs.session_items]);
+      if(inventorySignature!==liveInventorySignature){liveInventorySignature=inventorySignature;applyRemoteInventoryItems(data.inventory);}
+      if(accountSignature!==liveAccountSignature){liveAccountSignature=accountSignature;if(state.activeAdminSection==='inventory')renderInventory();}
+      if(Array.isArray(data.movements)&&canAccessAdminSection('movements')){
+        const signature=JSON.stringify(data.movements);
+        if(signature!==liveMovementSignature){
+          liveMovementSignature=signature;++state.movementRequestId;state.movementLoading=false;
+          const oldest=data.movements.reduce((at,row)=>!at||String(row.date)<at?String(row.date):at,'');
+          const older=data.movementsHistoryPartial&&oldest?state.inventoryMovements.filter(row=>String(row.date)<oldest):[];
+          state.inventoryMovements=[...new Map([...older,...data.movements].map(row=>[row.movementId,row])).values()];
+          state.movementLoaded=true;state.movementPartialHistory=!!data.movementsHistoryPartial;
+          state.movementCursor=data.movementCursor||null;state.movementHasMore=!!state.movementCursor;state.movementRevision=data.movementRevision||'';
+          persistInventoryMovements();if(state.activeAdminSection==='movements')renderInventoryMovements();
+        }
+      }
+      if(Array.isArray(data.sales)&&canAccessAdminSection('income')){
+        const signature=JSON.stringify([data.sales,data.model?.customerPayments]);
+        if(signature!==liveSalesSignature){
+          liveSalesSignature=signature;++state.incomeRequestId;state.incomeLoading=false;
+          state.invoiceHistory=data.sales.filter(sale=>!sale.voided);persistInvoiceHistory();state.incomeReport=null;
+          if(state.activeAdminSection==='income'){state.incomeReport=localIncomeReport(incomeFiltersFromForm());renderIncomeReport();void loadIncomeReport({background:true});}
+        }
+      }
+    },0);
+  });
 
   const loadMoreIncomeRecords = async () => {
     const report = state.incomeReport;
@@ -7022,13 +7058,13 @@ const App = (() => {
         status: item.status
       }))
     };
-    try {await OracleDb.remote("record_sale", {invoice}, invoice.id);}
+    let saleResult;try {saleResult=await OracleDb.remote("record_sale", {invoice}, invoice.id);}
     catch(error){receiptWindow?.close();toast(error.message,"error");state.paymentProcessing=false;return;}
     BranchStorage.removeItem("session-customer-selection:"+session.id);
     state.sessions=state.sessions.filter(s=>s.id!==session.id);
     state.optimisticSessionStates.delete(session.id);
     persistWalkInDrafts();renderAdminLive();
-    applyPaidInventoryLocally(invoice, inventoryPlan);
+    if(Array.isArray(saleResult?.items))applyRemoteInventoryItems(saleResult.items);else applyPaidInventoryLocally(invoice, inventoryPlan);
     applyInvoiceToInventory(invoice);
     $("#paymentDialog")?.close();
     renderInventory();
