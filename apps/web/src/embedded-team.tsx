@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AdministrationPage } from './Administration';
+import { AdministrationPage, PersonalAccount } from './Administration';
 import { useEmbeddedTransport } from './api';
 import { demoContext } from '../../../packages/shared/demo';
 import type { Context } from '../../../packages/shared/domain';
@@ -27,15 +27,16 @@ function contextForBranch(): Context {
   return context;
 }
 
-function EmbeddedTeam({ initial }: { initial: Context }) {
+function EmbeddedTeam({ initial, personal=false }: { initial: Context; personal?: boolean }) {
   const [context, setContext] = useState(initial);
   const current = context.locations.find(l => l.slug === branch().slug);
+  const Page = personal ? PersonalAccount : AdministrationPage;
   return <main className="setup-page team-centre embedded-team">
-    <AdministrationPage context={context} demo={!!runtime().isDemo} selectedLocation={current?.id} onContext={setContext} embedded branchName={current?.name || branch().name} />
+    <Page context={context} demo={!!runtime().isDemo} selectedLocation={current?.id} onContext={setContext} embedded branchName={current?.name || branch().name} />
   </main>;
 }
 
-export async function mount(host: HTMLElement) {
+export async function mount(host: HTMLElement, { personal=false }: { personal?: boolean } = {}) {
   const db = runtime();
   if (!db.user()) throw new Error('Inicia sesión para consultar tu usuario.');
   if (mounted.has(host)) return;
@@ -49,6 +50,6 @@ export async function mount(host: HTMLElement) {
   shadow.replaceChildren(link, style, root);
   await loaded;
   useEmbeddedTransport((path, options, locationId) => db.adminRequest(path, options, locationId));
-  createRoot(root).render(<EmbeddedTeam initial={contextForBranch()} />);
+  createRoot(root).render(<EmbeddedTeam initial={contextForBranch()} personal={personal} />);
   mounted.add(host);
 }

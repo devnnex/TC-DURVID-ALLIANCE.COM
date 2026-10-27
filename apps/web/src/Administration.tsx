@@ -31,9 +31,9 @@ export function AdministrationPage(props:AdministrationProps){
  const manages=!!props.context.is_owner||(props.selectedLocation?props.context.permissions[props.selectedLocation]?.includes('administration.manage'):Object.values(props.context.permissions).some(p=>p.includes('administration.manage')));
  return manages?<TeamAdministrationPage {...props}/>:<PersonalAccount {...props}/>;
 }
-function PersonalAccount({context,demo,onContext,selectedLocation}:AdministrationProps){
+export function PersonalAccount({context,demo,onContext,selectedLocation}:AdministrationProps){
  const [member,setMember]=useState<ManagedUser>(),[editing,setEditing]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const load=async()=>{try{setError('');setMember(await api<ManagedUser>('/account'));}catch(e){setError(message(e));}};
+ const load=async()=>{try{setError('');setMember(demo?{id:context.user.id,name:context.user.name,username:context.user.username,active:true,protected:!!context.is_owner,access:context.locations.map(l=>({location_id:l.id,roles:context.is_owner?['OWNER']:context.roles?.[l.id]||[],overrides:{}}))}:await api<ManagedUser>('/account'));}catch(e){setError(message(e));}};
  useEffect(()=>{void load();},[context.user.id]);
  const saved:UserSaved=(fields)=>{setMember(current=>current?{...current,...fields}:current);setEditing(false);setNotice('Tu usuario se guardó.');void api<Context>('/context').then(onContext).catch(()=>setError('Tu usuario se guardó. Vuelve a abrir la sección para actualizar los datos de la sesión.'));};
  const data={locations:context.locations,users:member?[member]:[],roles:roleTemplates,sections};
