@@ -57,6 +57,9 @@ export const userInput = z.object({name:z.string().trim().min(1).max(160),userna
 export type Access = {location_id:string;roles:string[];overrides:Record<string,'ALLOW'|'DENY'>};
 export type ManagedUser = {id:string;name:string;username:string;active:boolean;protected:boolean;access:Access[];createdBy?:string;createdByName?:string;createdAt?:string;updatedBy?:string;updatedByName?:string;updatedAt?:string};
 export type UserWrite = Omit<z.infer<typeof userInput>,'password'> & {password_hash?:string};
+// Personal edits never accept access, roles, active state or a target user ID.
+export const profileInput = z.object({name:z.string().trim().min(1).max(160),username:z.string().trim().min(1).max(320),password:z.string().min(4).max(12).optional()}).strict();
+export type ProfileWrite = Omit<z.infer<typeof profileInput>,'password'> & {password_hash?:string};
 export type Administration = {locations:Location[];users:ManagedUser[];roles:typeof roleTemplates;sections:typeof sections};
 export function effectivePermissions(roles:string[],overrides:Record<string,'ALLOW'|'DENY'>,templates=roleTemplates):string[]{
   if(roles.some(r=>r==='OWNER'||r==='BOSS'))return [...permissionCodes];

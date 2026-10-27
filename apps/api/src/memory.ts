@@ -4,7 +4,7 @@ import type { Ack, Context, Operation, Principal, Product, Change, Location } fr
 import type { Repository, Session, Setup, UserRecord } from './repository.js';
 import { digest } from './password.js';
 import { effectivePermissions, roleTemplates, sections, requireOwner, assertUserGrant } from '../../../packages/shared/administration.js';
-import type { Administration, LocationInput, ManagedUser, UserWrite } from '../../../packages/shared/administration.js';
+import type { Administration, LocationInput, ManagedUser, ProfileWrite, UserWrite } from '../../../packages/shared/administration.js';
 
 // Explicit development adapter. Never selected implicitly or used in production.
 export class MemoryRepository implements Repository {
@@ -34,6 +34,15 @@ export class MemoryRepository implements Repository {
     const context=await this.context(u);this.contexts.set(u,context);return context;
   }
   private async owner(id:string){const c=await this.context(id);requireOwner(!!c.is_owner);return c;}
+  async profile(actorId:string){await this.context(actorId);return structuredClone(this.managed.get(actorId)!);}
+  async saveProfile(actorId:string,input:ProfileWrite,sessionId:string){
+    const c=await this.context(actorId),user=this.users.get(actorId)!,member=this.managed.get(actorId)!;
+    if([...this.users.values()].some(u=>u.business_id===user.business_id&&u.username===input.username&&u.id!==actorId))throw new DomainError('USERNAME_EXISTS','Ya existe un usuario con ese nombre.',409);
+    this.users.set(actorId,{...user,name:input.name,username:input.username,...(input.password_hash?{password_hash:input.password_hash}:{})});
+    this.managed.set(actorId,{...member,name:input.name,username:input.username,updatedBy:actorId,updatedByName:input.name,updatedAt:new Date().toISOString()});
+    if(input.password_hash)for(const s of this.sessions.values())if(s.user_id===actorId&&s.id!==sessionId)s.revoked=true;
+    this.adminAudit.push({actor:c.user.id,action:'USER_PROFILE_SAVE',entity:actorId});
+  }
   private async teamManager(id:string){const c=await this.context(id);if(!c.is_owner&&!Object.values(c.permissions).some(p=>p.includes('administration.manage')))throw new DomainError('FORBIDDEN','No tienes permiso para gestionar usuarios.',403);return c;}
   async administration(actorId:string):Promise<Administration>{const c=await this.teamManager(actorId),managed=Object.entries(c.permissions).filter(([,p])=>p.includes('administration.manage')).map(([id])=>id);return structuredClone({locations:[...this.locations.values()].filter(l=>l.business_id===c.user.business_id&&(c.is_owner||managed.includes(l.id))),users:[...this.managed.values()].filter(u=>this.users.get(u.id)?.business_id===c.user.business_id&&(c.is_owner||u.access.some(a=>managed.includes(a.location_id)))),roles:roleTemplates,sections});}
   async saveLocation(actorId:string,id:string|undefined,input:LocationInput){

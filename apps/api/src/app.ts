@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { DomainError, operationSchema, uuid } from '../../../packages/shared/domain.js';
 import type { Principal } from '../../../packages/shared/domain.js';
 import type { Repository } from './repository.js';
-import { locationInput, userInput } from '../../../packages/shared/administration.js';
+import { locationInput, userInput, profileInput } from '../../../packages/shared/administration.js';
 import { checkPassword, digest, hashPassword, token } from './password.js';
 import { allowedWebOrigins } from './web-origins.js';
 import { registerSite } from './site.js';
@@ -82,6 +82,12 @@ export async function createApp(repo: Repository, cfg: AppConfig) {
     const {session}=await authenticate(request);await repo.revokeSession(session.id);reply.clearCookie('alliance_refresh',{path:refreshCookie.path});return {ok:true};
   });
   app.get('/api/v1/context',async request=>(await authenticate(request)).context);
+  app.get('/api/v1/account',async request=>repo.profile((await authenticate(request)).context.user.id));
+  app.put('/api/v1/account',async request=>{
+    const {context,session}=await authenticate(request),{password,...input}=profileInput.parse(request.body);
+    await repo.saveProfile(context.user.id,{...input,...(password?{password_hash:await hashPassword(password)}:{})},session.id);
+    return {ok:true};
+  });
   app.get('/api/v1/admin/overview',async request=>repo.administration((await authenticate(request)).context.user.id));
   app.post('/api/v1/admin/locations',async request=>{
     const {context}=await authenticate(request);await repo.saveLocation(context.user.id,undefined,locationInput.parse(request.body));return {ok:true};

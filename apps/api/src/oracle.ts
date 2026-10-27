@@ -5,7 +5,7 @@ import type { Ack, Context, Operation, Principal, Product, Location } from '../.
 import type { Repository, Session, Setup } from './repository.js';
 import { digest } from './password.js';
 import { effectivePermissions, roleTemplates } from '../../../packages/shared/administration.js';
-import type { LocationInput, UserWrite } from '../../../packages/shared/administration.js';
+import type { LocationInput, ProfileWrite, UserWrite } from '../../../packages/shared/administration.js';
 import { OracleAdministration } from './oracle-administration.js';
 import { oracleSettings } from './oracle-settings.js';
 type Row = Record<string, any>;
@@ -30,6 +30,8 @@ export class OracleRepository implements Repository {
   async health(){try{return await this.using(async c=>{await c.execute('SELECT 1 FROM dual');return true;});}catch{return false;}}
   async setupRequired(){return this.using(async c=>{const [r]=await rows(c,'SELECT COUNT(*) n FROM businesses');return r.N===0;});}
   administration(actor:string){return new OracleAdministration(this.pool).load(actor);}
+  profile(actor:string){return new OracleAdministration(this.pool).profile(actor);}
+  saveProfile(actor:string,input:ProfileWrite,sessionId:string){return new OracleAdministration(this.pool).saveProfile(actor,input,sessionId);}
   saveLocation(actor:string,id:string|undefined,input:LocationInput){return new OracleAdministration(this.pool).location(actor,id,input);}
   saveUser(actor:string,id:string|undefined,input:UserWrite,locationId?:string){return new OracleAdministration(this.pool).user(actor,id,input,locationId);}
   async using<T>(fn: (c: oracledb.Connection)=>Promise<T>): Promise<T> {

@@ -37,7 +37,7 @@ function EmbeddedTeam({ initial }: { initial: Context }) {
 
 export async function mount(host: HTMLElement) {
   const db = runtime();
-  if (!db.user() || !db.permission('administration.manage')) throw new Error('Esta sección está disponible para el jefe administrador.');
+  if (!db.user()) throw new Error('Inicia sesión para consultar tu usuario.');
   if (mounted.has(host)) return;
   host.dataset.allianceTeamHost = '';
   const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });

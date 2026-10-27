@@ -2,13 +2,31 @@ import type oracledb from 'oracledb';
 import { randomUUID } from 'node:crypto';
 import { DomainError, type Context } from '../../../packages/shared/domain.js';
 import { roleTemplates, sections, effectivePermissions, assertUserGrant } from '../../../packages/shared/administration.js';
-import type { Administration, LocationInput, ManagedUser, UserWrite } from '../../../packages/shared/administration.js';
+import type { Administration, LocationInput, ManagedUser, ProfileWrite, UserWrite } from '../../../packages/shared/administration.js';
 import { rows } from './oracle.js';
 
 // Administration is online and transactional. Every mutation serializes on
 // the business, checks the owner again, and writes a separate audit event.
 export class OracleAdministration {
   constructor(private pool:oracledb.Pool){}
+  async profile(actor:string):Promise<ManagedUser>{
+    const c=await this.pool.getConnection();try{
+      const [u]=await rows(c,'SELECT id,business_id,full_name,username,active FROM users WHERE id=:id AND active=1',{id:actor});
+      if(!u)throw new DomainError('UNAUTHORIZED','Usuario no disponible.',401);
+      const grants=await rows(c,'SELECT * FROM user_location_roles WHERE business_id=:b AND user_id=:id',{b:u.BUSINESS_ID,id:actor}),overrides=await rows(c,'SELECT * FROM user_location_permissions WHERE business_id=:b AND user_id=:id',{b:u.BUSINESS_ID,id:actor});
+      return {id:actor,name:u.FULL_NAME,username:u.USERNAME,active:true,protected:grants.some(g=>g.ROLE_CODE==='OWNER'),access:[...new Set(grants.map(g=>g.LOCATION_ID))].map(location_id=>({location_id,roles:grants.filter(g=>g.LOCATION_ID===location_id).map(g=>g.ROLE_CODE),overrides:Object.fromEntries(overrides.filter(o=>o.LOCATION_ID===location_id).map(o=>[o.PERMISSION_CODE,o.EFFECT]))}))};
+    }finally{await c.close();}
+  }
+  async saveProfile(actor:string,input:ProfileWrite,sessionId:string){
+    const c=await this.pool.getConnection();try{
+      const [u]=await rows(c,'SELECT id,business_id FROM users WHERE id=:id AND active=1',{id:actor});if(!u)throw new DomainError('UNAUTHORIZED','Usuario no disponible.',401);
+      await rows(c,'SELECT id FROM businesses WHERE id=:b FOR UPDATE',{b:u.BUSINESS_ID});
+      const [before]=await rows(c,'SELECT id,full_name,username FROM users WHERE id=:id AND business_id=:b AND active=1 FOR UPDATE',{id:actor,b:u.BUSINESS_ID});if(!before)throw new DomainError('UNAUTHORIZED','Usuario no disponible.',401);
+      await c.execute('UPDATE users SET full_name=:name,username=:username WHERE id=:id AND business_id=:b',{id:actor,b:u.BUSINESS_ID,name:input.name,username:input.username});
+      if(input.password_hash){await c.execute('UPDATE users SET password_hash=:hash WHERE id=:id AND business_id=:b',{id:actor,b:u.BUSINESS_ID,hash:input.password_hash});await c.execute('UPDATE auth_sessions SET revoked=1 WHERE business_id=:b AND user_id=:id AND id<>:sid',{b:u.BUSINESS_ID,id:actor,sid:sessionId});}
+      await this.audit(c,actor,u.BUSINESS_ID,'USER_PROFILE_SAVE',actor,before,{name:input.name,username:input.username,password_changed:!!input.password_hash});await c.commit();
+    }catch(e){await c.rollback();if((e as {errorNum?:number}).errorNum===1)throw new DomainError('USERNAME_EXISTS','Ya existe un usuario con ese nombre.',409);throw e;}finally{await c.close();}
+  }
   private async owner(c:oracledb.Connection,id:string){
     const [u]=await rows(c,'SELECT u.* FROM users u WHERE u.id=:id AND u.active=1',{id});if(!u)throw new DomainError('FORBIDDEN','Usuario no disponible.',403);
     const b=u.BUSINESS_ID,grants=await rows(c,'SELECT * FROM user_location_roles WHERE business_id=:b AND user_id=:id',{b,id}),overrides=await rows(c,'SELECT * FROM user_location_permissions WHERE business_id=:b AND user_id=:id',{b,id}),locations=await rows(c,'SELECT * FROM locations WHERE business_id=:b',{b});

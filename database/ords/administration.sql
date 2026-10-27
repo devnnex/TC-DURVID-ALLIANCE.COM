@@ -1,6 +1,8 @@
 CREATE OR REPLACE PACKAGE alliance_administration AUTHID DEFINER AS
   FUNCTION setup(p_body JSON_OBJECT_T,p_token VARCHAR2) RETURN JSON_OBJECT_T;
   FUNCTION overview(p_user VARCHAR2,p_business VARCHAR2) RETURN JSON_OBJECT_T;
+  FUNCTION profile(p_user VARCHAR2,p_business VARCHAR2) RETURN JSON_OBJECT_T;
+  PROCEDURE save_profile(p_user VARCHAR2,p_business VARCHAR2,p_session VARCHAR2,p_body JSON_OBJECT_T);
   PROCEDURE save_location(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_body JSON_OBJECT_T);
   PROCEDURE save_user(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_body JSON_OBJECT_T,p_location VARCHAR2 DEFAULT NULL);
 END;
@@ -41,6 +43,34 @@ CREATE OR REPLACE PACKAGE BODY alliance_administration AS
      IF h.before_json IS NULL AND NOT r.has('createdBy') THEN r.put('createdBy',h.actor_user_id);r.put('createdByName',h.full_name);r.put('createdAt',h.at_value);END IF;
      r.put('updatedBy',h.actor_user_id);r.put('updatedByName',h.full_name);r.put('updatedAt',h.at_value);
     END LOOP;RETURN r;
+  END;
+  FUNCTION profile(p_user VARCHAR2,p_business VARCHAR2) RETURN JSON_OBJECT_T IS n NUMBER;
+  BEGIN
+    SELECT COUNT(*) INTO n FROM users WHERE id=p_user AND business_id=p_business AND active=1;
+    IF n<>1 THEN alliance_security.fail(401,'UNAUTHORIZED','Usuario no disponible.');END IF;
+    RETURN user_json(p_user,p_business);
+  END;
+  PROCEDURE save_profile(p_user VARCHAR2,p_business VARCHAR2,p_session VARCHAR2,p_body JSON_OBJECT_T) IS
+    locked_id VARCHAR2(36);name_value VARCHAR2(160);username_value users.username%TYPE;password_value VARCHAR2(128);hash_value VARCHAR2(512);before_value CLOB;safe_body JSON_OBJECT_T;n NUMBER;
+  BEGIN
+    alliance_security.keys_only(p_body,'name,username,password');
+    SELECT id INTO locked_id FROM businesses WHERE id=p_business FOR UPDATE;
+    SELECT COUNT(*) INTO n FROM users WHERE id=p_user AND business_id=p_business AND active=1;
+    IF n<>1 THEN alliance_security.fail(401,'UNAUTHORIZED','Usuario no disponible.');END IF;
+    before_value:=user_json(p_user,p_business).to_clob;
+    name_value:=alliance_security.text_value(p_body,'name',160);username_value:=alliance_security.text_value(p_body,'username',320);
+    IF p_body.has('password') THEN
+      password_value:=alliance_security.text_value(p_body,'password',128);
+      IF LENGTH(password_value)<4 OR LENGTH(password_value)>12 THEN alliance_security.fail(400,'INVALID_PASSWORD','Usa una contrasena de 4 a 12 caracteres.');END IF;
+      hash_value:=alliance_security.password_hash(password_value);
+    END IF;
+    UPDATE users SET full_name=name_value,username=username_value,password_hash=NVL(hash_value,password_hash) WHERE id=p_user AND business_id=p_business AND active=1;
+    IF hash_value IS NOT NULL THEN
+      UPDATE auth_sessions SET revoked=1 WHERE business_id=p_business AND user_id=p_user;
+      UPDATE alliance_api_sessions SET revoked=1 WHERE business_id=p_business AND user_id=p_user AND id<>p_session;
+    END IF;
+    safe_body:=JSON_OBJECT_T(p_body.to_clob);safe_body.remove('password');safe_body.put('password_changed',hash_value IS NOT NULL);
+    audit(p_user,p_business,'USER_PROFILE_SAVE',p_user,before_value,safe_body.to_clob);
   END;
   FUNCTION setup(p_body JSON_OBJECT_T,p_token VARCHAR2) RETURN JSON_OBJECT_T IS
     b VARCHAR2(36):=alliance_security.new_id;u VARCHAR2(36):=alliance_security.new_id;l VARCHAR2(36);n NUMBER;dummy NUMBER;secret_hash VARCHAR2(64);hash_value VARCHAR2(512);

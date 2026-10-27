@@ -45,6 +45,10 @@ CREATE OR REPLACE PACKAGE BODY alliance_api AS
     ELSE
       access_value:=req.get_string('access_token');s:=alliance_security.authenticate(access_value);
       IF method_value='GET' AND path_value='/context' THEN data:=alliance_security.context_for(s.user_id);
+      ELSIF method_value='GET' AND path_value='/account' THEN data:=alliance_administration.profile(s.user_id,s.business_id);
+      ELSIF method_value='PUT' AND path_value='/account' THEN
+        alliance_administration.save_profile(s.user_id,s.business_id,s.id,body);
+        alliance_activity.record_event(s.user_id,s.business_id,NULL,'users','USER_PROFILE_SAVE','Actualizó su cuenta: '||body.get_string('name'),s.user_id);data.put('ok',TRUE);
       ELSIF method_value='GET' AND path_value='/admin/overview' THEN data:=alliance_administration.overview(s.user_id,s.business_id);
       ELSIF method_value IN ('POST','PUT') AND (path_value='/admin/locations' OR REGEXP_LIKE(path_value,'^/admin/locations/[0-9a-fA-F-]{36}$')) THEN
         IF method_value='PUT' THEN id_value:=SUBSTR(path_value,18);IF LENGTH(id_value)<>36 THEN alliance_security.fail(400,'INVALID_INPUT','Falta el identificador de sucursal.');END IF;

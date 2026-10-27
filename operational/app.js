@@ -1067,7 +1067,7 @@ const App = (() => {
   const syncPwaBranding = async () => {
     if (!state.business) return;
     const name = String(state.business.business_name || "Tienda Nápoles").trim() || "Tienda Nápoles";
-    const logoUrl = String(state.business.logo_url || "").trim();
+    const logoUrl = new URL("../../assets/logo.png", location.href).href;
     const themeColor = String(state.business.accent_color || "#f05a28");
     const signature = `${name}|${logoUrl}|${themeColor}`;
     if (signature === state.pwaBrandSignature) return;
@@ -1092,8 +1092,8 @@ const App = (() => {
     if (syncToken !== state.pwaBrandSyncToken) return;
 
     let iconEntries = [
-      { src: "./pwa-icon.svg", sizes: "192x192", type: "image/svg+xml", purpose: "any maskable" },
-      { src: "./pwa-icon.svg", sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }
+      { src: "../../assets/pwa-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+      { src: "../../assets/pwa-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }
     ];
     if (icon192 && icon512) {
       const faviconUrl = URL.createObjectURL(icon192);

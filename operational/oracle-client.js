@@ -65,7 +65,7 @@ window.OracleDb = (() => {
     const owner = !!context.is_owner || p.includes('sales.manage'),roles=context.roles?.[locationId()]||[];
     return {id:context.user.id, full_name:context.user.name, username:context.user.username,last_login_at:context.user.last_login_at,
       role:owner?'boss':roles.includes('WORKER')?'worker':roles.includes('ADMIN')||p.includes('administration.manage')?'admin':p.includes('kitchen.write')&&!p.includes('service.write')?'kitchen':p.some(c=>['sales.write','inventory.read','movements.read','brand.manage','products.write','sales.read'].includes(c))?'admin':'waiter', is_active:true, business_slug:context.user.business_slug,
-      permissions:Object.keys(map).filter(k=>p.includes(map[k]))};
+      permissions:Object.keys(map).filter(k=>k==='users'||p.includes(map[k]))};
   }
   const permission = code => (context?.permissions?.[locationId()]||[]).includes(code);
   async function pos(action, payload = {}, operationId, skipLocal=false,metadata={}) {
@@ -132,16 +132,19 @@ window.OracleDb = (() => {
     getPublicUrl:path=>({data:{publicUrl:images.get(path)||''}})
   };
   async function adminRequest(path,options={},selectedLocation){
-    if(!permission('administration.manage'))throw new Error('Solo el jefe administrador puede gestionar usuarios.');
+    const personal=(options.method||'GET').toUpperCase()==='GET'&&path==='/context'||['GET','PUT'].includes((options.method||'GET').toUpperCase())&&path==='/account';
+    if(!personal&&!permission('administration.manage'))throw new Error('Solo el jefe administrador puede gestionar usuarios.');
     if(selectedLocation&&selectedLocation!==locationId())throw new Error('Gestiona los usuarios desde el negocio correspondiente.');
     selectedLocation=locationId();
     const method=(options.method||'GET').toUpperCase();
-    const valid=method==='GET'&&['/context','/admin/overview'].includes(path)||method==='POST'&&['/admin/users','/admin/activity','/activity/visit'].includes(path)||method==='PUT'&&/^\/admin\/users\/[0-9a-f-]{36}$/i.test(path);
+    const valid=personal||method==='GET'&&path==='/admin/overview'||method==='POST'&&['/admin/users','/admin/activity','/activity/visit'].includes(path)||method==='PUT'&&/^\/admin\/users\/[0-9a-f-]{36}$/i.test(path);
     if(!valid)throw new Error('Operación de administración no permitida.');
     if(!navigator.onLine)throw new Error('Conéctate a internet para consultar o cambiar usuarios y permisos en servicio seguro. Tus otras secciones pueden seguir trabajando sin conexión.');
     if(!access)await renew(false);
     if(options.signal?.aborted)throw new DOMException('Consulta cancelada','AbortError');
-    const result=await request(path,options.body?JSON.parse(options.body):{},true,method,selectedLocation);
+    const payload=options.body?JSON.parse(options.body):{};
+    const result=await request(path,payload,true,method,selectedLocation);
+    if(path==='/account'&&method==='PUT'&&(payload.password||payload.username!==context?.user?.username))await window.AllianceOfflineAuth?.logout(context);
     if(path==='/context'){if(result.user?.id===context?.user?.id&&!result.user.last_login_at)result.user.last_login_at=context.user.last_login_at;context=result;localStorage.setItem('tc-alliance-session-view-v1',JSON.stringify({context,provider:'oracle-ords',validated_at:Date.now()}));window.dispatchEvent(new CustomEvent('alliance-session-verified'));}
     return result;
   }

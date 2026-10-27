@@ -17,8 +17,8 @@ export default defineConfig(()=>{
     base:'./',
     plugins:[portalPlugin(),react(),VitePWA({
       registerType:'prompt',
-      manifest:{name:'Alliance · Centro operativo',short_name:'Alliance',start_url:'./',scope:'./',display:'standalone',theme_color:'#f5f4f1',background_color:'#f5f4f1',icons:[{src:'icon.svg',sizes:'any',type:'image/svg+xml',purpose:'any'}]},
-      workbox:{clientsClaim:true,navigateFallback:'index.html',globPatterns:['**/*.{js,css,html,svg,png,woff2}'],cleanupOutdatedCaches:true,additionalManifestEntries:[{url:'../api-config.js',revision:createHash('sha256').update(publicApiUrl||readFileSync(new URL('../../api-config.js',import.meta.url))).digest('hex')}]},
+      manifest:{name:'Alliance · Centro operativo',short_name:'Alliance',start_url:'./',scope:'./',display:'standalone',theme_color:'#f5f4f1',background_color:'#f5f4f1',icons:[{src:'../assets/pwa-192.png',sizes:'192x192',type:'image/png',purpose:'any maskable'},{src:'../assets/pwa-512.png',sizes:'512x512',type:'image/png',purpose:'any maskable'}]},
+      workbox:{maximumFileSizeToCacheInBytes:3*1024*1024,clientsClaim:true,navigateFallback:'index.html',globPatterns:['**/*.{js,css,html,svg,png,woff2}'],cleanupOutdatedCaches:true,additionalManifestEntries:[{url:'../api-config.js',revision:createHash('sha256').update(publicApiUrl||readFileSync(new URL('../../api-config.js',import.meta.url))).digest('hex')}]},
       devOptions:{enabled:false}
     })],
     server:{port:5173,strictPort:true,fs:{allow:['../..']},proxy:{'/api':{target:apiTarget}}},
