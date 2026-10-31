@@ -19,12 +19,17 @@ globalThis.AllianceCosting = (() => {
   function convert(quantity,from,to){if(!units[from]||!units[to]||units[from].family!==units[to].family)throw new Error('Conversión incompatible: masa, volumen y unidades no se mezclan.');return number(quantity,'Cantidad')*units[from].factor/units[to].factor;}
   // Correcting the purchase presentation also corrects its recipe references.
   // Within a family keep physical quantities; across families keep purchase quantities.
-  function updateIngredient(model,row){
+  function updateIngredient(model,row,{recipeId,syncQuantity=false}={}){
     const previous=model.ingredients.find(i=>i.id===row.id);
     if(previous&&units[previous.unit]&&units[row.unit]&&units[previous.unit].family!==units[row.unit].family){
       for(const recipe of model.recipes)for(const line of recipe.lines)if(line.ingredientId===row.id){
         line.quantity=convert(line.quantity,line.unit,previous.unit);line.unit=row.unit;
       }
+    }
+    // A correction made from a production row must update that row's inputs too.
+    if(previous&&recipeId&&(syncQuantity||previous.unit!==row.unit||Number(previous.quantity)!==Number(row.quantity))){
+      const recipe=model.recipes.find(r=>r.id===recipeId);
+      for(const line of recipe?.lines||[])if(line.ingredientId===row.id){line.quantity=row.quantity;line.unit=row.unit;}
     }
     const index=model.ingredients.findIndex(i=>i.id===row.id);if(index<0)model.ingredients.push(row);else model.ingredients[index]=row;
     return model;

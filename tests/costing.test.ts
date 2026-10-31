@@ -4,6 +4,36 @@ import { describe,it,expect } from 'vitest';
 const context:any={};runInNewContext(readFileSync('operational/costing-engine.js','utf8'),context);const E=context.AllianceCosting;
 export function fixture(){return {settings:{monthlyUnits:100,monthlyMinutes:null,taxRate:19,taxMode:'included'},ingredients:[{id:'flour',name:'Harina',unit:'kg',quantity:1,purchasePrice:10000,yieldPercent:80,purchaseTaxRate:0,recoverableTax:false},{id:'cheese',name:'Queso',unit:'kg',quantity:1,purchasePrice:20000,yieldPercent:100,purchaseTaxRate:0,recoverableTax:false}],expenses:[{id:'rent',name:'Alquiler',amount:100000,periodMonths:1,kind:'fixed',allocation:'units',recipeId:'',includedElsewhere:false},{id:'box',name:'Empaque',amount:500,periodMonths:1,kind:'unit',allocation:'units',recipeId:'',includedElsewhere:false}],channels:[{id:'delivery',name:'Domicilio',salesPercent:10,paymentPercent:2,flatFee:0,feeBase:'net'}],recipes:[{id:'pizza',name:'Pizza',size:'Mediana',category:'Pizzas',output:1,wastePercent:0,minutes:null,monthlyUnits:100,currentPrice:13090,targetPercent:30,marginMode:'margin',channelId:'delivery',lines:[{ingredientId:'flour',quantity:200,unit:'g',processing:{version:1,stockState:'stored',recipeState:'cleaned',thaw:0,clean:20,cook:0}},{ingredientId:'cheese',quantity:100,unit:'g'}]}]};}
 describe('Costeo: cantidades, impuestos, comisiones y rentabilidad',()=>{
+  it('actualiza cantidad usada y costo al corregir la compra de la hoja activa',()=>{
+    const m=fixture(),ingredient=m.ingredients[0],recipe=m.recipes[0];
+    Object.assign(ingredient,{name:'Bolsas',unit:'unit',quantity:600,purchasePrice:66000});
+    recipe.lines=[{ingredientId:ingredient.id,quantity:600,unit:'unit'}];
+    m.recipes.push({...structuredClone(recipe),id:'other',lines:[{ingredientId:ingredient.id,quantity:20,unit:'unit'}]});
+    E.updateIngredient(m,{...ingredient,quantity:500,purchasePrice:55000},{recipeId:recipe.id});
+    E.validate(m);expect(recipe.lines[0].quantity).toBe(500);
+    expect(E.calculate(m,recipe).batchIngredients).toBe(55000);
+    expect(m.recipes[1].lines[0].quantity).toBe(20);
+  });
+  it('puede reaplicar una cantidad explícita para corregir el desfase de una edición anterior',()=>{
+    const m=fixture(),ingredient=m.ingredients[0],recipe=m.recipes[0];
+    Object.assign(ingredient,{unit:'unit',quantity:500,purchasePrice:55000});
+    recipe.lines=[{ingredientId:ingredient.id,quantity:600,unit:'unit'}];
+    E.updateIngredient(m,{...ingredient},{recipeId:recipe.id,syncQuantity:true});
+    expect(recipe.lines[0].quantity).toBe(500);expect(E.calculate(m,recipe).batchIngredients).toBe(55000);
+  });
+  it('conserva una cantidad usada parcial si sólo se edita el nombre o precio de compra',()=>{
+    const m=fixture(),ingredient=m.ingredients[0],recipe=m.recipes[0];
+    E.updateIngredient(m,{...ingredient,name:'Harina nueva',purchasePrice:12000},{recipeId:recipe.id});
+    expect(recipe.lines[0].quantity).toBe(200);expect(E.calculate(m,recipe).batchIngredients).toBe(5000);
+  });
+  it('corrige la unidad de la fila abierta aunque no cambie el número de la compra',()=>{
+    const m=fixture(),ingredient=m.ingredients[0],recipe=m.recipes[0];
+    Object.assign(ingredient,{quantity:500,purchasePrice:55000});
+    recipe.lines=[{ingredientId:ingredient.id,quantity:500,unit:'kg'}];
+    E.updateIngredient(m,{...ingredient,unit:'g'},{recipeId:recipe.id});
+    expect(recipe.lines[0]).toEqual({ingredientId:ingredient.id,quantity:500,unit:'g'});
+    expect(E.calculate(m,recipe).batchIngredients).toBe(55000);
+  });
   it('corrige kg a unidades en todas las recetas conservando costo y merma',()=>{
     const m=fixture();m.recipes.push({...structuredClone(m.recipes[0]),id:'other'});
     const before=m.recipes.map(r=>E.calculate(m,r).cost);
