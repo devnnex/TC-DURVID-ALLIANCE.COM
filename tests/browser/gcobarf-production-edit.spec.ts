@@ -142,12 +142,45 @@ for(const sample of [{name:'Bolsa 500G',unit:'unit'},{name:'Pollo',unit:'kg'},{n
   await modal.locator('[name=purchasePrice]').fill('60000');
   await modal.locator('[type=submit]').click();await expect(modal).toHaveCount(0);
   await expect(page.locator('#costingStatus')).toContainText('Guardado local');
-  await expect(page.locator('[data-sheet-line]')).toHaveValue('250');
+  await expect(page.locator('[data-sheet-line]')).toHaveValue('500');
   await expect(page.locator('.cost-excel-table').first()).toContainText(sample.name+' editado');
-  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('30.000');
+  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('60.000');
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
-  await expect(page.locator('[data-sheet-line]')).toHaveValue('250');
-  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('30.000');
+  await expect(page.locator('[data-sheet-line]')).toHaveValue('500');
+  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('60.000');
+});
+
+for(const sample of [{name:'Bolsas',unit:'unit'},{name:'Carne',unit:'kg'},{name:'Aceite',unit:'l'}])test(`GCOBARF: aplicar los valores visibles sin escribir corrige la hoja: ${sample.name}`,async({page})=>{
+  await open(page);await seed(page);
+  await page.evaluate(sample=>{
+    const w=window as any,saved=JSON.parse(w.OracleDb.local.getItem('costing-saved'));
+    Object.assign(saved.model.ingredients[0],{...sample,quantity:500,purchasePrice:55000,invoice:'FAC-500'});
+    Object.assign(saved.model.recipes[0],{output:100,lines:[{ingredientId:'chicken',quantity:600,unit:sample.unit}]});
+    saved.model.recipes.push({...structuredClone(saved.model.recipes[0]),id:'other',name:'Otra producción',lines:[{ingredientId:'chicken',quantity:20,unit:sample.unit}]});
+    w.OracleDb.local.setItem('costing-saved',JSON.stringify(saved));
+  },sample);
+  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
+  await page.locator('[data-sheet-line]').fill('600');
+  const modal=page.locator('#costSheetEditor');
+  for(let attempt=0;attempt<2;attempt++){
+    await page.locator('[data-sheet-editor=ingredients][data-key=chicken]').click();
+    await expect(modal.locator('[name=name]')).toHaveValue(sample.name);
+    await expect(modal.locator('[name=quantity]')).toHaveValue('500');
+    await expect(modal.locator('[name=purchasePrice]')).toHaveValue('$55.000');
+    await expect(modal.locator('[name=unit]')).toHaveValue(sample.unit);
+    await expect(modal.locator('[name=invoice]')).toHaveValue('FAC-500');
+    await modal.getByRole('button',{name:'Aplicar edición',exact:true}).click();
+    await expect(modal).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+    await expect(page.locator('[data-sheet-line]')).toHaveValue('500');
+    await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('55.000');
+    await expect(page.locator('[data-sheet-production-unit]')).toContainText('550');
+    const model=await page.evaluate(()=>JSON.parse((window as any).OracleDb.local.getItem('costing-saved')).model);
+    expect(model.ingredients).toHaveLength(1);expect(model.recipes.find((r:any)=>r.id==='recipe').lines[0].quantity).toBe(500);
+    expect(model.recipes.find((r:any)=>r.id==='other').lines[0].quantity).toBe(20);
+    await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
+    await expect(page.locator('[data-sheet-line]')).toHaveValue('500');
+    await expect(page.locator('[data-sheet-total]')).toContainText('55.000');
+  }
 });
 
 test('GCOBARF: Inicio sólo personas, secciones suspendidas y clientes disponibles',async({page})=>{
