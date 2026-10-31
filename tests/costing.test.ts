@@ -4,6 +4,16 @@ import { describe,it,expect } from 'vitest';
 const context:any={};runInNewContext(readFileSync('operational/costing-engine.js','utf8'),context);const E=context.AllianceCosting;
 export function fixture(){return {settings:{monthlyUnits:100,monthlyMinutes:null,taxRate:19,taxMode:'included'},ingredients:[{id:'flour',name:'Harina',unit:'kg',quantity:1,purchasePrice:10000,yieldPercent:80,purchaseTaxRate:0,recoverableTax:false},{id:'cheese',name:'Queso',unit:'kg',quantity:1,purchasePrice:20000,yieldPercent:100,purchaseTaxRate:0,recoverableTax:false}],expenses:[{id:'rent',name:'Alquiler',amount:100000,periodMonths:1,kind:'fixed',allocation:'units',recipeId:'',includedElsewhere:false},{id:'box',name:'Empaque',amount:500,periodMonths:1,kind:'unit',allocation:'units',recipeId:'',includedElsewhere:false}],channels:[{id:'delivery',name:'Domicilio',salesPercent:10,paymentPercent:2,flatFee:0,feeBase:'net'}],recipes:[{id:'pizza',name:'Pizza',size:'Mediana',category:'Pizzas',output:1,wastePercent:0,minutes:null,monthlyUnits:100,currentPrice:13090,targetPercent:30,marginMode:'margin',channelId:'delivery',lines:[{ingredientId:'flour',quantity:200,unit:'g',processing:{version:1,stockState:'stored',recipeState:'cleaned',thaw:0,clean:20,cook:0}},{ingredientId:'cheese',quantity:100,unit:'g'}]}]};}
 describe('Costeo: cantidades, impuestos, comisiones y rentabilidad',()=>{
+  it('acepta compras y recetas en libras con las conversiones de peso del inventario',()=>{
+    expect(E.convert(1,'lb','g')).toBe(453.59237);expect(E.convert(1,'lb','kg')).toBe(.45359237);
+    expect(E.convert(.45359237,'kg','lb')).toBeCloseTo(1,12);
+    const m=fixture(),ingredient=m.ingredients[0],recipe=m.recipes[0];
+    Object.assign(ingredient,{unit:'lb',quantity:2,purchasePrice:20000});
+    recipe.lines=[{ingredientId:ingredient.id,quantity:453.59237,unit:'g'}];
+    E.validate(m);expect(E.calculate(m,recipe).batchIngredients).toBeCloseTo(10000);
+    recipe.lines[0].unit='lb';recipe.lines[0].quantity=1;
+    expect(E.calculate(m,recipe).batchIngredients).toBeCloseTo(10000);
+  });
   it('actualiza cantidad usada y costo al corregir la compra de la hoja activa',()=>{
     const m=fixture(),ingredient=m.ingredients[0],recipe=m.recipes[0];
     Object.assign(ingredient,{name:'Bolsas',unit:'unit',quantity:600,purchasePrice:66000});

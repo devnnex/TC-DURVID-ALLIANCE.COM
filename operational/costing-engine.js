@@ -1,6 +1,6 @@
 /* Pure calculation engine. COP values retain decimals until presentation. */
 globalThis.AllianceCosting = (() => {
-  const units = {g:{family:'mass',factor:1},kg:{family:'mass',factor:1000},ml:{family:'volume',factor:1},l:{family:'volume',factor:1000},unit:{family:'count',factor:1}};
+  const units = {g:{family:'mass',factor:1},kg:{family:'mass',factor:1000},lb:{family:'mass',factor:453.59237},ml:{family:'volume',factor:1},l:{family:'volume',factor:1000},unit:{family:'count',factor:1}};
   const empty = () => ({settings:{monthlyUnits:null,monthlyMinutes:null,taxRate:0,taxMode:'included'},ingredients:[],expenses:[],channels:[],recipes:[]});
   const processingStates={stored:0,thawed:1,cleaned:3,cooked:7,'frozen-cleaned':2,'frozen-cooked':6};
   const processingDefaults=()=>({version:1,stockState:'stored',recipeState:'auto',thaw:0,clean:0,cook:0});

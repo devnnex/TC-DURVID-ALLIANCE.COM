@@ -30,7 +30,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
         raw_id:=NULL;n:=0;FOR j IN 0..maps.get_size-1 LOOP mapping:=TREAT(maps.get(j) AS JSON_OBJECT_T);alliance_security.keys_only(mapping,'ingredientId,stockId');IF mapping.get_string('ingredientId')=part.get_string('ingredientId') THEN raw_id:=alliance_security.text_value(mapping,'stockId',80,'^[a-zA-Z0-9_-]+$');n:=n+1;END IF;END LOOP;
         IF raw_id IS NULL OR n<>1 THEN alliance_security.fail(400,'INVALID_INPUT','Selecciona el insumo de '||ing.get_string('name'));END IF;
         SELECT COUNT(*) INTO n FROM alliance_raw_stock WHERE business_id=b AND location_id=l AND id=raw_id;
-        source_unit:=CASE WHEN ing.get_string('unit') IN('g','kg') THEN 'g' WHEN ing.get_string('unit') IN('ml','l') THEN 'ml' ELSE 'u' END;
+        source_unit:=CASE WHEN ing.get_string('unit') IN('g','kg','lb') THEN 'g' WHEN ing.get_string('unit') IN('ml','l') THEN 'ml' ELSE 'u' END;
         IF n=0 THEN
           name_value:=ing.get_string('name');SELECT COUNT(*) INTO n FROM alliance_raw_stock x WHERE x.business_id=b AND x.location_id=l AND LOWER(TRIM(x.name))=LOWER(TRIM(name_value)) AND x.unit_id=source_unit AND NOT EXISTS(SELECT 1 FROM alliance_pos_documents a WHERE a.business_id=b AND a.location_id=l AND a.entity='op_archivedingredients' AND a.id=x.id);
           IF n>0 THEN alliance_security.fail(409,'VERSION_CONFLICT','Ya existe '||ing.get_string('name')||' en la macro. Seleccionalo para compartir sus existencias.');END IF;

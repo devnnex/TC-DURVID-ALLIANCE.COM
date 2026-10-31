@@ -42,7 +42,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_jespresso AS
   FUNCTION approved_product(m JSON_OBJECT_T,r JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     s JSON_OBJECT_T:=r.get_object('sheet');ingredients JSON_ARRAY_T:=m.get_array('ingredients');lines JSON_ARRAY_T:=r.get_array('lines');a JSON_ARRAY_T;row_json JSON_OBJECT_T;l JSON_OBJECT_T;i JSON_OBJECT_T;result JSON_OBJECT_T:=JSON_OBJECT_T();w JSON_OBJECT_T:=JSON_OBJECT_T();
     batch NUMBER:=0;extras NUMBER:=0;line_cost NUMBER;unit_price NUMBER;management_percent NUMBER:=0;unforeseen NUMBER;management NUMBER;preparation NUMBER;cost NUMBER;sale_base NUMBER;capital_percent NUMBER;capital NUMBER;consumption NUMBER;iva NUMBER;final_price NUMBER;price NUMBER;monthly_fixed NUMBER:=0;daily_value NUMBER;estimate NUMBER;tax_rate NUMBER;tax_amount NUMBER;net NUMBER;profit NUMBER;
-    FUNCTION factor(u VARCHAR2) RETURN NUMBER IS BEGIN RETURN CASE WHEN u IN('kg','l') THEN 1000 ELSE 1 END;END;
+    FUNCTION factor(u VARCHAR2) RETURN NUMBER IS BEGIN RETURN CASE WHEN u IN('kg','l') THEN 1000 WHEN u='lb' THEN 453.59237 ELSE 1 END;END;
   BEGIN
     validate_sheet(s);
     IF lines.get_size=0 THEN alliance_security.fail(400,'COSTING_GOAL','Agrega los ingredientes de la receta.');END IF;

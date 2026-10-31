@@ -1305,7 +1305,7 @@ END;!';
   FUNCTION approved_product(m JSON_OBJECT_T,r JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     s JSON_OBJECT_T:=r.get_object('sheet');ingredients JSON_ARRAY_T:=m.get_array('ingredients');lines JSON_ARRAY_T:=r.get_array('lines');a JSON_ARRAY_T;row_json JSON_OBJECT_T;l JSON_OBJECT_T;i JSON_OBJECT_T;result JSON_OBJECT_T:=JSON_OBJECT_T();w JSON_OBJECT_T:=JSON_OBJECT_T();
     batch NUMBER:=0;extras NUMBER:=0;line_cost NUMBER;unit_price NUMBER;management_percent NUMBER:=0;unforeseen NUMBER;management NUMBER;preparation NUMBER;cost NUMBER;sale_base NUMBER;capital_percent NUMBER;capital NUMBER;consumption NUMBER;iva NUMBER;final_price NUMBER;price NUMBER;monthly_fixed NUMBER:=0;daily_value NUMBER;estimate NUMBER;tax_rate NUMBER;tax_amount NUMBER;net NUMBER;profit NUMBER;
-    FUNCTION factor(u VARCHAR2) RETURN NUMBER IS BEGIN RETURN CASE WHEN u IN('kg','l') THEN 1000 ELSE 1 END;END;
+    FUNCTION factor(u VARCHAR2) RETURN NUMBER IS BEGIN RETURN CASE WHEN u IN('kg','l') THEN 1000 WHEN u='lb' THEN 453.59237 ELSE 1 END;END;
   BEGIN
     validate_sheet(s);
     IF lines.get_size=0 THEN alliance_security.fail(400,'COSTING_GOAL','Agrega los ingredientes de la receta.');END IF;
@@ -1350,7 +1350,7 @@ END;!';
   PROCEDURE enum_value(o JSON_OBJECT_T,k VARCHAR2,allowed VARCHAR2) IS v VARCHAR2(100);
   BEGIN v:=o.get_string(k);IF v IS NULL OR INSTR(','||allowed||',',','||v||',')=0 THEN alliance_security.fail(400,'COSTING_INPUT','Opcion invalida: '||k);END IF;END;
   FUNCTION family(v VARCHAR2) RETURN VARCHAR2 IS
-  BEGIN RETURN CASE WHEN v IN('g','kg') THEN 'mass' WHEN v IN('ml','l') THEN 'volume' WHEN v='unit' THEN 'count' ELSE NULL END;END;
+  BEGIN RETURN CASE WHEN v IN('g','kg','lb') THEN 'mass' WHEN v IN('ml','l') THEN 'volume' WHEN v='unit' THEN 'count' ELSE NULL END;END;
   PROCEDURE flag(o JSON_OBJECT_T,k VARCHAR2) IS
   BEGIN IF NOT o.has(k) OR NOT o.get(k).is_boolean THEN alliance_security.fail(400,'COSTING_INPUT','Confirma la opcion '||k);END IF;END;
   PROCEDURE validate_model(m IN OUT JSON_OBJECT_T) IS
@@ -1368,7 +1368,7 @@ END;!';
         id_value:=alliance_security.text_value(row_json,'name',160);
         IF section=1 THEN
           row_json.put('yieldPercent',100);a.put(i,row_json,TRUE);m.put('ingredients',a);
-          alliance_security.keys_only(row_json,'id,name,unit,quantity,purchasePrice,yieldPercent,purchaseTaxRate,recoverableTax,purchaseDate,invoice');enum_value(row_json,'unit','g,kg,ml,l,unit');numeric_value(row_json,'quantity',0.000001,1e12);numeric_value(row_json,'purchasePrice',0,1e12);numeric_value(row_json,'yieldPercent',0.000001,100);numeric_value(row_json,'purchaseTaxRate',0,100);flag(row_json,'recoverableTax');IF row_json.has('invoice') AND (NOT row_json.get('invoice').is_string OR LENGTH(row_json.get_string('invoice'))>80) THEN alliance_security.fail(400,'COSTING_INPUT','Factura invalida.');END IF;IF row_json.get_string('purchaseDate') IS NOT NULL AND (NOT REGEXP_LIKE(row_json.get_string('purchaseDate'),'^[0-9]{4}-[0-9]{2}-[0-9]{2}$') OR VALIDATE_CONVERSION(row_json.get_string('purchaseDate') AS DATE,'FXYYYY-MM-DD')=0) THEN alliance_security.fail(400,'COSTING_INPUT','Fecha de compra invalida.');END IF;
+          alliance_security.keys_only(row_json,'id,name,unit,quantity,purchasePrice,yieldPercent,purchaseTaxRate,recoverableTax,purchaseDate,invoice');enum_value(row_json,'unit','g,kg,lb,ml,l,unit');numeric_value(row_json,'quantity',0.000001,1e12);numeric_value(row_json,'purchasePrice',0,1e12);numeric_value(row_json,'yieldPercent',0.000001,100);numeric_value(row_json,'purchaseTaxRate',0,100);flag(row_json,'recoverableTax');IF row_json.has('invoice') AND (NOT row_json.get('invoice').is_string OR LENGTH(row_json.get_string('invoice'))>80) THEN alliance_security.fail(400,'COSTING_INPUT','Factura invalida.');END IF;IF row_json.get_string('purchaseDate') IS NOT NULL AND (NOT REGEXP_LIKE(row_json.get_string('purchaseDate'),'^[0-9]{4}-[0-9]{2}-[0-9]{2}$') OR VALIDATE_CONVERSION(row_json.get_string('purchaseDate') AS DATE,'FXYYYY-MM-DD')=0) THEN alliance_security.fail(400,'COSTING_INPUT','Fecha de compra invalida.');END IF;
         ELSIF section=2 THEN
           alliance_security.keys_only(row_json,'id,name,amount,periodMonths,kind,allocation,recipeId,includedElsewhere');numeric_value(row_json,'amount',0,1e12);numeric_value(row_json,'periodMonths',0.000001,1e12);enum_value(row_json,'kind','fixed,unit,batch');IF row_json.get_string('kind')='batch' AND row_json.get_string('recipeId') IS NULL THEN alliance_security.fail(400,'COSTING_INPUT','Asigna el costo del lote a un producto.');END IF;enum_value(row_json,'allocation','units,minutes');flag(row_json,'includedElsewhere');
           FOR j IN 0..i-1 LOOP other_json:=TREAT(a.get(j) AS JSON_OBJECT_T);IF LOWER(TRIM(other_json.get_string('name')))=LOWER(TRIM(row_json.get_string('name'))) AND other_json.get_string('kind')=row_json.get_string('kind') AND NVL(other_json.get_string('recipeId'),'-')=NVL(row_json.get_string('recipeId'),'-') THEN alliance_security.fail(400,'COSTING_INPUT','Gasto duplicado: edita el existente.');END IF;END LOOP;
@@ -1382,7 +1382,7 @@ END;!';
           IF row_json.get_string('channelId') IS NOT NULL THEN found:=FALSE;FOR j IN 0..channels_json.get_size-1 LOOP other_json:=TREAT(channels_json.get(j) AS JSON_OBJECT_T);IF other_json.get_string('id')=row_json.get_string('channelId') THEN found:=TRUE;END IF;END LOOP;IF NOT found THEN alliance_security.fail(400,'COSTING_INPUT','Canal inexistente.');END IF;END IF;
           rows_json:=row_json.get_array('lines');IF rows_json IS NULL OR rows_json.get_size>100 THEN alliance_security.fail(400,'COSTING_INPUT','Receta demasiado grande.');END IF;
           FOR j IN 0..rows_json.get_size-1 LOOP
-            line_json:=TREAT(rows_json.get(j) AS JSON_OBJECT_T);alliance_security.keys_only(line_json,'ingredientId,quantity,unit,stage,manualCost,processing');IF row_json.has('sheet') THEN alliance_jespresso.validate_line(line_json);ELSIF line_json.has('stage') OR line_json.has('manualCost') THEN alliance_security.fail(400,'COSTING_INPUT','Opciones de ingrediente fuera de la hoja de recetas.');END IF;numeric_value(line_json,'quantity',CASE WHEN row_json.has('sheet') THEN 0 ELSE 0.000001 END,1e12);enum_value(line_json,'unit','g,kg,ml,l,unit');IF alliance_yield.factor(line_json)<=0 THEN alliance_security.fail(400,'COSTING_INPUT','Rendimiento invalido.');END IF;found:=FALSE;
+            line_json:=TREAT(rows_json.get(j) AS JSON_OBJECT_T);alliance_security.keys_only(line_json,'ingredientId,quantity,unit,stage,manualCost,processing');IF row_json.has('sheet') THEN alliance_jespresso.validate_line(line_json);ELSIF line_json.has('stage') OR line_json.has('manualCost') THEN alliance_security.fail(400,'COSTING_INPUT','Opciones de ingrediente fuera de la hoja de recetas.');END IF;numeric_value(line_json,'quantity',CASE WHEN row_json.has('sheet') THEN 0 ELSE 0.000001 END,1e12);enum_value(line_json,'unit','g,kg,lb,ml,l,unit');IF alliance_yield.factor(line_json)<=0 THEN alliance_security.fail(400,'COSTING_INPUT','Rendimiento invalido.');END IF;found:=FALSE;
             FOR k IN 0..ingredients_json.get_size-1 LOOP ingredient_json:=TREAT(ingredients_json.get(k) AS JSON_OBJECT_T);IF ingredient_json.get_string('id')=line_json.get_string('ingredientId') THEN found:=TRUE;IF family(ingredient_json.get_string('unit'))<>family(line_json.get_string('unit')) THEN alliance_security.fail(400,'COSTING_INPUT','Conversion incompatible.');END IF;END IF;END LOOP;
             IF NOT found THEN alliance_security.fail(400,'COSTING_INPUT','Ingrediente inexistente o eliminado.');END IF;
           END LOOP;
@@ -1395,7 +1395,7 @@ END;!';
     recipes JSON_ARRAY_T:=m.get_array('recipes');ingredients JSON_ARRAY_T:=m.get_array('ingredients');expenses JSON_ARRAY_T:=m.get_array('expenses');channels JSON_ARRAY_T:=m.get_array('channels');
     recipe JSON_OBJECT_T;ingredient JSON_OBJECT_T;expense JSON_OBJECT_T;channel JSON_OBJECT_T;s JSON_OBJECT_T:=m.get_object('settings');line JSON_OBJECT_T;lines JSON_ARRAY_T;result JSON_OBJECT_T:=JSON_OBJECT_T();
     batch NUMBER:=0;direct NUMBER:=0;allocated NUMBER:=0;price NUMBER;cost NUMBER;net NUMBER;fees NUMBER;profit NUMBER;actual NUMBER;capacity NUMBER;monthly NUMBER;unit_price NUMBER;quantity NUMBER;tax NUMBER;rate NUMBER;denominator NUMBER;
-    FUNCTION factor(u VARCHAR2) RETURN NUMBER IS BEGIN RETURN CASE WHEN u IN('kg','l') THEN 1000 ELSE 1 END;END;
+    FUNCTION factor(u VARCHAR2) RETURN NUMBER IS BEGIN RETURN CASE WHEN u IN('kg','l') THEN 1000 WHEN u='lb' THEN 453.59237 ELSE 1 END;END;
   BEGIN
     FOR i IN 0..recipes.get_size-1 LOOP recipe:=TREAT(recipes.get(i) AS JSON_OBJECT_T);EXIT WHEN recipe.get_string('id')=recipe_id;recipe:=NULL;END LOOP;
     IF recipe IS NULL THEN alliance_security.fail(404,'NOT_FOUND','Producto no disponible.');END IF;
@@ -1514,7 +1514,7 @@ END;!';
         raw_id:=NULL;n:=0;FOR j IN 0..maps.get_size-1 LOOP mapping:=TREAT(maps.get(j) AS JSON_OBJECT_T);alliance_security.keys_only(mapping,'ingredientId,stockId');IF mapping.get_string('ingredientId')=part.get_string('ingredientId') THEN raw_id:=alliance_security.text_value(mapping,'stockId',80,'^[a-zA-Z0-9_-]+$');n:=n+1;END IF;END LOOP;
         IF raw_id IS NULL OR n<>1 THEN alliance_security.fail(400,'INVALID_INPUT','Selecciona el insumo de '||ing.get_string('name'));END IF;
         SELECT COUNT(*) INTO n FROM alliance_raw_stock WHERE business_id=b AND location_id=l AND id=raw_id;
-        source_unit:=CASE WHEN ing.get_string('unit') IN('g','kg') THEN 'g' WHEN ing.get_string('unit') IN('ml','l') THEN 'ml' ELSE 'u' END;
+        source_unit:=CASE WHEN ing.get_string('unit') IN('g','kg','lb') THEN 'g' WHEN ing.get_string('unit') IN('ml','l') THEN 'ml' ELSE 'u' END;
         IF n=0 THEN
           name_value:=ing.get_string('name');SELECT COUNT(*) INTO n FROM alliance_raw_stock x WHERE x.business_id=b AND x.location_id=l AND LOWER(TRIM(x.name))=LOWER(TRIM(name_value)) AND x.unit_id=source_unit AND NOT EXISTS(SELECT 1 FROM alliance_pos_documents a WHERE a.business_id=b AND a.location_id=l AND a.entity='op_archivedingredients' AND a.id=x.id);
           IF n>0 THEN alliance_security.fail(409,'VERSION_CONFLICT','Ya existe '||ing.get_string('name')||' en la macro. Seleccionalo para compartir sus existencias.');END IF;

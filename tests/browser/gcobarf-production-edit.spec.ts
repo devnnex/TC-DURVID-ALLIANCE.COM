@@ -107,6 +107,32 @@ test('GCOBARF: fecha del guardado y recálculo al editar cada dato de la compra'
   await expect(page.locator('[data-sheet-production-unit]')).toContainText('10.000');
 });
 
+test('GCOBARF: Libras disponible al crear y editar, con costo y unidad persistidos',async({page})=>{
+  await open(page);await seed(page);
+  await page.getByRole('button',{name:'+ Agregar insumo',exact:true}).click();
+  const modal=page.locator('#costSheetEditor');
+  await expect(modal.locator('[name=unit] option[value=lb]')).toHaveText('Libras');
+  await modal.locator('[name=name]').fill('Carne en libras');await modal.locator('[name=unit]').selectOption('lb');
+  await modal.locator('[name=quantity]').fill('2');await modal.locator('[name=purchasePrice]').fill('20000');
+  await modal.locator('[type=submit]').click();await expect(modal).toHaveCount(0);
+  await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+  const row=page.locator('.cost-excel-table').first().locator('tbody tr').filter({hasText:'Carne en libras'});
+  await expect(row.locator('td').nth(3)).toHaveText('Libra');
+  await expect(row.locator('[data-sheet-line-cost]')).toContainText('20.000');
+  await row.getByRole('button',{name:'Editar',exact:true}).click();
+  await expect(modal.locator('[name=unit]')).toHaveValue('lb');await modal.locator('[name=quantity]').fill('3');
+  await modal.locator('[name=purchasePrice]').fill('30000');await modal.locator('[type=submit]').click();
+  await expect(modal).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+  await page.locator('[data-sheet-editor=ingredients][data-key=chicken]').click();
+  await expect(modal.locator('[name=unit] option[value=lb]')).toHaveText('Libras');
+  await modal.locator('[name=unit]').selectOption('lb');await modal.locator('[type=submit]').click();
+  await expect(modal).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
+  await expect(row.locator('[data-sheet-line]')).toHaveValue('3');
+  await expect(row.locator('[data-sheet-line-cost]')).toContainText('30.000');
+  await row.getByRole('button',{name:'Editar',exact:true}).click();await expect(modal.locator('[name=unit]')).toHaveValue('lb');
+});
+
 for(const sample of [{name:'Bolsa 500G',unit:'unit'},{name:'Pollo',unit:'kg'},{name:'Leche',unit:'l'}])test(`GCOBARF: corregir compra de 600 a 500 actualiza fila, total y costo guardado: ${sample.name}`,async({page})=>{
   await open(page);await seed(page);
   await page.evaluate(sample=>{
