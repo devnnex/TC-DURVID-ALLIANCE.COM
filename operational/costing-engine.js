@@ -17,6 +17,18 @@ globalThis.AllianceCosting = (() => {
   const neutralizeLosses=model=>{model.ingredients.forEach(i=>i.yieldPercent=100);model.recipes.forEach(r=>r.wastePercent=0);return model;};
   function number(value,label,min=0,max=1e12){if(value===null||value===''||!Number.isFinite(Number(value))||Number(value)<min||Number(value)>max)throw new Error(`${label}: revisa el valor.`);return Number(value);}
   function convert(quantity,from,to){if(!units[from]||!units[to]||units[from].family!==units[to].family)throw new Error('Conversión incompatible: masa, volumen y unidades no se mezclan.');return number(quantity,'Cantidad')*units[from].factor/units[to].factor;}
+  // Correcting the purchase presentation also corrects its recipe references.
+  // Within a family keep physical quantities; across families keep purchase quantities.
+  function updateIngredient(model,row){
+    const previous=model.ingredients.find(i=>i.id===row.id);
+    if(previous&&units[previous.unit]&&units[row.unit]&&units[previous.unit].family!==units[row.unit].family){
+      for(const recipe of model.recipes)for(const line of recipe.lines)if(line.ingredientId===row.id){
+        line.quantity=convert(line.quantity,line.unit,previous.unit);line.unit=row.unit;
+      }
+    }
+    const index=model.ingredients.findIndex(i=>i.id===row.id);if(index<0)model.ingredients.push(row);else model.ingredients[index]=row;
+    return model;
+  }
   function ingredientCost(i){const q=number(i.quantity,'Compra',0.000001);const tax=number(i.purchaseTaxRate,'Impuesto de compra',0,100)/100;const price=number(i.purchasePrice,'Precio de compra');return (i.recoverableTax?price/(1+tax):price)/q;}
   const lineCost=(i,line)=>line.manualCost!=null?number(line.manualCost,'Importe directo')/processingFactor(line):convert(lineQuantity(line),line.unit,i.unit)*ingredientCost(i);
   function calculate(model,recipe,channelId=recipe.channelId){
@@ -71,5 +83,5 @@ globalThis.AllianceCosting = (() => {
       minimumTotal:minimum===null?null:minimum*factor,recommendedTotal:recommended===null?null:recommended*factor,
       belowMinimum:minimum!==null&&recipe.currentPrice!==null&&recipe.currentPrice!==''&&Number(recipe.currentPrice)<minimum};
   }
-  return {empty,units,convert,ingredientCost,lineCost,lineQuantity,processingFactor,processingTarget,processingDefaults,processingStates,neutralizeLosses,calculate,priceGuide,validate};
+  return {empty,units,convert,updateIngredient,ingredientCost,lineCost,lineQuantity,processingFactor,processingTarget,processingDefaults,processingStates,neutralizeLosses,calculate,priceGuide,validate};
 })();

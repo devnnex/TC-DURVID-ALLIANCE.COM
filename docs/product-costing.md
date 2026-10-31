@@ -22,9 +22,17 @@ Ejemplo de prueba: $549.600 / 204 = $2.694,117647 de producción por unidad. Sin
 
 ## Merma
 
-- **Editar insumo → Ajustes de pérdida e impuestos → ¿Qué porcentaje puedes usar?**: un rendimiento del 90 % representa 10 % de pérdida de esa compra.
-- **Editar producto → Más detalles de la receta → Pérdida al preparar (%)**: pérdida adicional de preparación. No repetir la ya incluida en el rendimiento del insumo.
+- **Configurar merma**, junto al ingrediente de la hoja, aplica descongelación, limpieza y cocción según su estado. La merma pertenece a esa preparación; no se suma otra pérdida en el catálogo ni en el producto.
+- **Cerrar** o Escape conserva un borrador de merma por receta e ingrediente. **Cancelar** descarta ese borrador y **Guardar y aplicar merma** confirma los porcentajes.
 - **Insumos y compras → Insumos → Entrada / merma** registra pérdidas físicas de inventario, con fecha y responsable; es un movimiento distinto del porcentaje usado para costear.
+
+## Hoja de GCOBARF
+
+**Nuevo producto** crea una hoja con la tabla de compras vacía. **Agregar insumo** incorpora únicamente la compra registrada, con fecha automática de Bogotá. Editar conserva la fecha original. El botón separado **Editar producto** está comentado; las hojas guardadas se abren con **Ver y editar hoja**, que selecciona el producto y lleva el foco al comienzo de su hoja.
+
+La edición de un insumo permite corregir nombre, compra y unidad. Las unidades compatibles conservan la conversión física. Al cambiar entre peso, volumen y unidades se corrige la presentación de compra en todas sus recetas: por ejemplo, 1.000 g de una compra en kg pasa a 1 unidad si esa compra se corrige a unidades. No se introduce una equivalencia física entre kg y unidades. Se conserva la merma de cada línea y se recalculan los importes con la compra corregida.
+
+GCOBARF usa siempre **Personas** en Inicio y conserva **Clientes y cartera**. Sus accesos a Mesas, Atender mesa y Cuentas están comentados; las secciones se conservan inactivas dentro de `template[data-gcobarf-suspended]`. Para reactivarlas se deben restaurar los enlaces, retirar esos contenedores `template` y desactivar `personsOnly` en su `config.js`.
 
 ## Inventario y Excel
 

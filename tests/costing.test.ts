@@ -4,6 +4,20 @@ import { describe,it,expect } from 'vitest';
 const context:any={};runInNewContext(readFileSync('operational/costing-engine.js','utf8'),context);const E=context.AllianceCosting;
 export function fixture(){return {settings:{monthlyUnits:100,monthlyMinutes:null,taxRate:19,taxMode:'included'},ingredients:[{id:'flour',name:'Harina',unit:'kg',quantity:1,purchasePrice:10000,yieldPercent:80,purchaseTaxRate:0,recoverableTax:false},{id:'cheese',name:'Queso',unit:'kg',quantity:1,purchasePrice:20000,yieldPercent:100,purchaseTaxRate:0,recoverableTax:false}],expenses:[{id:'rent',name:'Alquiler',amount:100000,periodMonths:1,kind:'fixed',allocation:'units',recipeId:'',includedElsewhere:false},{id:'box',name:'Empaque',amount:500,periodMonths:1,kind:'unit',allocation:'units',recipeId:'',includedElsewhere:false}],channels:[{id:'delivery',name:'Domicilio',salesPercent:10,paymentPercent:2,flatFee:0,feeBase:'net'}],recipes:[{id:'pizza',name:'Pizza',size:'Mediana',category:'Pizzas',output:1,wastePercent:0,minutes:null,monthlyUnits:100,currentPrice:13090,targetPercent:30,marginMode:'margin',channelId:'delivery',lines:[{ingredientId:'flour',quantity:200,unit:'g',processing:{version:1,stockState:'stored',recipeState:'cleaned',thaw:0,clean:20,cook:0}},{ingredientId:'cheese',quantity:100,unit:'g'}]}]};}
 describe('Costeo: cantidades, impuestos, comisiones y rentabilidad',()=>{
+  it('corrige kg a unidades en todas las recetas conservando costo y merma',()=>{
+    const m=fixture();m.recipes.push({...structuredClone(m.recipes[0]),id:'other'});
+    const before=m.recipes.map(r=>E.calculate(m,r).cost);
+    E.updateIngredient(m,{...m.ingredients[0],name:'Harina por bolsa',unit:'unit'});E.validate(m);
+    for(const [index,r] of m.recipes.entries()){
+      expect(r.lines[0].unit).toBe('unit');expect(r.lines[0].quantity).toBe(.2);
+      expect(r.lines[0].processing?.clean).toBe(20);expect(E.calculate(m,r).cost).toBeCloseTo(before[index]);
+    }
+  });
+  it('conserva la conversión física al cambiar kg a gramos',()=>{
+    const m=fixture(),before=E.calculate(m,m.recipes[0]).cost;
+    E.updateIngredient(m,{...m.ingredients[0],unit:'g',quantity:1000});E.validate(m);
+    expect(m.recipes[0].lines[0].quantity).toBe(200);expect(E.calculate(m,m.recipes[0]).cost).toBeCloseTo(before);
+  });
   it('convierte unidades compatibles y rechaza conversiones físicas inventadas',()=>{expect(E.convert(1,'kg','g')).toBe(1000);expect(E.convert(500,'ml','l')).toBe(.5);expect(()=>E.convert(1,'kg','l')).toThrow();});
   it('calcula costo, precio, utilidad, margen y equilibrio con datos completos',()=>{const m=fixture(),c=E.calculate(E.validate(m),m.recipes[0]);expect(c.definitive).toBe(true);expect(c.ingredients).toBe(4500);expect(c.cost).toBe(6000);expect(c.net).toBeCloseTo(11000);expect(c.taxAmount).toBeCloseTo(2090);expect(c.fees).toBeCloseTo(1320);expect(c.profit).toBeCloseTo(3680);expect(c.recommended).toBeCloseTo(6000/.58*1.19);expect(c.margin).toBeCloseTo(3680/11000*100);expect(c.breakEven).toBe(22);});
   it('descuenta impuestos recuperables de compra una sola vez',()=>{const m=fixture();m.ingredients[0].purchasePrice=11900;m.ingredients[0].purchaseTaxRate=19;m.ingredients[0].recoverableTax=true;expect(E.ingredientCost(m.ingredients[0])).toBeCloseTo(10000);m.ingredients[0].recoverableTax=false;expect(E.ingredientCost(m.ingredients[0])).toBeCloseTo(11900);});

@@ -41,7 +41,7 @@
         <a class="ghost demo-entry" href="admin.html?demo=1">Abrir demostración local</a>
         <small id="loginError" role="alert"></small><a href="../../admin/index.html#/setup">Configurar propietario por primera vez</a>
       </form>
-      <div class="login-story"><span class="eyebrow">GCOBARF Nutripet’s</span><h2>Tu negocio.<br>Todo a la mano.</h2><p>Atiende, revisa y toma decisiones desde un mismo lugar.</p><div class="login-story-features"><span><i data-lucide="utensils"></i> Mesas y cuentas</span><span><i data-lucide="boxes"></i> Productos e inventario</span><span><i data-lucide="chart-no-axes-combined"></i> Costos y ventas</span></div><small>Cada sucursal, con su propia identidad.</small></div>
+      <div class="login-story"><span class="eyebrow">GCOBARF Nutripet’s</span><h2>Tu negocio.<br>Todo a la mano.</h2><p>Atiende, revisa y toma decisiones desde un mismo lugar.</p><div class="login-story-features"><span><i data-lucide="utensils"></i> Clientes y cartera</span><span><i data-lucide="boxes"></i> Productos e inventario</span><span><i data-lucide="chart-no-axes-combined"></i> Costos y ventas</span></div><small>Cada sucursal, con su propia identidad.</small></div>
     </section>
 
     <aside class="admin-sidebar">
@@ -54,8 +54,12 @@
       </div>
       <nav>
         <a data-nav-group="operation" href="#dashboard" data-admin-only><i data-lucide="layout-dashboard"></i> Inicio <span class="nav-request-badge" id="navRequestBadge" role="status" aria-label="Solicitudes pendientes" hidden>0</span></a>
+        <!-- GCOBARF: opcion suspendida; conservar para reactivacion.
         <a data-nav-group="operation" href="#service" class="service-nav-link"><i data-lucide="scan-line"></i> Atender mesa</a>
+        -->
+        <!-- GCOBARF: opcion suspendida; conservar para reactivacion.
         <a data-nav-group="operation" href="#accounts"><i data-lucide="receipt-text"></i> Cuentas</a>
+        -->
         <a data-nav-group="operation" href="#tips" class="tips-nav-link" data-tip-feature hidden><i data-lucide="hand-coins"></i> Propinas</a>
         <a href="#inventory" data-admin-only><i data-lucide="boxes"></i> Inventario</a>
         <a href="#costing" data-admin-only><i data-lucide="calculator"></i> Costo de productos</a>
@@ -64,7 +68,9 @@
         <!-- Asistente IA en pausa; descomentar también su clave en operational/app.js para reactivarlo.
         <a href="#assistant" data-admin-only><i data-lucide="sparkles"></i> Asistente IA</a>
         -->
+        <!-- GCOBARF: opcion suspendida; conservar para reactivacion.
         <a href="#menu" data-admin-only><i data-lucide="layout-grid"></i> Mesas</a>
+        -->
         <a href="#users"><i data-lucide="users"></i> Usuarios</a>
         <a href="#brand" data-admin-only><i data-lucide="paintbrush"></i> Marca</a>
       </nav>
@@ -90,7 +96,7 @@
         <div>
           <span class="eyebrow">Centro de mando</span>
           <h1 class="js-business-name">Restaurante</h1>
-          <p class="js-business-subtitle">Gestiona solicitudes, mesas, menu y cuentas.</p>
+          <p class="js-business-subtitle">Gestiona personas, productos, clientes y cartera.</p>
           <span class="live-status" id="realtimeStatus"><i data-lucide="wifi"></i> Conectando en vivo</span>
         </div>
         <div class="admin-header-actions">
@@ -99,7 +105,7 @@
       </header>
 
       <section class="metrics-grid" data-admin-section="dashboard">
-        <article class="metric-card"><span>Mesas</span><strong id="metricTables">0</strong></article>
+        <article class="metric-card"><span>Personas</span><strong id="metricTables">0</strong></article>
         <article class="metric-card urgent"><span>Llamados</span><strong id="metricAlerts">0</strong></article>
         <article class="metric-card"><span>Cuentas</span><strong id="metricOpen">0</strong></article>
         <article class="metric-card"><span>Abierto</span><strong id="metricSales">$0</strong></article>
@@ -131,16 +137,16 @@
           <div class="section-head">
             <div>
               <div class="dashboard-table-heading-top">
-                <span class="eyebrow">Salon</span>
-                <label class="dashboard-table-search"><i data-lucide="search"></i><input id="dashboardTableSearch" type="search" autocomplete="off" placeholder="Buscar M1 o M 1" aria-label="Buscar mesa o terraza en inicio"></label>
+                <span class="eyebrow">Personas</span>
+                <label class="dashboard-table-search"><i data-lucide="search"></i><input id="dashboardTableSearch" type="search" autocomplete="off" placeholder="Buscar persona o número" aria-label="Buscar persona en inicio"></label>
               </div>
-              <h2>Estado de mesas</h2>
+              <h2>Personas</h2>
             </div>
             <label class="table-zone-filter">Mostrar
-              <select id="dashboardTableGroupFilter" aria-label="Filtrar mesas del inicio por nombre"><option value="all">Todos los nombres</option></select>
+              <select id="dashboardTableGroupFilter" aria-label="Filtrar personas del inicio por nombre"><option value="all">Todos los nombres</option></select>
             </label>
           </div>
-          <label class="dashboard-person-mode"><span>Atender por personas</span><input type="checkbox" role="switch" data-persons-toggle aria-label="Atender por personas en Inicio"></label><div class="tables-grid" id="tablesGrid"></div>
+          <!-- Cambio a mesas suspendido en GCOBARF. --><div class="dashboard-person-mode"><span>PERSONAS</span></div><div class="tables-grid" id="tablesGrid"></div>
         </div>
       </section>
 
@@ -169,7 +175,7 @@
             <small data-upload-status="cover_url">Seleccionar imagen</small>
           </label>
           <button class="primary form-submit" type="submit"><i data-lucide="save"></i> Guardar marca</button>
-          <div class="tip-setting-card wide"><div class="tip-setting-copy"><span class="tip-setting-icon"><i data-lucide="users-round"></i></span><div><strong>Atender por personas</strong><small>Actívalo para usar personas en Inicio y Atender en lugar de mesas. Las cuentas y su historial se conservan.</small></div></div><label class="modern-switch"><input name="persons_enabled" type="checkbox" role="switch" aria-label="Atender por personas"><span aria-hidden="true"></span></label></div>
+          <!-- GCOBARF usa siempre atencion por personas; configuracion disponible en las otras sucursales. -->
           <div class="tip-setting-card wide">
             <div class="tip-setting-copy">
               <span class="tip-setting-icon"><i data-lucide="hand-coins"></i></span>
@@ -197,6 +203,8 @@
         </form>
       </section>
 
+      <!-- GCOBARF: seccion suspendida. Quitar el template para reactivarla. -->
+      <template data-gcobarf-suspended="menu">
       <section class="admin-grid menu-workbench menu-workbench-full" id="menu" data-admin-section="menu" data-admin-only>
         <div class="panel menu-tool-card">
           <div class="section-head">
@@ -267,6 +275,7 @@
         </div>
         -->
       </section>
+      </template>
 
       <!--
       <section class="panel menu-products-panel" data-admin-section="menu">
@@ -443,6 +452,8 @@
         </div>
       </section>
 
+      <!-- GCOBARF: seccion suspendida. Quitar el template para reactivarla. -->
+      <template data-gcobarf-suspended="accounts">
       <section class="panel" id="accounts" data-admin-section="accounts">
         <div class="section-head">
           <div>
@@ -452,6 +463,7 @@
         </div>
         <div class="accounts-panel" id="accountsPanel"></div>
       </section>
+      </template>
 
       <section class="panel tips-section" id="tips" data-admin-section="tips" data-tip-feature hidden>
         <div class="section-head">
@@ -477,6 +489,8 @@
         </div>
       </section>
 
+      <!-- GCOBARF: seccion suspendida. Quitar el template para reactivarla. -->
+      <template data-gcobarf-suspended="service">
       <section class="panel" id="service" data-admin-section="service">
         <div class="section-head">
           <div>
@@ -491,6 +505,7 @@
           </article>
         </div>
       </section>
+      </template>
 
       <section class="panel admin-assistant-section" id="assistant" data-admin-section="assistant" data-admin-only>
         <div class="section-head">

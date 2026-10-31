@@ -481,7 +481,8 @@ const App = (() => {
     </div>
   `;
 
-  const personsMode = () => [true,1,'true','1'].includes(state.business?.persons_enabled);
+  const personsOnly = () => window.BRANCH_CONFIG?.personsOnly === true;
+  const personsMode = () => personsOnly() || [true,1,'true','1'].includes(state.business?.persons_enabled);
   const tableLabel = (table) => personsMode() && table && !String(table.qr_code||"").startsWith("interno-") ? `Persona ${table.table_number || ""}` : table?.table_name || `Mesa ${table?.table_number || ""}`.trim();
 
   const OUTDOOR_TABLE_PREFIX = "tn-outdoor:v1:";
@@ -644,8 +645,8 @@ const App = (() => {
   const normalizedUserPermissions = (user = state.currentUser) => {
     
     
-    if (Array.isArray(user?.permissions)) return [...new Set(user.permissions.filter((section) => [...ADMIN_SECTION_KEYS,"users"].includes(section)))];
-    return [...ADMIN_SECTION_KEYS];
+    const sections=Array.isArray(user?.permissions)?[...new Set(user.permissions.filter((section) => [...ADMIN_SECTION_KEYS,"users"].includes(section)))]:[...ADMIN_SECTION_KEYS];
+    return personsOnly()?sections.filter(section=>!["service","accounts","menu"].includes(section)):sections;
   };
   const canAccessAdminSection = (section, user = state.currentUser) => normalizedUserPermissions(user).includes(section);
   const firstAllowedAdminSection = (user = state.currentUser) => normalizedUserPermissions(user)[0] || "service";
@@ -3712,8 +3713,8 @@ const App = (() => {
   };
 
   const syncServiceModeLabels = () => {
-    const persons=personsMode(),title=$('#tablesGrid')?.closest('.panel')?.querySelector('h2');if(title)title.textContent=persons?'Personas y cuentas':'Estado de mesas';
-    document.querySelectorAll('[data-persons-toggle]').forEach(c=>{c.checked=persons;c.closest('label').hidden=!OracleDb.isDemo&&!OracleDb.permission('brand.manage');});
+    const persons=personsMode(),title=$('#tablesGrid')?.closest('.panel')?.querySelector('h2');if(title)title.textContent=personsOnly()?'Personas':persons?'Personas y cuentas':'Estado de mesas';
+    document.querySelectorAll('[data-persons-toggle]').forEach(c=>{c.checked=persons;c.closest('label').hidden=personsOnly()||!OracleDb.isDemo&&!OracleDb.permission('brand.manage');});
     const metric=$('#metricTables')?.parentElement?.querySelector('span');if(metric)metric.textContent=persons?'Personas':'Mesas';
     const service=$('#service h2');if(service)service.textContent=persons?'Seleccionar y atender persona':'Seleccionar y atender mesa';
     const block=$('.service-tables-panel strong');if(block)block.textContent=persons?'Consumos por persona':'Ventas por mesa';
@@ -6172,6 +6173,7 @@ const App = (() => {
 
   let serviceModeSaving=false;
   const saveServiceMode = async (enabled) => {
+    if(personsOnly())return;
     if(serviceModeSaving)return;serviceModeSaving=true;const previous=personsMode();
     state.business={...state.business,persons_enabled:enabled};persistBootstrapCache();renderTables();renderServiceTables();
     document.querySelectorAll('[data-persons-toggle],[name=persons_enabled]').forEach(c=>{c.checked=enabled;c.disabled=true;});
@@ -6191,7 +6193,7 @@ const App = (() => {
       cover_url: form.cover_url.value.trim(),
       tips_enabled: state.tipSettings.enabled === true,
       tip_percentage: Number(state.tipSettings.percentage || 10),
-      persons_enabled: form.persons_enabled.checked
+      persons_enabled: personsOnly() || !!form.persons_enabled?.checked
     };
     window.AllianceForms?.clear(form);
     const original = state.business;
