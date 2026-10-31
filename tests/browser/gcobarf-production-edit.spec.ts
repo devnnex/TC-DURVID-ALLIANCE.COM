@@ -30,7 +30,8 @@ test('GCOBARF: editar unidad y nombre, fecha automática, borrador, merma y hoja
   await page.locator('[data-sheet-editor=ingredients][data-key=chicken]').click();
   await expect(modal.locator('[name=name]')).toHaveValue('Pollo por unidades');
   await expect(modal.locator('[name=unit]')).toHaveValue('unit');
-  await expect(modal.locator('[name=purchaseDate]')).toHaveValue('2026-10-20');
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  await expect(modal.locator('[name=purchaseDate]')).toHaveValue(today);
   await expect(modal.locator('[name=purchaseDate]')).not.toBeEditable();
   await modal.locator('[type=submit]').click();await expect(modal).toHaveCount(0);
   await expect(page.locator('#costingStatus')).toContainText('Guardado local');
@@ -47,7 +48,6 @@ test('GCOBARF: editar unidad y nombre, fecha automática, borrador, merma y hoja
   await page.getByRole('button',{name:'+ Agregar insumo',exact:true}).click();modal=page.locator('#costSheetEditor');
   await modal.locator('[name=name]').fill('Bolsas');await modal.locator('[name=unit]').selectOption('unit');
   await modal.locator('[name=quantity]').fill('10');await modal.locator('[name=purchasePrice]').fill('1000');
-  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   await expect(modal.locator('[name=purchaseDate]')).toHaveValue(today);
   await modal.locator('[type=submit]').click();await expect(modal).toHaveCount(0);
   await expect(page.locator('[data-sheet-line]')).toHaveCount(1);await expect(page.locator('[data-sheet-production-unit]')).toContainText('1.000');
@@ -57,6 +57,52 @@ test('GCOBARF: editar unidad y nombre, fecha automática, borrador, merma y hoja
   await expect(page.locator('[data-sheet-line]')).toHaveValue('1');await expect(page.locator('[data-sheet-production-unit]')).toContainText('6.250');
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(page.locator('[data-sheet-production-unit]')).toContainText('6.250');
   expect(errors).toEqual([]);
+});
+
+test('GCOBARF: fecha del guardado y recálculo al editar cada dato de la compra',async({page})=>{
+  await page.clock.setFixedTime(new Date('2026-10-31T04:59:00Z'));
+  await open(page);await seed(page);
+  const edit=page.locator('[data-sheet-editor=ingredients][data-key=chicken]'),modal=page.locator('#costSheetEditor');
+  const saved=()=>page.evaluate(()=>JSON.parse((window as any).OracleDb.local.getItem('costing-saved')).model);
+  await edit.click();await expect(modal.locator('[name=purchaseDate]')).toHaveValue('2026-10-30');
+  await modal.locator('[name=name]').fill('Pollo actualizado');
+  await page.clock.setFixedTime(new Date('2026-10-31T05:01:00Z'));
+  await modal.locator('[type=submit]').click();await expect(modal).toHaveCount(0);
+  await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+  expect((await saved()).ingredients[0].purchaseDate).toBe('2026-10-31');
+  await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
+  await expect(page.locator('.cost-excel-table').first()).toContainText('Pollo actualizado');
+
+  await page.clock.setFixedTime(new Date('2026-11-01T05:01:00Z'));
+  for(const change of [
+    {field:'purchasePrice',value:'18000',cost:'9.000'},
+    {field:'quantity',value:'3',cost:'3.000'},
+    {field:'unit',value:'unit',cost:'3.000'},
+    {field:'unit',value:'l',cost:'3.000'},
+    {field:'unit',value:'kg',cost:'3.000'},
+    {field:'unit',value:'g',purchaseQuantity:'3000',cost:'3.000'}
+  ]){
+    await edit.click();await expect(modal.locator('[name=purchaseDate]')).toHaveValue('2026-11-01');
+    const control=modal.locator(`[name=${change.field}]`);
+    if(change.field==='unit')await control.selectOption(change.value);else await control.fill(change.value);
+    if(change.purchaseQuantity)await modal.locator('[name=quantity]').fill(change.purchaseQuantity);
+    await modal.locator('[type=submit]').click();await expect(modal).toHaveCount(0);
+    await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+    await expect(page.locator('[data-sheet-production-unit]')).toContainText(change.cost);
+    const model=await saved();expect(model.ingredients[0].purchaseDate).toBe('2026-11-01');
+    expect(String(model.ingredients[0][change.field])).toBe(change.value);
+  }
+  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
+  await expect(page.locator('[data-sheet-production-unit]')).toContainText('3.000');
+  await page.getByRole('button',{name:'+ Agregar insumo',exact:true}).click();
+  await expect(modal.locator('[name=purchaseDate]')).toHaveValue('2026-11-01');
+  await modal.locator('[name=name]').fill('Bolsas nuevas');await modal.locator('[name=quantity]').fill('1');
+  await modal.locator('[name=purchasePrice]').fill('2000');
+  await page.clock.setFixedTime(new Date('2026-11-02T05:01:00Z'));
+  await modal.locator('[type=submit]').click();await expect(modal).toHaveCount(0);
+  await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+  expect((await saved()).ingredients.at(-1).purchaseDate).toBe('2026-11-02');
+  await expect(page.locator('[data-sheet-production-unit]')).toContainText('4.000');
 });
 
 test('GCOBARF: Inicio sólo personas, secciones suspendidas y clientes disponibles',async({page})=>{

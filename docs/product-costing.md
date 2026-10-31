@@ -5,7 +5,7 @@ La pantalla principal conserva la distribución de la hoja de cálculo: compras 
 ## Usar la hoja
 
 1. Selecciona un producto o pulsa **Nuevo producto**. Sus insumos, cantidades y rendimiento se editan en la misma pantalla.
-2. Registra las compras. La fecha se asigna al registrar un insumo nuevo, con la hora de Colombia. Editar un registro anterior conserva su fecha; si una compra antigua no tenía fecha, no se inventa una.
+2. Registra las compras. En GCOBARF, la fecha se asigna automáticamente al guardar un insumo nuevo o cualquier edición, según el día actual de Bogotá. No se introduce manualmente.
 3. La tabla muestra **Fecha compra, Insumos, Cantidad usada, Unidad, Valor y Editar**. La factura anterior se conserva en los datos, aunque ya no ocupa una columna.
 4. Completa la cantidad producida y, por separado, los gastos y el volumen mensual.
 5. Pulsa **Guardar hoja de producción**. Las hojas guardadas aparecen debajo y en **Historial**. **Ver y editar hoja** selecciona el producto y sube al editor; **Eliminar producto** retira la receta y sus gastos exclusivos, manteniendo los insumos compartidos y las demás recetas.
@@ -28,7 +28,7 @@ Ejemplo de prueba: $549.600 / 204 = $2.694,117647 de producción por unidad. Sin
 
 ## Hoja de GCOBARF
 
-**Nuevo producto** crea una hoja con la tabla de compras vacía. **Agregar insumo** incorpora únicamente la compra registrada, con fecha automática de Bogotá. Editar conserva la fecha original. El botón separado **Editar producto** está comentado; las hojas guardadas se abren con **Ver y editar hoja**, que selecciona el producto y lleva el foco al comienzo de su hoja.
+**Nuevo producto** crea una hoja con la tabla de compras vacía. **Agregar insumo** incorpora únicamente la compra registrada. Tanto al crear como al editar, el formulario muestra la fecha actual de Bogotá y vuelve a calcularla al guardar; esa fecha queda registrada en la columna **Fecha compra**. El botón separado **Editar producto** está comentado; las hojas guardadas se abren con **Ver y editar hoja**, que selecciona el producto y lleva el foco al comienzo de su hoja.
 
 La edición de un insumo permite corregir nombre, compra y unidad. Las unidades compatibles conservan la conversión física. Al cambiar entre peso, volumen y unidades se corrige la presentación de compra en todas sus recetas: por ejemplo, 1.000 g de una compra en kg pasa a 1 unidad si esa compra se corrige a unidades. No se introduce una equivalencia física entre kg y unidades. Se conserva la merma de cada línea y se recalculan los importes con la compra corregida.
 
