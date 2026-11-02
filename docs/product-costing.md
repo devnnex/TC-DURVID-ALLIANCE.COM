@@ -28,6 +28,14 @@ Ejemplo de prueba: $549.600 / 204 = $2.694,117647 de producción por unidad. Sin
 
 ## Hoja de GCOBARF
 
+En GCOBARF, el menú **Macro de insumos** abre la macro junto a **Historial**; los controles de productos para vender quedan ocultos y conservados en el código. Al crear o editar un insumo se registra el valor total de las existencias. La tarjeta muestra el costo por su unidad guardada y el valor de las existencias. Ejemplo: 500 bolsas por $55.000 cuestan $110 cada una. Las nuevas entradas conservan el costo promedio ponderado de lo disponible.
+
+**Todos los insumos** ordena alfabéticamente las tarjetas disponibles y deja al final las que no tienen existencias, también en orden alfabético. Los otros filtros conservan su orden habitual. El aviso de existencias bajas se muestra rojo. En la hoja de costos, la primera columna de **Compras para esta producción** se titula **Fecha de producción**; este cambio solo modifica el título en GCOBARF.
+
+La unidad elegida al crear el insumo se conserva: tanto **Editar** como **± Cantidad** la muestran bloqueada. No se convierte silenciosamente un registro de kg a gramos o a unidades. El historial conserva altas, ediciones, entradas, retiros y eliminaciones con los valores anteriores y nuevos, el usuario autenticado y la fecha; permite buscar y filtrar por usuario, acción y fechas. Los movimientos anteriores se muestran cuando esos registros históricos están disponibles.
+
+En **Agregar insumo** o **Editar** de la hoja se puede seleccionar **Insumo de la macro**. El precio de compra se obtiene de su costo unitario actual, convirtiendo las medidas compatibles. La cantidad usada de la hoja decide el importe: usar 20 bolsas de $110 cuesta $2.200. La actualización del precio de la macro conserva la cantidad utilizada en la receta. La consulta de una ficha aprobada histórica mantiene sus valores originales.
+
 La producción real se puede desglosar en filas con nombre y cantidad, usando **Agregar cantidad de producción**. El total es la suma de esas filas, incluidas cantidades cero: Pollo 191 + Mixta 0 + Carne 57 = 248. El precio estimado por unidad es **Total compras ÷ Total producción real**, como `H16/F30` en el Excel: $610.931 ÷ 248 = $2.463,4314516129034. La proyección de 230 no reemplaza la producción real. El costo mensual por unidad sigue siendo gastos mensuales ÷ producción mensual y se suma aparte como referencia. Los cálculos conservan los decimales y no cambian las cantidades usadas de los ingredientes al editar la producción real.
 
 La **X** junto a **Editar** quita únicamente ese ingrediente de la hoja abierta, confirma la acción y recalcula sus totales. El catálogo, las demás recetas y la producción real se conservan. El desglose de producción y la eliminación se guardan también en Oracle; las hojas anteriores siguen usando su producción guardada hasta que se editen.

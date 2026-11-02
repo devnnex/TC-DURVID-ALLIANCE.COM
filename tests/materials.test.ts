@@ -9,6 +9,34 @@ const apply=(s:any,command:string,payload:any)=>{const next=structuredClone(s);r
 const link={productId:'product',recipeId:'recipe',revision:1,salePortions:1,mappings:[{ingredientId:'tartara',stockId:'raw-tartara'},{ingredientId:'milk',stockId:'raw-milk'}]};
 function ready(){let s=apply(initial(),'materials_link',link);for(const [id,unit]of [['raw-tartara','g'],['raw-milk','ml']])s=apply(s,'materials_adjust',{ingredientId:id,quantity:1000,unit,kind:'in',totalCost:10000,reason:'Abastecer'});return s;}
 describe('Macro de insumos y recetas por unidad vendida',()=>{
+  it('registra costo total al crear y editar, con historial del usuario y sin inventar movimientos',()=>{
+    let s=apply(initial(),'materials_save',{id:'bag',revision:0,name:'Bolsa 500G',unit:'u',quantity:500,minStock:0,totalCost:55000});
+    let row=s.operations.ingredients.find((i:any)=>i.id==='bag');expect(row.unitCost).toBe(110);
+    expect(s.operations.materialHistory.at(-1)).toMatchObject({action:'create',actorId:'boss',actorName:'Jefe',totalCost:55000,after:{quantity:500,unitCost:110}});
+    s=apply(s,'materials_save',{id:'bag',revision:row.revision,name:'Bolsa editada',unit:'u',quantity:500,minStock:10,totalCost:60000});
+    row=s.operations.ingredients.find((i:any)=>i.id==='bag');expect(row.unitCost).toBe(120);expect(s.operations.materialMovements).toHaveLength(1);
+    expect(s.operations.materialHistory.at(-1)).toMatchObject({action:'edit',before:{unitCost:110,name:'Bolsa 500G'},after:{unitCost:120,name:'Bolsa editada'}});
+    s=apply(s,'materials_adjust',{ingredientId:'bag',kind:'in',quantity:500,unit:'u',totalCost:40000});
+    expect(s.operations.ingredients.find((i:any)=>i.id==='bag').unitCost).toBe(100);
+    s=apply(s,'materials_delete',{ingredientId:'bag'});expect(s.operations.materialHistory.map((e:any)=>e.action)).toEqual(['create','edit','in','delete']);
+    expect(s.operations.materialHistory.at(-1).after.archived).toBe(true);
+  });
+  it('rechaza costos inválidos y evita asignar valor a existencias cero',()=>{
+    const p={id:'bag',revision:0,name:'Bolsa',unit:'u',quantity:0,minStock:0,totalCost:100};
+    expect(()=>apply(initial(),'materials_save',p)).toThrow('cero');
+    expect(()=>apply(initial(),'materials_save',{...p,quantity:10,totalCost:-1})).toThrow('costo');
+  });
+  it('GCOBARF conserva la unidad elegida tanto al editar como al mover existencias',()=>{
+    ctx.BRANCH_CONFIG={slug:'gcobarf'};
+    try{
+      const s=apply(initial(),'materials_save',{id:'flour',revision:0,name:'Harina',unit:'kg',quantity:2,minStock:0,totalCost:10000});
+      const row=s.operations.ingredients.find((i:any)=>i.id==='flour');expect(row.unit).toBe('kg');
+      expect(()=>apply(s,'materials_adjust',{ingredientId:'flour',kind:'in',quantity:500,unit:'g',totalCost:2500})).toThrow('unidad guardada');
+      expect(()=>apply(s,'materials_save',{id:'flour',revision:row.revision,name:row.name,unit:'g',quantity:2,minStock:0,totalCost:10000})).toThrow('unidad');
+      const next=apply(s,'materials_adjust',{ingredientId:'flour',kind:'in',quantity:.5,unit:'kg',totalCost:2500});
+      expect(next.operations.ingredients.find((i:any)=>i.id==='flour')).toMatchObject({quantity:2.5,unit:'kg',unitCost:5000});
+    }finally{delete ctx.BRANCH_CONFIG;}
+  });
   it('agrupa varias líneas del mismo producto y devuelve sus insumos en una sola anulación',()=>{const s=ready(),invoice={id:'grouped',number:'GROUP',sessionId:'grouped-session',saleChannel:'walk_in',table:'Venta individual',createdAt:new Date().toISOString(),items:[{id:'one',menu_item_id:'product',quantity:4,unit_price:5000},{id:'two',menu_item_id:'product',quantity:4,unit_price:5000}],totals:{subtotal:40000,total:40000,discount:0,tax:0,serviceFee:0,tip:0},payments:[{method:'transfer',amount:40000}]};POS.execute(s,'record_sale',{invoice});expect(s.movements).toHaveLength(1);expect(s.movements[0].delta).toBe(-8);expect(s.movements[0].ingredients.find((i:any)=>i.ingredientId==='raw-tartara').quantity).toBe(75);POS.execute(s,'delete_sale',{saleId:'grouped'});expect(s.movements).toHaveLength(2);expect(s.movements[0].delta).toBe(8);expect(s.movements[0].ingredients.find((i:any)=>i.ingredientId==='raw-tartara').quantity).toBe(75);expect(s.operations.ingredients.find((i:any)=>i.id==='raw-tartara').quantity).toBe(1000);expect(s.stock.product.stock).toBe(8);});
 
   it('vincula la hoja nativa de GCOBARF con merma por ingrediente y producción real',()=>{const s=initial(),r=s.costing.model.recipes[0];delete r.sheet;r.lines.forEach((l:any)=>delete l.stage);r.lines[0].processing={version:1,stockState:'stored',recipeState:'thawed',thaw:5,clean:0,cook:30};const next=apply(s,'materials_link',link),part=next.operations.recipes[0].lines.find((l:any)=>l.ingredientId==='raw-tartara');expect(part.quantity).toBeCloseTo(75/.95/8,12);expect(next.operations.recipes[0].overheadCost).toBe(0);});

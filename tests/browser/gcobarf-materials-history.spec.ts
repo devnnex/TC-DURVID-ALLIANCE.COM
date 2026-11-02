@@ -1,0 +1,101 @@
+import {test,expect} from '@playwright/test';
+import {pathToFileURL} from 'node:url';
+import {resolve} from 'node:path';
+
+test('GCOBARF ordena todos los insumos con ceros al final y conserva el orden de los otros filtros',async({page})=>{
+  await page.context().setOffline(true);
+  await page.goto(pathToFileURL(resolve('negocios/gcobarf/admin.html')).href+'?demo=1#inventory');
+  await expect(page.locator('.admin-sidebar [href="#inventory"]')).toHaveText('Macro de insumos');
+  await expect(page.locator('[data-material-action=new]')).toBeVisible();
+  for(const [name,quantity] of [['Zanahoria','5'],['Arroz','0'],['Banano','4'],['Cebolla','0']]){
+    await page.locator('[data-material-action=new]').click();const modal=page.locator('#materialsDialog');
+    await modal.locator('[name=name]').fill(name);await modal.locator('[name=quantity]').fill(quantity);
+    await modal.locator('[name=totalCost]').fill(quantity==='0'?'0':'100');
+    await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();
+  }
+  const names=page.locator('[data-material-card]:visible h4');
+  await expect(names).toHaveText(['Banano','Zanahoria','Arroz','Cebolla']);
+  const zero=page.locator('[data-material-card]').filter({has:page.locator('h4',{hasText:'Arroz'})});
+  await expect(zero.locator('.material-symbol')).toHaveCSS('color','rgb(180, 35, 43)');
+  await expect(zero.locator('.material-balance b')).toHaveCSS('color','rgb(180, 35, 43)');
+  await page.locator('[data-material-filter]').selectOption('available');
+  await expect(names).toHaveText(['Zanahoria','Banano']);
+  await page.locator('[data-material-filter]').selectOption('low');
+  await expect(names).toHaveText(['Arroz','Cebolla']);
+  await page.locator('[data-material-filter]').selectOption('all');
+  await page.locator('[data-material-search]').fill('a');
+  await expect(names).toHaveText(['Banano','Zanahoria','Arroz','Cebolla']);
+  await page.reload();await expect(names).toHaveText(['Banano','Zanahoria','Arroz','Cebolla']);
+});
+
+test('GCOBARF: macro directa, precio unitario, historial y costeo con el insumo seleccionado',async({page})=>{
+  test.setTimeout(90000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.context().setOffline(true);
+  await page.goto(pathToFileURL(resolve('negocios/gcobarf/admin.html')).href+'?demo=1#inventory');
+  await expect(page.locator('#materialsContent')).toBeVisible();await expect(page.locator('[data-material-action=new]')).toBeVisible();
+  await expect(page.locator('[data-material-view=products]')).toHaveCount(0);await expect(page.locator('#inventoryList')).not.toBeVisible();
+  await page.locator('[data-material-action=new]').click();const modal=page.locator('#materialsDialog');
+  await modal.locator('[name=name]').fill('Bolsa 500G');await modal.locator('[name=unit]').selectOption('u');
+  await modal.locator('[name=quantity]').fill('500');await modal.locator('[name=totalCost]').fill('55000');
+  await expect(modal.locator('[data-material-unit-preview]')).toContainText('110');
+  await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();
+  const card=page.locator('[data-material-card]').filter({hasText:'Bolsa 500G'});
+  await expect(card.locator('.material-balance strong')).toHaveText('500');await expect(card.locator('.material-unit-cost')).toContainText('110');
+  const stockId=await card.getAttribute('data-material-card');
+  await card.locator('[data-material-action=edit]').click();await modal.locator('[name=totalCost]').fill('60000');
+  await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();await expect(card.locator('.material-unit-cost')).toContainText('120');
+  await card.locator('[data-material-action=adjust]').click();await expect(modal.locator('[name=unit]')).toBeDisabled();await expect(modal.locator('[name=unit]')).toHaveValue('u');await modal.locator('[name=quantity]').fill('500');await modal.locator('[name=totalCost]').fill('40000');
+  await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();await expect(card.locator('.material-balance strong')).toHaveText('1.000');
+  await expect(card.locator('.material-unit-cost')).toContainText('100');
+  await page.locator('[data-material-view=history]').click();await expect(page.locator('.materials-history-record:visible')).toHaveCount(3);
+  await expect(page.locator('.materials-history-record').first()).toContainText('Administrador de demostración');
+  await page.locator('[data-material-history-action]').selectOption('edit');await expect(page.locator('.materials-history-record:visible')).toHaveCount(1);
+  await expect(page.locator('.materials-history-record:visible')).toContainText('110 →');
+  await page.locator('[data-material-history-search]').fill('inexistente');await expect(page.locator('.materials-history-record:visible')).toHaveCount(0);
+  await page.locator('[data-material-history-search]').fill('Bolsa');await expect(page.locator('.materials-history-record:visible')).toHaveCount(1);
+  await page.locator('[data-material-history-actor]').selectOption('22222222-2222-4222-8222-222222222222');
+  await expect(page.locator('.materials-history-record:visible')).toHaveCount(1);
+  await page.locator('.admin-sidebar [href="#costing"]').click();await expect(page.locator('#costingReload')).toBeEnabled();
+  await expect(page.locator('.cost-excel-sheet table').first().locator('thead th').first()).toHaveText('Fecha de producción');
+  await page.locator('[data-sheet-editor=recipes]').click();let editor=page.locator('#costSheetEditor');
+  await editor.locator('[name=name]').fill('Producción con bolsas');await editor.locator('[name=newChannelName]').fill('Directa');
+  await editor.locator('[type=submit]').click();await expect(editor).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+  await page.locator('[data-sheet-editor=ingredients]').click();editor=page.locator('#costSheetEditor');
+  await editor.locator('[name=stockId]').selectOption(stockId!);await editor.locator('[name=quantity]').fill('20');
+  await expect(editor.locator('[name=purchasePrice]')).toHaveValue('$2.000');await editor.locator('[type=submit]').click();
+  await expect(editor).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('2.000');
+  await page.locator('[data-sheet-line="0"]').fill('5');await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('500');
+  await page.locator('[data-sheet-save]').click();await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+  await page.locator('.admin-sidebar [href="#inventory"]').click();await page.locator('[data-material-view=macro]').click();
+  await card.locator('[data-material-action=edit]').click();await modal.locator('[name=totalCost]').fill('110000');
+  await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();
+  await page.locator('.admin-sidebar [href="#costing"]').click();await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('550');
+  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('550');
+  await page.locator('.admin-sidebar [href="#inventory"]').click();await page.locator('[data-material-view=macro]').click();
+  await card.locator('[data-material-action=delete]').click();await page.locator('#systemMessageDialog [value=accept]').click();await expect(card).toHaveCount(0);
+  await page.locator('[data-material-view=history]').click();await page.locator('[data-material-history-action]').selectOption('delete');
+  await expect(page.locator('.materials-history-record:visible')).toHaveCount(1);await expect(page.locator('.materials-history-record:visible')).toContainText('Bolsa 500G');
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('GCOBARF conserva cualquier unidad elegida al crear, editar y agregar existencias',async({page})=>{
+  test.setTimeout(90000);await page.context().setOffline(true);
+  await page.goto(pathToFileURL(resolve('negocios/gcobarf/admin.html')).href+'?demo=1#inventory');
+  await expect(page.locator('[data-material-action=new]')).toBeVisible();
+  for(const unit of ['kg','g','lb','l','ml','u']){
+    await page.locator('[data-material-action=new]').click();const modal=page.locator('#materialsDialog');
+    await modal.locator('[name=name]').fill('Insumo '+unit);await modal.locator('[name=unit]').selectOption(unit);
+    await modal.locator('[name=quantity]').fill('1');await modal.locator('[name=totalCost]').fill('100');
+    await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();
+    const card=page.locator('[data-material-card]').filter({has:page.locator('h4',{hasText:new RegExp('^Insumo '+unit+'$')})});
+    await card.locator('[data-material-action=edit]').click();await expect(modal.locator('[name=unit]')).toBeDisabled();
+    await expect(modal.locator('[name=unit]')).toHaveValue(unit);await modal.locator('[data-material-close]').first().click();
+    await card.locator('[data-material-action=adjust]').click();await expect(modal.locator('[name=unit]')).toBeDisabled();
+    await expect(modal.locator('[name=unit]')).toHaveValue(unit);await modal.locator('[name=quantity]').fill('2');
+    await modal.locator('[name=totalCost]').fill('200');await modal.locator('[type=submit]').click();
+    await expect(modal).not.toBeVisible();await expect(card.locator('.material-balance strong')).toHaveText('3');
+    await expect(card.locator('.material-unit-cost')).toContainText('100');
+  }
+  await page.reload();await expect(page.locator('[data-material-card]')).toHaveCount(6);
+});
