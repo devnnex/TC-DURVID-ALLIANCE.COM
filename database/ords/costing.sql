@@ -16,6 +16,18 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
   BEGIN RETURN CASE WHEN v IN('g','kg','lb') THEN 'mass' WHEN v IN('ml','l') THEN 'volume' WHEN v='unit' THEN 'count' ELSE NULL END;END;
   PROCEDURE flag(o JSON_OBJECT_T,k VARCHAR2) IS
   BEGIN IF NOT o.has(k) OR NOT o.get(k).is_boolean THEN alliance_security.fail(400,'COSTING_INPUT','Confirma la opcion '||k);END IF;END;
+  PROCEDURE validate_production(r JSON_OBJECT_T) IS rows_value JSON_ARRAY_T;v JSON_OBJECT_T;total NUMBER:=0;
+  BEGIN
+    IF NOT r.has('productionRows') THEN RETURN;END IF;
+    rows_value:=r.get_array('productionRows');
+    IF r.has('sheet') OR rows_value IS NULL OR rows_value.get_size=0 OR rows_value.get_size>100 THEN alliance_security.fail(400,'COSTING_INPUT','Desglose de produccion invalido.');END IF;
+    FOR i IN 0..rows_value.get_size-1 LOOP
+      v:=TREAT(rows_value.get(i) AS JSON_OBJECT_T);alliance_security.keys_only(v,'name,quantity');
+      IF alliance_security.text_value(v,'name',160) IS NULL THEN alliance_security.fail(400,'COSTING_INPUT','Escribe el nombre de la produccion.');END IF;
+      numeric_value(v,'quantity',0,1e12);total:=total+v.get_number('quantity');
+    END LOOP;
+    IF total<=0 OR total>1e12 OR ABS(total-r.get_number('output'))>1e-8*GREATEST(1,total) THEN alliance_security.fail(400,'COSTING_INPUT','El total de produccion debe coincidir con la suma de sus cantidades.');END IF;
+  END;
   PROCEDURE validate_model(m IN OUT JSON_OBJECT_T) IS
     s JSON_OBJECT_T;a JSON_ARRAY_T;rows_json JSON_ARRAY_T;row_json JSON_OBJECT_T;line_json JSON_OBJECT_T;ingredients_json JSON_ARRAY_T;recipes_json JSON_ARRAY_T;channels_json JSON_ARRAY_T;ingredient_json JSON_OBJECT_T;other_json JSON_OBJECT_T;ids CLOB;id_value VARCHAR2(80);found BOOLEAN;
   BEGIN
@@ -40,7 +52,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
           alliance_security.keys_only(row_json,'id,name,salesPercent,paymentPercent,flatFee,feeBase');numeric_value(row_json,'salesPercent',0,99.999);numeric_value(row_json,'paymentPercent',0,99.999);numeric_value(row_json,'flatFee',0,1e12);enum_value(row_json,'feeBase','net,gross');
         ELSE
           row_json.put('wastePercent',0);a.put(i,row_json,TRUE);m.put('recipes',a);
-          alliance_security.keys_only(row_json,'id,name,size,category,output,wastePercent,minutes,monthlyUnits,currentPrice,targetPercent,marginMode,channelId,lines,pricingBasis,sheet');IF row_json.has('sheet') THEN alliance_jespresso.validate_sheet(row_json.get_object('sheet'));END IF;IF row_json.has('pricingBasis') THEN enum_value(row_json,'pricingBasis','full,production');END IF;numeric_value(row_json,'output',0.000001,1e12);numeric_value(row_json,'wastePercent',0,99.999);numeric_value(row_json,'minutes',0.000001,1e12,TRUE);numeric_value(row_json,'monthlyUnits',0.000001,1e12,TRUE);numeric_value(row_json,'currentPrice',0,1e12,TRUE);enum_value(row_json,'marginMode','margin,markup');numeric_value(row_json,'targetPercent',0,CASE WHEN row_json.get_string('marginMode')='markup' THEN 1000 ELSE 99.999 END);
+          alliance_security.keys_only(row_json,'id,name,size,category,output,wastePercent,minutes,monthlyUnits,currentPrice,targetPercent,marginMode,channelId,lines,pricingBasis,sheet,productionRows');IF row_json.has('sheet') THEN alliance_jespresso.validate_sheet(row_json.get_object('sheet'));END IF;IF row_json.has('pricingBasis') THEN enum_value(row_json,'pricingBasis','full,production');END IF;numeric_value(row_json,'output',0.000001,1e12);validate_production(row_json);numeric_value(row_json,'wastePercent',0,99.999);numeric_value(row_json,'minutes',0.000001,1e12,TRUE);numeric_value(row_json,'monthlyUnits',0.000001,1e12,TRUE);numeric_value(row_json,'currentPrice',0,1e12,TRUE);enum_value(row_json,'marginMode','margin,markup');numeric_value(row_json,'targetPercent',0,CASE WHEN row_json.get_string('marginMode')='markup' THEN 1000 ELSE 99.999 END);
           IF LENGTH(row_json.get_string('size'))>80 OR LENGTH(row_json.get_string('category'))>80 THEN alliance_security.fail(400,'COSTING_INPUT','Variante demasiado larga.');END IF;
           IF row_json.get_string('channelId') IS NOT NULL THEN found:=FALSE;FOR j IN 0..channels_json.get_size-1 LOOP other_json:=TREAT(channels_json.get(j) AS JSON_OBJECT_T);IF other_json.get_string('id')=row_json.get_string('channelId') THEN found:=TRUE;END IF;END LOOP;IF NOT found THEN alliance_security.fail(400,'COSTING_INPUT','Canal inexistente.');END IF;END IF;
           rows_json:=row_json.get_array('lines');IF rows_json IS NULL OR rows_json.get_size>100 THEN alliance_security.fail(400,'COSTING_INPUT','Receta demasiado grande.');END IF;

@@ -35,11 +35,23 @@ globalThis.AllianceCosting = (() => {
     return model;
   }
   function ingredientCost(i){const q=number(i.quantity,'Compra',0.000001);const tax=number(i.purchaseTaxRate,'Impuesto de compra',0,100)/100;const price=number(i.purchasePrice,'Precio de compra');return (i.recoverableTax?price/(1+tax):price)/q;}
+  function productionTotal(recipe){
+    const output=number(recipe.output,'Unidades producidas',0.000001);
+    if(recipe.productionRows===undefined)return output;
+    if(recipe.sheet||!Array.isArray(recipe.productionRows)||!recipe.productionRows.length||recipe.productionRows.length>100)throw new Error('Desglose de producción inválido.');
+    const total=recipe.productionRows.reduce((sum,row)=>{
+      if(!row||typeof row.name!=='string'||!row.name.trim()||row.name.length>160||typeof row.quantity!=='number')throw new Error('Revisa los nombres y cantidades de producción.');
+      return sum+number(row.quantity,'Cantidad producida');
+    },0);
+    number(total,'Total producción',0.000001);
+    if(Math.abs(total-output)>1e-8*Math.max(1,total))throw new Error('El total de producción debe coincidir con la suma de sus cantidades.');
+    return output;
+  }
   const lineCost=(i,line)=>line.manualCost!=null?number(line.manualCost,'Importe directo')/processingFactor(line):convert(lineQuantity(line),line.unit,i.unit)*ingredientCost(i);
   function calculate(model,recipe,channelId=recipe.channelId){
     if(recipe.sheet){if(!globalThis.AllianceJespresso)throw new Error('No se pudo cargar la hoja de recetas.');return AllianceJespresso.calculate(model,recipe);}
     const missing=[], operatingMissing=[],assumptions=[],lines=[];const s=model.settings,productionBasis=recipe.pricingBasis==='production',allocationMissing=productionBasis?operatingMissing:missing;
-    const output=number(recipe.output,'Unidades producidas',0.000001);
+    const output=productionTotal(recipe);
     if(!recipe.lines.length)missing.push('Agrega al menos un ingrediente a la receta.');
     for(const line of recipe.lines){const ingredient=model.ingredients.find(i=>i.id===line.ingredientId);if(!ingredient){missing.push('Ingrediente eliminado o no disponible.');continue;}const cost=lineCost(ingredient,line);lines.push({name:ingredient.name,quantity:Number(line.quantity),inventoryQuantity:lineQuantity(line),unit:line.unit,cost});}
     const batchIngredients=lines.reduce((n,l)=>n+l.cost,0),ingredients=batchIngredients/output;let allocated=0,direct=0,monthlyFixed=0,batchDirect=0;
@@ -88,5 +100,5 @@ globalThis.AllianceCosting = (() => {
       minimumTotal:minimum===null?null:minimum*factor,recommendedTotal:recommended===null?null:recommended*factor,
       belowMinimum:minimum!==null&&recipe.currentPrice!==null&&recipe.currentPrice!==''&&Number(recipe.currentPrice)<minimum};
   }
-  return {empty,units,convert,updateIngredient,ingredientCost,lineCost,lineQuantity,processingFactor,processingTarget,processingDefaults,processingStates,neutralizeLosses,calculate,priceGuide,validate};
+  return {empty,units,convert,updateIngredient,ingredientCost,productionTotal,lineCost,lineQuantity,processingFactor,processingTarget,processingDefaults,processingStates,neutralizeLosses,calculate,priceGuide,validate};
 })();

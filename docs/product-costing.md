@@ -28,6 +28,10 @@ Ejemplo de prueba: $549.600 / 204 = $2.694,117647 de producción por unidad. Sin
 
 ## Hoja de GCOBARF
 
+La producción real se puede desglosar en filas con nombre y cantidad, usando **Agregar cantidad de producción**. El total es la suma de esas filas, incluidas cantidades cero: Pollo 191 + Mixta 0 + Carne 57 = 248. El precio estimado por unidad es **Total compras ÷ Total producción real**, como `H16/F30` en el Excel: $610.931 ÷ 248 = $2.463,4314516129034. La proyección de 230 no reemplaza la producción real. El costo mensual por unidad sigue siendo gastos mensuales ÷ producción mensual y se suma aparte como referencia. Los cálculos conservan los decimales y no cambian las cantidades usadas de los ingredientes al editar la producción real.
+
+La **X** junto a **Editar** quita únicamente ese ingrediente de la hoja abierta, confirma la acción y recalcula sus totales. El catálogo, las demás recetas y la producción real se conservan. El desglose de producción y la eliminación se guardan también en Oracle; las hojas anteriores siguen usando su producción guardada hasta que se editen.
+
 **Nuevo producto** crea una hoja con la tabla de compras vacía. **Agregar insumo** incorpora únicamente la compra registrada. Tanto al crear como al editar, el formulario muestra la fecha actual de Bogotá y vuelve a calcularla al guardar; esa fecha queda registrada en la columna **Fecha compra**. El botón separado **Editar producto** está comentado; las hojas guardadas se abren con **Ver y editar hoja**, que selecciona el producto y lleva el foco al comienzo de su hoja.
 
 La edición de un insumo permite corregir nombre, compra y unidad. En la hoja abierta, corregir la unidad actualiza la fila con la cantidad y unidad ingresadas. En otras recetas, las unidades compatibles conservan la conversión física; al cambiar entre peso, volumen y unidades se corrige la presentación de compra: por ejemplo, 1.000 g de una compra en kg pasa a 1 unidad si esa compra se corrige a unidades. No se introduce una equivalencia física entre kg y unidades. Se conserva la merma de cada línea y se recalculan los importes con la compra corregida.

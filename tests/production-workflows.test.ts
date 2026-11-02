@@ -12,6 +12,26 @@ export function productionFixture(){
   return {model,sheet};
 }
 describe('Producción y turnos: fórmulas y datos reales',()=>{
+  it('reproduce las fórmulas de multivitamínico y bolsas con la cantidad usada original',()=>{
+    const {model,sheet}=productionFixture();
+    Object.assign(model.ingredients[1],{quantity:350,purchasePrice:49000});model.recipes[0].lines[1].quantity=230;
+    Object.assign(model.ingredients[5],{quantity:300,purchasePrice:21300});model.recipes[0].lines[5].quantity=248;
+    const c=ctx.AllianceCosting.calculate(model,model.recipes[0]);
+    expect(c.lines[1].cost).toBe(sheet.H9.v);expect(c.lines[5].cost).toBe(sheet.H13.v);
+    expect(c.batchIngredients+c.batchDirect).toBe(610931);
+    model.recipes[0].output=300;
+    expect(ctx.AllianceCosting.calculate(model,model.recipes[0]).cost).toBeCloseTo(610931/300+sheet.K25.v,9);
+    expect(model.recipes[0].lines[1].quantity).toBe(230);expect(model.recipes[0].lines[5].quantity).toBe(248);
+  });
+  it('suma el desglose real 191 + 0 + 57 y conserva las cantidades usadas',()=>{
+    const {model,sheet}:any=productionFixture(),recipe=model.recipes[0];
+    recipe.productionRows=[{name:'Pollo',quantity:191},{name:'Mixta',quantity:0},{name:'Carne',quantity:57}];
+    const before=structuredClone(recipe.lines),c=ctx.AllianceCosting.calculate(ctx.AllianceCosting.validate(model),recipe);
+    expect(ctx.AllianceCosting.productionTotal(recipe)).toBe(248);expect(c.ingredients+c.direct).toBeCloseTo(sheet.H16.v/248,9);
+    expect(recipe.lines).toEqual(before);recipe.output=230;
+    expect(()=>ctx.AllianceCosting.validate(model)).toThrow('suma');
+    recipe.output=248;recipe.productionRows[1].quantity=-1;expect(()=>ctx.AllianceCosting.validate(model)).toThrow();
+  });
   it('reproduce el Excel: compras / producción real + gasto mensual / producción mensual',()=>{
     const {model,sheet}=productionFixture(),c=ctx.AllianceCosting.calculate(ctx.AllianceCosting.validate(model),model.recipes[0]);
     expect(c.batchIngredients+c.batchDirect).toBe(sheet.H16.v);expect(c.batchIngredients+c.batchDirect).toBe(610931);
