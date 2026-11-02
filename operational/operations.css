@@ -141,3 +141,7 @@
 .op-supplier-data div{min-width:0}.op-supplier-data dd{overflow-wrap:anywhere}
 
 #customers .op-status[hidden]{display:none!important}
+.cost-production-day{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.cost-production-day h3{margin:0}.cost-production-date-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;font-weight:600}.cost-production-date-picker input{font:inherit;min-width:0;max-width:100%;padding:9px 11px;border:1px solid #c9d4e0;border-radius:8px;background:white;box-sizing:border-box}.cost-saved-production-date{font-weight:600}
+.cost-line-loss{display:block;margin-top:6px;color:#526b62;font-size:12px;white-space:normal;min-width:100px}
+.cost-product-rename{display:inline-flex;align-items:center;justify-content:center;margin-left:8px;padding:3px 7px;min-width:32px;min-height:32px;vertical-align:middle;font-size:20px}
+.cost-production-month{display:grid;gap:7px;font-weight:600}.cost-excel-table .cost-production-month input{max-width:220px;width:100%}[data-production-month-total]{display:block;padding-top:8px;font-size:13px;color:#526b62}

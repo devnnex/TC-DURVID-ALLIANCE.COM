@@ -39,7 +39,7 @@ test('GCOBARF: editar unidad y nombre, fecha automática, borrador, merma y hoja
   await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
   await page.locator('[data-sheet-yield]').click();const yieldDialog=page.locator('#ingredientYieldDialog');
   await yieldDialog.locator('[name=clean]').fill('20');await yieldDialog.locator('[type=submit]').click();
-  await expect(yieldDialog).not.toBeVisible();await expect(page.locator('[data-sheet-production-unit]')).toContainText('6.250');
+  await expect(yieldDialog).not.toBeVisible();await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
   await page.getByRole('button',{name:'+ Nuevo producto',exact:true}).click();modal=page.locator('#costSheetEditor');
   await expect(modal.locator('.cost-line')).toHaveCount(0);await modal.locator('[name=name]').fill('Segunda producción');
   await modal.locator('[name=channelId]').selectOption('direct');await modal.locator('[type=submit]').click();
@@ -54,8 +54,8 @@ test('GCOBARF: editar unidad y nombre, fecha automática, borrador, merma y hoja
   await page.locator('[data-sheet-open=recipe]').click();
   await expect.poll(()=>page.locator('.cost-sheet-heading').evaluate(e=>e.getBoundingClientRect().top)).toBeGreaterThanOrEqual(-1);
   expect(await page.locator('.cost-sheet-heading').evaluate(e=>e.getBoundingClientRect().top)).toBeLessThan(200);
-  await expect(page.locator('[data-sheet-line]')).toHaveValue('1');await expect(page.locator('[data-sheet-production-unit]')).toContainText('6.250');
-  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(page.locator('[data-sheet-production-unit]')).toContainText('6.250');
+  await expect(page.locator('[data-sheet-line]')).toHaveValue('1');await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
+  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
   expect(errors).toEqual([]);
 });
 

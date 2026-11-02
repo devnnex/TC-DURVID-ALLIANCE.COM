@@ -16,7 +16,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_yield AS
     IF from_value<0 OR to_value<0 OR BITAND(from_value,to_value)<>from_value THEN alliance_security.fail(400,'COSTING_INPUT','El estado de la receta no puede deshacer la preparacion del inventario.');END IF;
     FOR i IN 1..3 LOOP key_value:=CASE i WHEN 1 THEN 'thaw' WHEN 2 THEN 'clean' ELSE 'cook' END;bit_value:=POWER(2,i-1);
       IF NOT p.has(key_value) OR NOT p.get(key_value).is_number THEN alliance_security.fail(400,'COSTING_INPUT','Revisa el porcentaje de merma.');END IF;
-      value:=p.get_number(key_value);IF value<0 OR value>99.999999 THEN alliance_security.fail(400,'COSTING_INPUT','El porcentaje de merma debe ser menor que 100.');END IF;
+      value:=p.get_number(key_value);IF value<0 OR value>CASE WHEN line.has('initialQuantity') THEN 100 ELSE 99.999999 END THEN alliance_security.fail(400,'COSTING_INPUT','El porcentaje de merma debe ser menor que 100.');END IF;
       IF p.get_string('recipeState')='auto' AND value>0 THEN to_value:=to_value+POWER(2,i)-1-BITAND(to_value,POWER(2,i)-1);END IF;
     END LOOP;
     FOR i IN 1..3 LOOP key_value:=CASE i WHEN 1 THEN 'thaw' WHEN 2 THEN 'clean' ELSE 'cook' END;bit_value:=POWER(2,i-1);IF BITAND(from_value,bit_value)=0 AND BITAND(to_value,bit_value)<>0 THEN result_value:=result_value*(1-p.get_number(key_value)/100);END IF;END LOOP;RETURN result_value;

@@ -4,6 +4,51 @@ import { describe,it,expect } from 'vitest';
 const context:any={};runInNewContext(readFileSync('operational/costing-engine.js','utf8'),context);const E=context.AllianceCosting;
 export function fixture(){return {settings:{monthlyUnits:100,monthlyMinutes:null,taxRate:19,taxMode:'included'},ingredients:[{id:'flour',name:'Harina',unit:'kg',quantity:1,purchasePrice:10000,yieldPercent:80,purchaseTaxRate:0,recoverableTax:false},{id:'cheese',name:'Queso',unit:'kg',quantity:1,purchasePrice:20000,yieldPercent:100,purchaseTaxRate:0,recoverableTax:false}],expenses:[{id:'rent',name:'Alquiler',amount:100000,periodMonths:1,kind:'fixed',allocation:'units',recipeId:'',includedElsewhere:false},{id:'box',name:'Empaque',amount:500,periodMonths:1,kind:'unit',allocation:'units',recipeId:'',includedElsewhere:false}],channels:[{id:'delivery',name:'Domicilio',salesPercent:10,paymentPercent:2,flatFee:0,feeBase:'net'}],recipes:[{id:'pizza',name:'Pizza',size:'Mediana',category:'Pizzas',output:1,wastePercent:0,minutes:null,monthlyUnits:100,currentPrice:13090,targetPercent:30,marginMode:'margin',channelId:'delivery',lines:[{ingredientId:'flour',quantity:200,unit:'g',processing:{version:1,stockState:'stored',recipeState:'cleaned',thaw:0,clean:20,cook:0}},{ingredientId:'cheese',quantity:100,unit:'g'}]}]};}
 describe('Costeo: cantidades, impuestos, comisiones y rentabilidad',()=>{
+  it('adopta la unidad de la macro convirtiendo ambos pesos sin cambiar costo o merma',()=>{
+    const m:any=fixture(),ingredient=m.ingredients[0],line={ingredientId:ingredient.id,unit:'g',initialQuantity:500,quantity:400};
+    m.recipes[0].lines=[line];const before=E.calculate(m,m.recipes[0]).batchIngredients;
+    E.alignIngredientUnit(m,ingredient,'kg');expect(line).toMatchObject({unit:'kg',initialQuantity:.5,quantity:.4});
+    expect(E.calculate(m,m.recipes[0]).batchIngredients).toBe(before);expect(E.processingFactor(line)).toBeCloseTo(.8);
+    E.alignIngredientUnit(m,ingredient,'lb');expect(line.initialQuantity).toBeCloseTo(.5/.45359237);
+    expect(E.calculate(m,m.recipes[0]).batchIngredients).toBeCloseTo(before);
+    const snapshot=JSON.stringify(m);expect(()=>E.alignIngredientUnit(m,ingredient,'ml')).toThrow('incompatible');expect(JSON.stringify(m)).toBe(snapshot);
+  });
+  it('suma una vez cada hoja del mes seleccionado usando su producción real y fecha',()=>{
+    const m:any=fixture(),r=m.recipes[0];Object.assign(r,{productionDate:'2026-10-31',output:10});
+    m.recipes.push({...structuredClone(r),id:'second',output:20,productionDate:'2026-11-01'});
+    m.recipes.push({...structuredClone(r),id:'third',output:30,productionDate:'2026-11-30'});
+    m.recipes.push({...structuredClone(r),id:'undated',productionDate:undefined});
+    expect(E.monthlyProduction(m,'2026-10')).toEqual({units:10,sheets:1});
+    expect(E.monthlyProduction(m,'2026-11')).toEqual({units:50,sheets:2});
+    m.recipes[1].output=25;expect(E.monthlyProduction(m,'2026-11')).toEqual({units:55,sheets:2});
+    expect(E.monthlyProduction(m,'2026-12')).toEqual({units:0,sheets:0});
+    expect(()=>E.monthlyProduction(m,'2026-13')).toThrow('mes');
+  });
+  it('calcula merma por pesos sin descontarla dos veces en cualquier unidad',()=>{
+    for(const unit of ['kg','g','lb','l','ml','unit']){
+      const m:any=fixture(),recipe=m.recipes[0],ingredient=m.ingredients[0];
+      Object.assign(ingredient,{unit,quantity:10,purchasePrice:100000});
+      const line={ingredientId:ingredient.id,unit,initialQuantity:2,quantity:1.6};recipe.lines=[line];
+      E.validate(m);expect(E.processingFactor(line)).toBeCloseTo(.8);expect(E.lineQuantity(line)).toBe(2);
+      expect(E.calculate(m,recipe).batchIngredients).toBe(20000);
+      line.quantity=0;E.validate(m);expect(E.lineQuantity(line)).toBe(2);expect(E.processingFactor(line)).toBe(0);
+      expect(E.calculate(m,recipe).batchIngredients).toBe(20000);
+      line.quantity=3;expect(()=>E.validate(m)).toThrow('peso final');
+      line.quantity=1.6;E.updateIngredient(m,{...ingredient,quantity:5},{recipeId:recipe.id,syncQuantity:true});
+      expect(line.initialQuantity).toBe(5);expect(line.quantity).toBe(4);
+    }
+  });
+  it('conserva la fecha opcional de cada producción y rechaza fechas inválidas',()=>{
+    const m:any=fixture();const before=E.calculate(m,m.recipes[0]).cost;
+    for(const value of ['2026-10-31','2024-02-29']){
+      m.recipes[0].productionDate=value;E.validate(m);
+      expect(m.recipes[0].productionDate).toBe(value);expect(E.calculate(m,m.recipes[0]).cost).toBe(before);
+    }
+    for(const value of ['',null,1,'2026-02-29','2026-02-30','02/11/2026','2026-13-01']){
+      m.recipes[0].productionDate=value;expect(()=>E.validate(m)).toThrow('Fecha de producción inválida');
+    }
+    delete m.recipes[0].productionDate;expect(()=>E.validate(m)).not.toThrow();
+  });
   it('acepta compras y recetas en libras con las conversiones de peso del inventario',()=>{
     expect(E.convert(1,'lb','g')).toBe(453.59237);expect(E.convert(1,'lb','kg')).toBe(.45359237);
     expect(E.convert(.45359237,'kg','lb')).toBeCloseTo(1,12);

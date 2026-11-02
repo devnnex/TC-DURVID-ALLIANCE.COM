@@ -9,6 +9,17 @@ const apply=(s:any,command:string,payload:any)=>{const next=structuredClone(s);r
 const link={productId:'product',recipeId:'recipe',revision:1,salePortions:1,mappings:[{ingredientId:'tartara',stockId:'raw-tartara'},{ingredientId:'milk',stockId:'raw-milk'}]};
 function ready(){let s=apply(initial(),'materials_link',link);for(const [id,unit]of [['raw-tartara','g'],['raw-milk','ml']])s=apply(s,'materials_adjust',{ingredientId:id,quantity:1000,unit,kind:'in',totalCost:10000,reason:'Abastecer'});return s;}
 describe('Macro de insumos y recetas por unidad vendida',()=>{
+  it('descuenta el peso inicial medido de la macro y conserva la pérdida al vincular',()=>{
+    const s=ready(),before=structuredClone(s.costing.model),recipe=s.costing.model.recipes[0];
+    delete recipe.sheet;recipe.lines.forEach((l:any)=>delete l.stage);
+    Object.assign(recipe.lines[0],{initialQuantity:100,quantity:80});s.costing.revision++;
+    M.syncProcessing(s,before,actor);
+    expect(s.operations.recipes[0].lines.find((l:any)=>l.ingredientId==='raw-tartara').quantity).toBe(12.5);
+    const invoice={id:'measured',number:'MEASURED',sessionId:'measured-session',saleChannel:'walk_in',table:'Venta individual',createdAt:new Date().toISOString(),items:[{id:'one',menu_item_id:'product',quantity:8,unit_price:5000}],totals:{subtotal:40000,total:40000,discount:0,tax:0,serviceFee:0,tip:0},payments:[{method:'transfer',amount:40000}]};
+    POS.execute(s,'record_sale',{invoice});
+    expect(s.operations.ingredients.find((i:any)=>i.id==='raw-tartara').quantity).toBe(900);
+    expect(recipe.lines[0]).toMatchObject({initialQuantity:100,quantity:80});
+  });
   it('registra costo total al crear y editar, con historial del usuario y sin inventar movimientos',()=>{
     let s=apply(initial(),'materials_save',{id:'bag',revision:0,name:'Bolsa 500G',unit:'u',quantity:500,minStock:0,totalCost:55000});
     let row=s.operations.ingredients.find((i:any)=>i.id==='bag');expect(row.unitCost).toBe(110);

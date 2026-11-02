@@ -55,7 +55,8 @@ test('GCOBARF: macro directa, precio unitario, historial y costeo con el insumo 
   await page.locator('[data-material-history-actor]').selectOption('22222222-2222-4222-8222-222222222222');
   await expect(page.locator('.materials-history-record:visible')).toHaveCount(1);
   await page.locator('.admin-sidebar [href="#costing"]').click();await expect(page.locator('#costingReload')).toBeEnabled();
-  await expect(page.locator('.cost-excel-sheet table').first().locator('thead th').first()).toHaveText('Fecha de producción');
+  await expect(page.locator('.cost-excel-sheet table').first().locator('thead th').first()).toHaveText('Insumos');
+  await expect(page.locator('.cost-sheet-heading [name=sheetProductionDate]')).toBeVisible();
   await page.locator('[data-sheet-editor=recipes]').click();let editor=page.locator('#costSheetEditor');
   await editor.locator('[name=name]').fill('Producción con bolsas');await editor.locator('[name=newChannelName]').fill('Directa');
   await editor.locator('[type=submit]').click();await expect(editor).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
@@ -98,4 +99,37 @@ test('GCOBARF conserva cualquier unidad elegida al crear, editar y agregar exist
     await expect(card.locator('.material-unit-cost')).toContainText('100');
   }
   await page.reload();await expect(page.locator('[data-material-card]')).toHaveCount(6);
+});
+
+test('GCOBARF usa la unidad de la macro al seleccionar o editar y convierte los pesos antiguos',async({page})=>{
+  await page.context().setOffline(true);
+  await page.goto(pathToFileURL(resolve('negocios/gcobarf/admin.html')).href+'?demo=1#inventory');
+  await expect(page.locator('[data-material-action=new]')).toBeVisible();
+  await page.locator('[data-material-action=new]').click();const modal=page.locator('#materialsDialog');
+  await modal.locator('[name=name]').fill('Carne macro');await modal.locator('[name=unit]').selectOption('kg');
+  await modal.locator('[name=quantity]').fill('10');await modal.locator('[name=totalCost]').fill('100000');
+  await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();
+  const stockId=await page.locator('[data-material-card]').getAttribute('data-material-card');
+  await page.locator('.admin-sidebar [href="#costing"]').click();await expect(page.locator('#costingReload')).toBeEnabled();
+  await page.evaluate(stockId=>{const w=window as any,m=w.AllianceCosting.empty();
+    m.ingredients=[{id:'meat',stockId,name:'Carne macro',unit:'g',quantity:1000,purchasePrice:10000,yieldPercent:100,purchaseTaxRate:0,recoverableTax:false}];
+    m.channels=[{id:'direct',name:'Directa',salesPercent:0,paymentPercent:0,flatFee:0,feeBase:'net'}];
+    m.recipes=[{id:'batch',name:'Producción',size:'',category:'',output:1,wastePercent:0,minutes:null,monthlyUnits:null,currentPrice:20000,targetPercent:30,marginMode:'margin',channelId:'direct',pricingBasis:'production',lines:[{ingredientId:'meat',unit:'g',initialQuantity:500,quantity:400}]}];
+    w.OracleDb.local.setItem('costing-saved',JSON.stringify({model:m,revision:1}));
+  },stockId);
+  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
+  await expect(page.locator('[data-sheet-line]')).toHaveValue('0.5');await expect(page.locator('[data-sheet-final-weight]')).toHaveValue('0.4');
+  await expect(page.locator('.cost-excel-table').first().locator('tbody tr').first().locator('td').nth(3)).toHaveText('kg');
+  await expect(page.locator('[data-sheet-line-cost]')).toContainText('5.000');await expect(page.locator('[data-sheet-loss]')).toContainText('20 %');
+  await page.locator('[data-sheet-editor=ingredients][data-key=meat]').click();const editor=page.locator('#costSheetEditor');
+  await expect(editor.locator('[name=unit]')).toHaveValue('kg');await expect(editor.locator('[name=unit]')).toBeDisabled();
+  await expect(editor.locator('[name=quantity]')).toHaveValue('1');await editor.locator('[data-sheet-close]').click();
+  await page.locator('[data-sheet-editor=ingredients][data-key=""]').click();
+  await editor.locator('[name=stockId]').selectOption(stockId!);await expect(editor.locator('[name=unit]')).toHaveValue('kg');
+  await expect(editor.locator('[name=unit]')).toBeDisabled();await editor.locator('[name=quantity]').fill('2');
+  await editor.locator('[type=submit]').click();await expect(editor).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
+  await expect(page.locator('[data-sheet-line]').nth(1)).toHaveValue('2');
+  await expect(page.locator('[data-sheet-line-cost]').nth(1)).toContainText('20.000');
+  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
+  await expect(page.locator('[data-sheet-line]').first()).toHaveValue('0.5');await expect(page.locator('[data-sheet-final-weight]').first()).toHaveValue('0.4');
 });

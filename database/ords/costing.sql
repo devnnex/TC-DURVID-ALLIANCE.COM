@@ -18,6 +18,9 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
   BEGIN IF NOT o.has(k) OR NOT o.get(k).is_boolean THEN alliance_security.fail(400,'COSTING_INPUT','Confirma la opcion '||k);END IF;END;
   PROCEDURE validate_production(r JSON_OBJECT_T) IS rows_value JSON_ARRAY_T;v JSON_OBJECT_T;total NUMBER:=0;
   BEGIN
+    IF r.has('productionDate') THEN
+      IF NOT r.get('productionDate').is_string OR r.get_string('productionDate') IS NULL OR NOT REGEXP_LIKE(r.get_string('productionDate'),'^[0-9]{4}-[0-9]{2}-[0-9]{2}$') OR VALIDATE_CONVERSION(r.get_string('productionDate') AS DATE,'FXYYYY-MM-DD')=0 THEN alliance_security.fail(400,'COSTING_INPUT','Fecha de produccion invalida.');END IF;
+    END IF;
     IF NOT r.has('productionRows') THEN RETURN;END IF;
     rows_value:=r.get_array('productionRows');
     IF r.has('sheet') OR rows_value IS NULL OR rows_value.get_size=0 OR rows_value.get_size>100 THEN alliance_security.fail(400,'COSTING_INPUT','Desglose de produccion invalido.');END IF;
@@ -29,9 +32,13 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
     IF total<=0 OR total>1e12 OR ABS(total-r.get_number('output'))>1e-8*GREATEST(1,total) THEN alliance_security.fail(400,'COSTING_INPUT','El total de produccion debe coincidir con la suma de sus cantidades.');END IF;
   END;
   PROCEDURE validate_model(m IN OUT JSON_OBJECT_T) IS
-    s JSON_OBJECT_T;a JSON_ARRAY_T;rows_json JSON_ARRAY_T;row_json JSON_OBJECT_T;line_json JSON_OBJECT_T;ingredients_json JSON_ARRAY_T;recipes_json JSON_ARRAY_T;channels_json JSON_ARRAY_T;ingredient_json JSON_OBJECT_T;other_json JSON_OBJECT_T;ids CLOB;id_value VARCHAR2(80);found BOOLEAN;
+    s JSON_OBJECT_T;a JSON_ARRAY_T;rows_json JSON_ARRAY_T;row_json JSON_OBJECT_T;line_json JSON_OBJECT_T;ingredients_json JSON_ARRAY_T;recipes_json JSON_ARRAY_T;channels_json JSON_ARRAY_T;ingredient_json JSON_OBJECT_T;other_json JSON_OBJECT_T;ids CLOB;id_value VARCHAR2(80);found BOOLEAN;month_value VARCHAR2(7);month_total NUMBER:=0;
   BEGIN
-    alliance_security.keys_only(m,'settings,ingredients,expenses,channels,recipes');s:=m.get_object('settings');alliance_security.keys_only(s,'monthlyUnits,monthlyMinutes,taxRate,taxMode');
+    alliance_security.keys_only(m,'settings,ingredients,expenses,channels,recipes');s:=m.get_object('settings');alliance_security.keys_only(s,'monthlyUnits,monthlyMinutes,taxRate,taxMode,productionMonth');
+    IF s.has('productionMonth') THEN
+      IF NOT s.get('productionMonth').is_string OR s.get_string('productionMonth') IS NULL OR NOT REGEXP_LIKE(s.get_string('productionMonth'),'^[0-9]{4}-(0[1-9]|1[0-2])$') THEN alliance_security.fail(400,'COSTING_INPUT','Mes de produccion invalido.');END IF;
+      month_value:=s.get_string('productionMonth');
+    END IF;
     numeric_value(s,'monthlyUnits',0.000001,1e12,TRUE);numeric_value(s,'monthlyMinutes',0.000001,1e12,TRUE);numeric_value(s,'taxRate',0,100);enum_value(s,'taxMode','included,added');
     ingredients_json:=m.get_array('ingredients');recipes_json:=m.get_array('recipes');channels_json:=m.get_array('channels');
     FOR section IN 1..4 LOOP
@@ -52,18 +59,23 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
           alliance_security.keys_only(row_json,'id,name,salesPercent,paymentPercent,flatFee,feeBase');numeric_value(row_json,'salesPercent',0,99.999);numeric_value(row_json,'paymentPercent',0,99.999);numeric_value(row_json,'flatFee',0,1e12);enum_value(row_json,'feeBase','net,gross');
         ELSE
           row_json.put('wastePercent',0);a.put(i,row_json,TRUE);m.put('recipes',a);
-          alliance_security.keys_only(row_json,'id,name,size,category,output,wastePercent,minutes,monthlyUnits,currentPrice,targetPercent,marginMode,channelId,lines,pricingBasis,sheet,productionRows');IF row_json.has('sheet') THEN alliance_jespresso.validate_sheet(row_json.get_object('sheet'));END IF;IF row_json.has('pricingBasis') THEN enum_value(row_json,'pricingBasis','full,production');END IF;numeric_value(row_json,'output',0.000001,1e12);validate_production(row_json);numeric_value(row_json,'wastePercent',0,99.999);numeric_value(row_json,'minutes',0.000001,1e12,TRUE);numeric_value(row_json,'monthlyUnits',0.000001,1e12,TRUE);numeric_value(row_json,'currentPrice',0,1e12,TRUE);enum_value(row_json,'marginMode','margin,markup');numeric_value(row_json,'targetPercent',0,CASE WHEN row_json.get_string('marginMode')='markup' THEN 1000 ELSE 99.999 END);
+          alliance_security.keys_only(row_json,'id,name,size,category,output,wastePercent,minutes,monthlyUnits,currentPrice,targetPercent,marginMode,channelId,lines,pricingBasis,sheet,productionRows,productionDate');IF row_json.has('sheet') THEN alliance_jespresso.validate_sheet(row_json.get_object('sheet'));END IF;IF row_json.has('pricingBasis') THEN enum_value(row_json,'pricingBasis','full,production');END IF;numeric_value(row_json,'output',0.000001,1e12);validate_production(row_json);numeric_value(row_json,'wastePercent',0,99.999);numeric_value(row_json,'minutes',0.000001,1e12,TRUE);numeric_value(row_json,'monthlyUnits',0.000001,1e12,TRUE);numeric_value(row_json,'currentPrice',0,1e12,TRUE);enum_value(row_json,'marginMode','margin,markup');numeric_value(row_json,'targetPercent',0,CASE WHEN row_json.get_string('marginMode')='markup' THEN 1000 ELSE 99.999 END);
           IF LENGTH(row_json.get_string('size'))>80 OR LENGTH(row_json.get_string('category'))>80 THEN alliance_security.fail(400,'COSTING_INPUT','Variante demasiado larga.');END IF;
           IF row_json.get_string('channelId') IS NOT NULL THEN found:=FALSE;FOR j IN 0..channels_json.get_size-1 LOOP other_json:=TREAT(channels_json.get(j) AS JSON_OBJECT_T);IF other_json.get_string('id')=row_json.get_string('channelId') THEN found:=TRUE;END IF;END LOOP;IF NOT found THEN alliance_security.fail(400,'COSTING_INPUT','Canal inexistente.');END IF;END IF;
           rows_json:=row_json.get_array('lines');IF rows_json IS NULL OR rows_json.get_size>100 THEN alliance_security.fail(400,'COSTING_INPUT','Receta demasiado grande.');END IF;
           FOR j IN 0..rows_json.get_size-1 LOOP
-            line_json:=TREAT(rows_json.get(j) AS JSON_OBJECT_T);alliance_security.keys_only(line_json,'ingredientId,quantity,unit,stage,manualCost,processing');IF row_json.has('sheet') THEN alliance_jespresso.validate_line(line_json);ELSIF line_json.has('stage') OR line_json.has('manualCost') THEN alliance_security.fail(400,'COSTING_INPUT','Opciones de ingrediente fuera de la hoja de recetas.');END IF;numeric_value(line_json,'quantity',CASE WHEN row_json.has('sheet') THEN 0 ELSE 0.000001 END,1e12);enum_value(line_json,'unit','g,kg,lb,ml,l,unit');IF alliance_yield.factor(line_json)<=0 THEN alliance_security.fail(400,'COSTING_INPUT','Rendimiento invalido.');END IF;found:=FALSE;
+            line_json:=TREAT(rows_json.get(j) AS JSON_OBJECT_T);alliance_security.keys_only(line_json,'ingredientId,quantity,unit,stage,manualCost,processing,initialQuantity');IF row_json.has('sheet') THEN alliance_jespresso.validate_line(line_json);ELSIF line_json.has('stage') OR line_json.has('manualCost') THEN alliance_security.fail(400,'COSTING_INPUT','Opciones de ingrediente fuera de la hoja de recetas.');END IF;IF line_json.has('initialQuantity') THEN IF row_json.has('sheet') THEN alliance_security.fail(400,'COSTING_INPUT','Pesos fuera de la hoja de produccion.');END IF;numeric_value(line_json,'initialQuantity',0.000001,1e12);IF line_json.get_number('quantity')>line_json.get_number('initialQuantity') THEN alliance_security.fail(400,'COSTING_INPUT','El peso final no puede superar el inicial.');END IF;END IF;numeric_value(line_json,'quantity',CASE WHEN row_json.has('sheet') OR line_json.has('initialQuantity') THEN 0 ELSE 0.000001 END,1e12);enum_value(line_json,'unit','g,kg,lb,ml,l,unit');IF alliance_yield.factor(line_json)<=0 AND NOT line_json.has('initialQuantity') THEN alliance_security.fail(400,'COSTING_INPUT','Rendimiento invalido.');END IF;found:=FALSE;
             FOR k IN 0..ingredients_json.get_size-1 LOOP ingredient_json:=TREAT(ingredients_json.get(k) AS JSON_OBJECT_T);IF ingredient_json.get_string('id')=line_json.get_string('ingredientId') THEN found:=TRUE;IF family(ingredient_json.get_string('unit'))<>family(line_json.get_string('unit')) THEN alliance_security.fail(400,'COSTING_INPUT','Conversion incompatible.');END IF;END IF;END LOOP;
             IF NOT found THEN alliance_security.fail(400,'COSTING_INPUT','Ingrediente inexistente o eliminado.');END IF;
           END LOOP;
         END IF;
       END LOOP;
     END LOOP;
+    IF month_value IS NOT NULL THEN
+      FOR i IN 0..recipes_json.get_size-1 LOOP row_json:=TREAT(recipes_json.get(i) AS JSON_OBJECT_T);IF SUBSTR(row_json.get_string('productionDate'),1,7)=month_value THEN month_total:=month_total+row_json.get_number('output');END IF;END LOOP;
+      IF month_total>1e12 THEN alliance_security.fail(400,'COSTING_INPUT','Produccion mensual fuera de rango.');END IF;
+      IF month_total>0 THEN s.put('monthlyUnits',month_total);ELSE s.put_null('monthlyUnits');END IF;m.put('settings',s);
+    END IF;
   END;
   -- Recalculate approval in Oracle; clients cannot submit invented profit figures.
   FUNCTION approved_product(m JSON_OBJECT_T,recipe_id VARCHAR2) RETURN JSON_OBJECT_T IS
@@ -84,7 +96,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
       FOR j IN 0..ingredients.get_size-1 LOOP ingredient:=TREAT(ingredients.get(j) AS JSON_OBJECT_T);EXIT WHEN ingredient.get_string('id')=line.get_string('ingredientId');END LOOP;
       unit_price:=ingredient.get_number('purchasePrice');IF ingredient.get_boolean('recoverableTax') THEN unit_price:=unit_price/(1+ingredient.get_number('purchaseTaxRate')/100);END IF;
       unit_price:=unit_price/ingredient.get_number('quantity');
-      quantity:=line.get_number('quantity')/alliance_yield.factor(line)*factor(line.get_string('unit'))/factor(ingredient.get_string('unit'));batch:=batch+quantity*unit_price;
+      quantity:=(CASE WHEN line.has('initialQuantity') THEN line.get_number('initialQuantity') ELSE line.get_number('quantity')/alliance_yield.factor(line) END)*factor(line.get_string('unit'))/factor(ingredient.get_string('unit'));batch:=batch+quantity*unit_price;
     END LOOP;
     FOR i IN 0..expenses.get_size-1 LOOP
       expense:=TREAT(expenses.get(i) AS JSON_OBJECT_T);
@@ -96,7 +108,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
             IF capacity IS NULL OR capacity<=0 OR recipe.get_number('minutes') IS NULL THEN alliance_security.fail(400,'COSTING_GOAL','Faltan tiempos para repartir los gastos.');END IF;
             allocated:=allocated+monthly*recipe.get_number('minutes')/capacity;
           ELSE
-            IF expense.get_string('recipeId') IS NOT NULL THEN capacity:=recipe.get_number('monthlyUnits');ELSE capacity:=s.get_number('monthlyUnits');END IF;
+            IF expense.get_string('recipeId') IS NOT NULL AND NOT s.has('productionMonth') THEN capacity:=recipe.get_number('monthlyUnits');ELSE capacity:=s.get_number('monthlyUnits');END IF;
             IF capacity IS NULL OR capacity<=0 THEN alliance_security.fail(400,'COSTING_GOAL','Indica las ventas del mes para repartir los gastos.');END IF;
             allocated:=allocated+monthly/capacity;
           END IF;
