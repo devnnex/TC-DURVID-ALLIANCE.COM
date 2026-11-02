@@ -39,7 +39,7 @@ test('GCOBARF: editar unidad y nombre, fecha automática, borrador, merma y hoja
   await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
   await page.locator('[data-sheet-yield]').click();const yieldDialog=page.locator('#ingredientYieldDialog');
   await yieldDialog.locator('[name=clean]').fill('20');await yieldDialog.locator('[type=submit]').click();
-  await expect(yieldDialog).not.toBeVisible();await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
+  await expect(yieldDialog).not.toBeVisible();await expect(page.locator('[data-sheet-production-unit]')).toContainText('4.000');
   await page.getByRole('button',{name:'+ Nuevo producto',exact:true}).click();modal=page.locator('#costSheetEditor');
   await expect(modal.locator('.cost-line')).toHaveCount(0);await modal.locator('[name=name]').fill('Segunda producción');
   await modal.locator('[name=channelId]').selectOption('direct');await modal.locator('[type=submit]').click();
@@ -54,8 +54,8 @@ test('GCOBARF: editar unidad y nombre, fecha automática, borrador, merma y hoja
   await page.locator('[data-sheet-open=recipe]').click();
   await expect.poll(()=>page.locator('.cost-sheet-heading').evaluate(e=>e.getBoundingClientRect().top)).toBeGreaterThanOrEqual(-1);
   expect(await page.locator('.cost-sheet-heading').evaluate(e=>e.getBoundingClientRect().top)).toBeLessThan(200);
-  await expect(page.locator('[data-sheet-line]')).toHaveValue('1');await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
-  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
+  await expect(page.locator('[data-sheet-line]')).toHaveValue('1');await expect(page.locator('[data-sheet-production-unit]')).toContainText('4.000');
+  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(page.locator('[data-sheet-production-unit]')).toContainText('4.000');
   expect(errors).toEqual([]);
 });
 
@@ -159,7 +159,7 @@ for(const sample of [{name:'Bolsa 500G',unit:'unit'},{name:'Pollo',unit:'kg'},{n
   await expect(modal.locator('[name=quantity]')).toHaveValue('500');
   await expect(modal.locator('[name=purchasePrice]')).toHaveValue('$55.000');
   await modal.locator('[data-sheet-close]').click();
-  await page.locator('[data-sheet-line]').fill('250');
+  await page.locator('[data-sheet-final-weight]').fill('250');
   await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('27.500');
   await page.locator('[data-sheet-save]').click();
   await expect(page.locator('#costingStatus')).toContainText('Guardado local');
@@ -170,10 +170,10 @@ for(const sample of [{name:'Bolsa 500G',unit:'unit'},{name:'Pollo',unit:'kg'},{n
   await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await expect(page.locator('[data-sheet-line]')).toHaveValue('500');
   await expect(page.locator('.cost-excel-table').first()).toContainText(sample.name+' editado');
-  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('60.000');
+  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('30.000');
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
   await expect(page.locator('[data-sheet-line]')).toHaveValue('500');
-  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('60.000');
+  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('30.000');
 });
 
 for(const sample of [{name:'Bolsas',unit:'unit'},{name:'Carne',unit:'kg'},{name:'Aceite',unit:'l'}])test(`GCOBARF: aplicar los valores visibles sin escribir corrige la hoja: ${sample.name}`,async({page})=>{

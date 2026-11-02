@@ -96,7 +96,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
       FOR j IN 0..ingredients.get_size-1 LOOP ingredient:=TREAT(ingredients.get(j) AS JSON_OBJECT_T);EXIT WHEN ingredient.get_string('id')=line.get_string('ingredientId');END LOOP;
       unit_price:=ingredient.get_number('purchasePrice');IF ingredient.get_boolean('recoverableTax') THEN unit_price:=unit_price/(1+ingredient.get_number('purchaseTaxRate')/100);END IF;
       unit_price:=unit_price/ingredient.get_number('quantity');
-      quantity:=(CASE WHEN line.has('initialQuantity') THEN line.get_number('initialQuantity') ELSE line.get_number('quantity')/alliance_yield.factor(line) END)*factor(line.get_string('unit'))/factor(ingredient.get_string('unit'));batch:=batch+quantity*unit_price;
+      quantity:=(CASE WHEN line.has('initialQuantity') THEN line.get_number('quantity') ELSE line.get_number('quantity')/alliance_yield.factor(line) END)*factor(line.get_string('unit'))/factor(ingredient.get_string('unit'));batch:=batch+quantity*unit_price;
     END LOOP;
     FOR i IN 0..expenses.get_size-1 LOOP
       expense:=TREAT(expenses.get(i) AS JSON_OBJECT_T);

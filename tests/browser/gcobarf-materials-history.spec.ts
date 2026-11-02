@@ -65,7 +65,7 @@ test('GCOBARF: macro directa, precio unitario, historial y costeo con el insumo 
   await expect(editor.locator('[name=purchasePrice]')).toHaveValue('$2.000');await editor.locator('[type=submit]').click();
   await expect(editor).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('2.000');
-  await page.locator('[data-sheet-line="0"]').fill('5');await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('500');
+  await page.locator('[data-sheet-final-weight="0"]').fill('5');await page.locator('[data-sheet-line="0"]').fill('5');await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('500');
   await page.locator('[data-sheet-save]').click();await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await page.locator('.admin-sidebar [href="#inventory"]').click();await page.locator('[data-material-view=macro]').click();
   await card.locator('[data-material-action=edit]').click();await modal.locator('[name=totalCost]').fill('110000');
@@ -120,7 +120,7 @@ test('GCOBARF usa la unidad de la macro al seleccionar o editar y convierte los 
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
   await expect(page.locator('[data-sheet-line]')).toHaveValue('0.5');await expect(page.locator('[data-sheet-final-weight]')).toHaveValue('0.4');
   await expect(page.locator('.cost-excel-table').first().locator('tbody tr').first().locator('td').nth(3)).toHaveText('kg');
-  await expect(page.locator('[data-sheet-line-cost]')).toContainText('5.000');await expect(page.locator('[data-sheet-loss]')).toContainText('20 %');
+  await expect(page.locator('[data-sheet-line-cost]')).toContainText('4.000');await expect(page.locator('[data-sheet-loss]')).toContainText('20 %');
   await page.locator('[data-sheet-editor=ingredients][data-key=meat]').click();const editor=page.locator('#costSheetEditor');
   await expect(editor.locator('[name=unit]')).toHaveValue('kg');await expect(editor.locator('[name=unit]')).toBeDisabled();
   await expect(editor.locator('[name=quantity]')).toHaveValue('1');await editor.locator('[data-sheet-close]').click();

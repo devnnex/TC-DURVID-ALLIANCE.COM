@@ -1434,7 +1434,7 @@ END;!';
       FOR j IN 0..ingredients.get_size-1 LOOP ingredient:=TREAT(ingredients.get(j) AS JSON_OBJECT_T);EXIT WHEN ingredient.get_string('id')=line.get_string('ingredientId');END LOOP;
       unit_price:=ingredient.get_number('purchasePrice');IF ingredient.get_boolean('recoverableTax') THEN unit_price:=unit_price/(1+ingredient.get_number('purchaseTaxRate')/100);END IF;
       unit_price:=unit_price/ingredient.get_number('quantity');
-      quantity:=(CASE WHEN line.has('initialQuantity') THEN line.get_number('initialQuantity') ELSE line.get_number('quantity')/alliance_yield.factor(line) END)*factor(line.get_string('unit'))/factor(ingredient.get_string('unit'));batch:=batch+quantity*unit_price;
+      quantity:=(CASE WHEN line.has('initialQuantity') THEN line.get_number('quantity') ELSE line.get_number('quantity')/alliance_yield.factor(line) END)*factor(line.get_string('unit'))/factor(ingredient.get_string('unit'));batch:=batch+quantity*unit_price;
     END LOOP;
     FOR i IN 0..expenses.get_size-1 LOOP
       expense:=TREAT(expenses.get(i) AS JSON_OBJECT_T);
@@ -1554,7 +1554,7 @@ END;!';
         raw:=alliance_operations.raw_item(b,l,raw_id);q:=alliance_operations.convert_quantity((CASE WHEN part.has('initialQuantity') THEN part.get_number('initialQuantity') ELSE part.get_number('quantity')/alliance_yield.factor(part) END),part.get_string('unit'),raw.get_string('unit'))*portions/CASE WHEN part.get_string('stage')='portion' THEN 1 ELSE r.get_number('output') END;
         IF q>0 THEN row_json:=merged.get_object(raw_id);IF row_json IS NULL THEN row_json:=JSON_OBJECT_T();row_json.put('ingredientId',raw_id);row_json.put('name',raw.get_string('name'));row_json.put('unit',raw.get_string('unit'));row_json.put('quantity',q);ELSE row_json.put('quantity',row_json.get_number('quantity')+q);END IF;merged.put(raw_id,row_json);END IF;
         IF NVL(part.get_string('stage'),'batch')<>'portion' THEN
-          IF part.has('manualCost') AND NOT part.get('manualCost').is_null THEN batch:=batch+part.get_number('manualCost')/alliance_yield.factor(part);ELSE cost_value:=ing.get_number('purchasePrice');IF ing.get_boolean('recoverableTax') THEN cost_value:=cost_value/(1+ing.get_number('purchaseTaxRate')/100);END IF;batch:=batch+alliance_operations.convert_quantity((CASE WHEN part.has('initialQuantity') THEN part.get_number('initialQuantity') ELSE part.get_number('quantity')/alliance_yield.factor(part) END),part.get_string('unit'),ing.get_string('unit'))*cost_value/ing.get_number('quantity');END IF;
+          IF part.has('manualCost') AND NOT part.get('manualCost').is_null THEN batch:=batch+part.get_number('manualCost')/alliance_yield.factor(part);ELSE cost_value:=ing.get_number('purchasePrice');IF ing.get_boolean('recoverableTax') THEN cost_value:=cost_value/(1+ing.get_number('purchaseTaxRate')/100);END IF;batch:=batch+alliance_operations.convert_quantity((CASE WHEN part.has('initialQuantity') THEN part.get_number('quantity') ELSE part.get_number('quantity')/alliance_yield.factor(part) END),part.get_string('unit'),ing.get_string('unit'))*cost_value/ing.get_number('quantity');END IF;
         END IF;
       END LOOP;
       keys_value:=merged.get_keys;FOR k IN(SELECT column_value key_value FROM TABLE(keys_value) ORDER BY NLSSORT(column_value,'NLS_SORT=BINARY')) LOOP parts.append(merged.get_object(k.key_value));END LOOP;IF parts.get_size=0 THEN alliance_security.fail(400,'INVALID_INPUT','La receta necesita cantidades mayores que cero.');END IF;

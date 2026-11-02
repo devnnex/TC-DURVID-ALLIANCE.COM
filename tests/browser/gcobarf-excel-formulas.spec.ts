@@ -24,7 +24,7 @@ test('GCOBARF guarda la fecha de producción por producto y la muestra en su tar
   await expect(table.locator('thead th')).toHaveText(['Insumos','Peso inicial','Peso final','Unidad','Valor','']);
   await expect(table.locator('tbody tr').first().locator('td')).toHaveCount(6);
   await expect(table.locator('tbody tr').last().locator('td')).toHaveCount(6);
-  await expect(table.locator('tfoot th')).toHaveAttribute('colspan','4');
+  await expect(table.locator('tfoot th')).toHaveText(['Total costo insumos sin merma','Total costo insumos con merma']);await expect(table.locator('tfoot th').first()).toHaveAttribute('colspan','4');
   await expect(page.locator('.cost-product-card time')).toHaveCount(0);
   await date.fill('2026-10-31');await page.locator('[data-sheet-save]').click();
   await expect(page.locator('#costingStatus')).toContainText('Guardado local');
@@ -96,9 +96,9 @@ test('GCOBARF aplica los pesos y la merma manual sin duplicar el consumo inicial
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
   const initial=page.locator('[data-sheet-line="0"]'),final=page.locator('[data-sheet-final-weight="0"]'),loss=page.locator('[data-sheet-loss="0"]');
   await final.fill('0.8');await expect(loss).toContainText('0,2 kg (20 %)');
-  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('10.000');
+  await expect(initial).toHaveValue('1');await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('8.000');
   await initial.fill('2');await expect(loss).toContainText('1,2 kg (60 %)');
-  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('20.000');
+  await expect(final).toHaveValue('0.8');await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('8.000');
   await page.locator('[data-sheet-save]').click();await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(initial).toHaveValue('2');await expect(final).toHaveValue('0.8');
   await page.locator('[data-sheet-yield="0"]').click();const modal=page.locator('#ingredientYieldDialog');
@@ -106,7 +106,7 @@ test('GCOBARF aplica los pesos y la merma manual sin duplicar el consumo inicial
   await expect(modal.locator('[data-yield-result=inventory]')).toHaveText('2 kg');
   await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();
   await expect(initial).toHaveValue('2');await expect(final).toHaveValue('1.5');await expect(loss).toContainText('0,5 kg (25 %)');
-  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('20.000');
+  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('15.000');
   await final.fill('0');await expect(loss).toContainText('2 kg (100 %)');
   await page.locator('[data-sheet-save]').click();await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(final).toHaveValue('0');
@@ -131,7 +131,7 @@ test('GCOBARF reproduce las fórmulas del Excel y la X quita sólo la línea sel
   await expect(page.locator('#costSheetResult')).toContainText('2.463,431452');
   await expect(page.locator('[data-sheet-monthly-total]')).toContainText('736.667');
   await expect(page.locator('[data-sheet-monthly-unit]')).toContainText('1.485');
-  await expect(page.locator('[data-sheet-final]')).toContainText('3.948,65');
+  await expect(page.locator('[data-sheet-final]')).toContainText('3.949');
   await page.locator('[data-production-name="0"]').fill('Pollo');await page.locator('[name=sheetOutput]').fill('191');
   await page.locator('[data-production-add]').click();await page.locator('[data-production-name="1"]').fill('Mixta');
   await page.locator('[data-production-add]').click();await page.locator('[data-production-name="2"]').fill('Carne');
@@ -150,7 +150,7 @@ test('GCOBARF reproduce las fórmulas del Excel y la X quita sólo la línea sel
   await expect(page.locator('[data-sheet-line]')).toHaveCount(6);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await expect(page.locator('[data-sheet-total]')).toContainText('409.931');
   await expect(page.locator('[data-sheet-output]')).toHaveText('248');
-  await expect(page.locator('[data-sheet-production-unit]')).toContainText('1.652,95');
+  await expect(page.locator('[data-sheet-production-unit]')).toContainText('1.653');
   const saved=await page.evaluate(()=>JSON.parse((window as any).OracleDb.local.getItem('costing-saved')).model);
   expect(saved.ingredients).toHaveLength(7);expect(saved.recipes[1].lines).toHaveLength(7);
   expect(saved.recipes[0].productionRows.map((r:any)=>r.quantity)).toEqual([191,0,57]);
@@ -174,9 +174,9 @@ test('GCOBARF suma los gastos por unidad al lote y recalcula sin redondeo interm
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
   await expect(page.locator('[data-sheet-expense=package]')).toContainText('24.800');
   await expect(page.locator('[data-sheet-total]')).toContainText('635.731');
-  await expect(page.locator('[data-sheet-production-unit]')).toContainText('2.563,43');
+  await expect(page.locator('[data-sheet-production-unit]')).toContainText('2.563');
   await page.locator('[name=sheetOutput]').fill('250');
   await expect(page.locator('[data-sheet-expense=package]')).toContainText('25.000');
   await expect(page.locator('[data-sheet-total]')).toContainText('635.931');
-  await expect(page.locator('[data-sheet-production-unit]')).toContainText('2.543,72');
+  await expect(page.locator('[data-sheet-production-unit]')).toContainText('2.544');
 });
