@@ -62,6 +62,10 @@ GCOBARF muestra un calendario en la posición de las mesas, con sus colores de d
 
 ## Inventario y Excel
 
+En GCOBARF, **Macro de insumos** abre los insumos por defecto y ofrece los botones **Inventario** e **Historial**. **Inventario** muestra los productos terminados, sus existencias y los controles habituales; esos mismos productos se seleccionan al asignar consumos a los clientes del calendario. Las celdas del calendario forman una cuadrícula continua y más amplia, conservan sus colores y muestran hasta dos nombres con más espacio. En pantallas pequeñas se puede desplazar el mes horizontalmente.
+
+En las filas de ingredientes de GCOBARF, los campos de peso inicial y final quedan alineados. La merma se muestra debajo del peso final sin desplazar el campo, y **Editar** y **×** permanecen juntos.
+
 Las fichas guardadas conservan **Agregar al inventario**. Se completan nombre, variante, categoría, costo de producción y precio; solo se piden existencia y stock mínimo. El impuesto adicional se incluye una sola vez. Las categorías se resuelven dentro de la sucursal y no se crean hasta confirmar el producto.
 
 La descarga XLSX conserva valores numéricos y el detalle de ingredientes, recetas, gastos y canales. La presentación COP usa pesos completos y las cantidades mostradas se redondean; los cálculos mantienen su precisión interna.

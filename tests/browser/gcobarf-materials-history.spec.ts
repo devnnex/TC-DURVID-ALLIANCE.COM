@@ -32,7 +32,7 @@ test('GCOBARF: macro directa, precio unitario, historial y costeo con el insumo 
   test.setTimeout(90000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.context().setOffline(true);
   await page.goto(pathToFileURL(resolve('negocios/gcobarf/admin.html')).href+'?demo=1#inventory');
   await expect(page.locator('#materialsContent')).toBeVisible();await expect(page.locator('[data-material-action=new]')).toBeVisible();
-  await expect(page.locator('[data-material-view=products]')).toHaveCount(0);await expect(page.locator('#inventoryList')).not.toBeVisible();
+  await expect(page.locator('[data-material-view=products]')).toHaveText('Inventario');await expect(page.locator('#inventoryList')).not.toBeVisible();
   await page.locator('[data-material-action=new]').click();const modal=page.locator('#materialsDialog');
   await modal.locator('[name=name]').fill('Bolsa 500G');await modal.locator('[name=unit]').selectOption('u');
   await modal.locator('[name=quantity]').fill('500');await modal.locator('[name=totalCost]').fill('55000');

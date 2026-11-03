@@ -3,3 +3,29 @@
 @media(max-width:700px){.delivery-dialog-layout{grid-template-columns:1fr}.delivery-dialog-layout>section:last-child{order:-1}.delivery-day.compact-table-tile{min-height:66px;padding:5px}.delivery-day small{display:none}.delivery-week{font-size:11px}.delivery-client-balance h4{font-size:18px}.delivery-actions button{flex:1}}
 
 @media(max-width:700px){.delivery-day [data-delivery-count]{font-size:0;white-space:nowrap}.delivery-day [data-delivery-count]::after{content:attr(data-delivery-count) " ·";font-size:10px;font-weight:700}}
+
+/* Keep the original table colors in one continuous, more readable month. */
+.admin-grid:has(>#deliveryCalendar){grid-template-columns:minmax(230px,.65fr) minmax(0,1.35fr);align-items:start}
+.delivery-month-table{max-width:100%;overflow-x:auto;border:1px solid #cbdccc;border-radius:12px;background:#f8fbf9}
+.delivery-month-table .delivery-week,.delivery-month-table .delivery-grid{min-width:490px;gap:0;margin:0}
+.delivery-month-table .delivery-week span{padding:10px 5px;background:#f0f6f2;border-bottom:1px solid #cbdccc}
+.delivery-month-table .delivery-day.compact-table-tile,.delivery-month-table .delivery-blank{border:0;border-right:1px solid #cbdccc;border-bottom:1px solid #cbdccc;border-radius:0;box-shadow:none;min-height:126px;padding:10px 8px;box-sizing:border-box}
+.delivery-month-table .delivery-day.compact-table-tile{gap:7px;transform:none}
+.delivery-month-table .delivery-grid>:nth-child(7n){border-right:0}
+.delivery-month-table .delivery-grid>:nth-last-child(-n+7){border-bottom:0}
+.delivery-month-table .delivery-blank{background:#f6faf7}
+.delivery-month-table .delivery-day small{display:block;font-size:12px;line-height:1.35;width:100%;text-align:left;white-space:normal;-webkit-line-clamp:unset}
+.delivery-month-table .delivery-day .delivery-customer-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;font-size:12px;line-height:1.35;white-space:normal;margin-bottom:3px}
+.delivery-month-table .delivery-day.is-selected{outline-offset:-3px}
+.admin-grid:has(>#deliveryCalendar)>.panel:first-child>.section-head{flex-wrap:wrap;align-items:flex-start}
+.admin-grid:has(>#deliveryCalendar)>.panel:first-child>.section-head>div:first-child{flex-basis:100%}
+@media(max-width:1100px){.admin-grid:has(>#deliveryCalendar){grid-template-columns:minmax(0,1fr)}}
+@media(max-width:700px){.delivery-month-table .delivery-day.compact-table-tile,.delivery-month-table .delivery-blank{min-height:112px;padding:8px 6px}.delivery-month-table .delivery-day .delivery-customer-name{font-size:11px}}
+
+/* The loss note sits below the final weight without lifting its input. */
+#costing .cost-excel-table .gcobarf-production-ingredient>td{padding-top:14px!important;padding-bottom:36px!important;vertical-align:middle}
+.gcobarf-weight-field{position:relative}
+#costing .gcobarf-production-ingredient [data-sheet-line],#costing .gcobarf-production-ingredient [data-sheet-final-weight]{display:block;margin:0}
+#costing .gcobarf-weight-field .cost-line-loss{position:absolute;top:100%;left:0;margin-top:9px;line-height:1.3;width:100%;min-width:0}
+.gcobarf-ingredient-actions{display:inline-flex;align-items:center;gap:7px;flex-wrap:nowrap;white-space:nowrap}
+#costing .gcobarf-ingredient-actions button{flex:none;margin:0!important}

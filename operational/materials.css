@@ -3,8 +3,7 @@
 
 .materials-tabs button.primary{color:#fff}
 
-/* GCOBARF keeps product selling controls in the source and opens the macro directly. */
-.gcobarf-materials .materials-tabs~[data-material-hidden]{display:none!important}
+/* GCOBARF opens the macro first; its Inventory tab restores the product controls. */
 .gcobarf-materials .material-unit-cost{color:#176343;flex-basis:100%}.gcobarf-materials .material-details{flex-wrap:wrap}
 .materials-history-filters{display:grid;grid-template-columns:2fr 1.5fr 1.5fr 1fr 1fr;gap:12px;margin:20px 0}.materials-history-filters label{display:grid;gap:7px;font-size:14px}.materials-history-filters input,.materials-history-filters select{font:inherit;font-size:16px;min-width:0;width:100%;box-sizing:border-box}.materials-history-records{display:grid;gap:12px}.materials-history-record{padding:18px;border:1px solid #d9e6df;border-radius:14px;background:white}.materials-history-record header{display:grid;gap:6px}.materials-history-record small{color:#5d7281}.materials-history-record dl{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:0}.materials-history-record dl>div{display:grid;gap:5px}.materials-history-record dt{font-size:12px;color:#5d7281}.materials-history-record dd{margin:0;font-weight:600}.materials-history-record p{margin-bottom:0;font-size:13px}.materials-history-record[hidden]{display:none}@media(max-width:850px){.materials-history-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.materials-history-filters label:first-child{grid-column:1/-1}}@media(max-width:480px){.materials-history-filters{grid-template-columns:minmax(0,1fr)}.materials-history-record dl{display:grid;gap:10px}}
 
