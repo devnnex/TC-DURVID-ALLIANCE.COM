@@ -12,6 +12,15 @@ globalThis.AllianceLocalPOS=operator=>{
   function query(state,body){
     const {table,op,values,filters=[],single}=body;const rows=state.docs[table];if(!rows)throw new Error('Esta tabla no forma parte de la demostración.');let result=[];
     const delivery=(row,patch)=>{
+      if(table==='table_sessions'&&patch.status==='cancelled'&&row.delivery_date&&globalThis.BRANCH_CONFIG?.slug==='gcobarf'){
+        if(operator.role!=='boss')throw Error('Solo el propietario puede cancelar una entrega.');
+        if(row.status==='cancelled')return;
+        if(row.status!=='open')throw Error('La entrega ya fue cobrada o cerrada. Conserva su historial.');
+        for(const line of state.docs.session_items.filter(i=>i.session_id===row.id&&i.status!=='cancelled')){Object.assign(line,{status:'cancelled',updated_by_user_id:operator.id,updated_at:now()});state.docVersions||={};state.docVersions.session_items||={};state.docVersions.session_items[line.id]=(state.docVersions.session_items[line.id]||0)+1;}
+        const deltas=new Map();for(const m of state.movements.filter(m=>m.sessionId===row.id&&['CONSUMO_MESA','DEVOLUCION_CONSUMO'].includes(m.type)))deltas.set(m.productId,(deltas.get(m.productId)||0)+m.delta);
+        for(const [product,delta]of deltas)if(delta<0)movement(state,product,-delta,'DEVOLUCION_CONSUMO','Entrega cancelada','DELIVERY-CANCEL-'+row.id+'-'+product,row.id);
+        patch.closed_at=now();
+      }
       if(table!=='table_sessions'||!['delivery_date','delivery_time','customer_id'].some(k=>Object.hasOwn(patch,k)))return;
       if(globalThis.BRANCH_CONFIG?.slug&&BRANCH_CONFIG.slug!=='gcobarf')throw Error('La agenda de entregas pertenece a GCOBARF.');
       const next={...row,...patch},customer=state.operations.customers.find(c=>c.id===next.customer_id&&c.active);
@@ -26,7 +35,7 @@ globalThis.AllianceLocalPOS=operator=>{
       for(const value of Array.isArray(values)?values:[values]){const rowId=table==='business_settings'?'primary':value.id||id();let row=rows.find(r=>r.id===rowId);if(row&&op==='insert'){result.push(row);continue;}if(!row){row={id:rowId,created_at:now()};rows.push(row);}delivery(row,value);Object.assign(row,value,{id:rowId,updated_at:now()});if(table==='table_sessions'){row.status||='open';row.sale_channel||='table';row.opened_at||=now();}if(table==='menu_items'&&row.is_available==null)row.is_available=true;if(table==='menu_categories'&&row.is_active==null)row.is_active=true;if(table==='session_items'){row.status||='served';row.created_by_user_id=operator.id;}if(table==='service_requests')row.status||='pending';result.push(row);}
     }else if(op==='update'){if(table==='session_items'&&rows.filter(r=>matches(r,filters)).some(r=>!state.docs.table_sessions.some(s=>s.id===r.session_id&&s.status==='open')))throw Error('Esta cuenta ya fue cobrada o cerrada.');if(table==='service_requests'&&rows.some(r=>matches(r,filters)&&r.request_type==='order'))throw new Error('Acepta o rechaza esta comanda desde su detalle en Inicio.');result=rows.filter(r=>matches(r,filters));for(const row of result){delivery(row,values);Object.assign(row,values,{updated_at:now()});}}
     else if(op==='delete'){if(table==='service_requests'&&rows.some(r=>matches(r,filters)&&r.request_type==='order'))throw new Error('Acepta o rechaza esta comanda desde su detalle en Inicio.');result=rows.filter(r=>matches(r,filters));state.docs[table]=rows.filter(r=>!matches(r,filters));}
-    if(op==='update'&&(table==='session_items'||table==='table_sessions'&&['closed','paid'].includes(values.status)))for(const sid of new Set(result.map(r=>table==='session_items'?r.session_id:r.id)))AllianceReconcileSession(state,sid,operator);
+    if(op==='update'&&(table==='session_items'||table==='table_sessions'&&['closed','paid','cancelled'].includes(values.status)))for(const sid of new Set(result.map(r=>table==='session_items'?r.session_id:r.id)))AllianceReconcileSession(state,sid,operator);
     if(op!=='select'&&['session_items','table_sessions'].includes(table))globalThis.AllianceMaterialsEngine?.guard(state,[],undefined,operator);
     const output=result.map(r=>joined(state,table,r));return single?output[0]||null:output;
   }

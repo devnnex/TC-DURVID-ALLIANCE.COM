@@ -593,6 +593,22 @@ END;!';
     ELSE IF actual IS NULL THEN IF expected IS NOT NULL AND NOT expected.is_null THEN RETURN FALSE;END IF;ELSIF expected IS NULL OR actual.to_string<>expected.to_string THEN RETURN FALSE;END IF;END IF;
   END LOOP;RETURN TRUE;
   END;
+  -- Cancel an unpaid delivery atomically, retaining its customer and audit trail.
+  PROCEDURE cancel_delivery(u VARCHAR2,b VARCHAR2,l VARCHAR2,account JSON_OBJECT_T) IS
+  branch_slug VARCHAR2(80);line JSON_OBJECT_T;before_json CLOB;sid VARCHAR2(80):=account.get_string('id');
+  BEGIN
+    SELECT slug INTO branch_slug FROM locations WHERE business_id=b AND id=l;
+    IF branch_slug<>'gcobarf' OR account.get_string('delivery_date') IS NULL THEN RETURN;END IF;
+    IF account.get_string('status')='cancelled' THEN RETURN;END IF;
+    IF account.get_string('status')<>'open' THEN alliance_security.fail(409,'CLOSED_ACCOUNT','La entrega ya fue cobrada o cerrada. Conserva su historial.');END IF;
+    FOR x IN(SELECT id,data_json FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='session_items' AND JSON_VALUE(data_json,'$.session_id')=sid AND NVL(JSON_VALUE(data_json,'$.status'),'served')<>'cancelled') LOOP
+      before_json:=x.data_json;line:=JSON_OBJECT_T(before_json);line.put('status','cancelled');line.put('updated_by_user_id',u);line.put('updated_at',stamp);put_document(b,l,'session_items',x.id,line);audit(u,b,'POS_SESSION_ITEMS',x.id,before_json,line.to_clob);
+    END LOOP;
+    -- Return only stock actually debited for this account, never raw materials used in production.
+    FOR x IN(SELECT product_id,-SUM(delta) quantity FROM alliance_pos_movements WHERE business_id=b AND location_id=l AND session_id=sid AND kind IN('CONSUMO_MESA','DEVOLUCION_CONSUMO') GROUP BY product_id HAVING SUM(delta)<0) LOOP
+      movement(u,b,l,'DELIVERY-CANCEL-'||sid||'-'||x.product_id,x.product_id,x.quantity,'DEVOLUCION_CONSUMO','Entrega cancelada',sid);
+    END LOOP;
+  END;
   FUNCTION query(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
   entity_value VARCHAR2(32):=p_body.get_string('table');op VARCHAR2(12):=p_body.get_string('op');permission_value VARCHAR2(80);rows_json JSON_ARRAY_T;out_json JSON_ARRAY_T:=JSON_ARRAY_T();filters JSON_ARRAY_T:=p_body.get_array('filters');patch JSON_OBJECT_T;row_json JSON_OBJECT_T;old_json JSON_OBJECT_T;parent JSON_OBJECT_T;keys_json JSON_KEY_LIST;
   id_value VARCHAR2(80);category_value VARCHAR2(36);name_value VARCHAR2(160);price_value NUMBER;active_value NUMBER;data_value CLOB;n NUMBER;search_value VARCHAR2(80);branch_slug VARCHAR2(80);date_value VARCHAR2(10);time_value VARCHAR2(5);customer_value VARCHAR2(80);result_json JSON_OBJECT_T:=JSON_OBJECT_T();
@@ -678,12 +694,13 @@ END;!';
             IF row_json.get_string('status') IN('paid','closed') THEN SELECT COUNT(*) INTO n FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='session_items' AND JSON_VALUE(data_json,'$.session_id')=id_value AND NVL(JSON_VALUE(data_json,'$.status'),'served')<>'cancelled';IF n>0 THEN alliance_security.fail(409,'PAYMENT_REQUIRED','Registra el pago para cerrar una cuenta con consumos.');END IF;
             ELSIF NOT alliance_security.location_owner(p_user,p_business,p_location) THEN alliance_security.fail(403,'FORBIDDEN','Solo el propietario puede cancelar una cuenta.');END IF;
           END IF;
+          IF row_json.get_string('status')='cancelled' THEN cancel_delivery(p_user,p_business,p_location,old_json);row_json.put('closed_at',stamp);END IF;
           IF NOT row_json.has('opened_at') THEN row_json.put('opened_at',stamp);END IF;
         ELSIF entity_value='session_items' THEN
           IF row_json.get_string('status')='cancelled' AND NOT alliance_security.location_owner(p_user,p_business,p_location) THEN alliance_security.fail(403,'FORBIDDEN','Solo un jefe puede retirar consumos.');END IF;
           parent:=document(p_business,p_location,'table_sessions',row_json.get_string('session_id'));IF parent IS NULL OR parent.get_string('status')<>'open' THEN alliance_security.fail(409,'CLOSED_ACCOUNT','La cuenta no esta abierta.');END IF;
           IF row_json.get_number('quantity') IS NULL OR row_json.get_number('quantity')<=0 OR row_json.get_number('quantity')>10000 OR row_json.get_number('unit_price') IS NULL OR row_json.get_number('unit_price')<0 THEN alliance_security.fail(400,'INVALID_INPUT','Cantidad o precio invalido.');END IF;
-          IF row_json.get_string('menu_item_id') IS NOT NULL THEN parent:=document(p_business,p_location,'menu_items',row_json.get_string('menu_item_id'));IF parent IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Producto no disponible.');END IF;END IF;
+          IF row_json.get_string('menu_item_id') IS NOT NULL THEN parent:=document(p_business,p_location,'menu_items',row_json.get_string('menu_item_id'));IF parent IS NULL THE!') || TO_CLOB(q'!N alliance_security.fail(403,'FORBIDDEN','Producto no disponible.');END IF;END IF;
           IF NOT row_json.has('status') THEN row_json.put('status','confirmed');END IF;row_json.put('updated_by_user_id',p_user);IF op='insert' THEN row_json.put('created_by_user_id',p_user);END IF;
         ELSIF entity_value='service_requests' THEN
           parent:=document(p_business,p_location,'restaurant_tables',row_json.get_string('table_id'));IF parent IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Mesa no disponible.');END IF;
@@ -695,10 +712,10 @@ END;!';
       out_json.append(row_json);
     END IF;
   END LOOP;
-  IF op='update' AND (entity_value='session_items' OR (entity_value='table_sessions' AND patch.get_string('status') IN('closed','paid'))) THEN FOR i IN 0..out_json.get_size-1 LOOP row_json:=TREAT(out_json.get(i) AS JSON_OBJECT_T);reconcile_session(p_user,p_business,p_location,CASE WHEN entity_value='session_items' THEN row_json.get_string('session_id') ELSE row_json.get_string('id') END);END LOOP;END IF;
+  IF op='update' AND (entity_value='session_items' OR (entity_value='table_sessions' AND patch.get_string('status') IN('closed','paid','cancelled'))) THEN FOR i IN 0..out_json.get_size-1 LOOP row_json:=TREAT(out_json.get(i) AS JSON_OBJECT_T);reconcile_session(p_user,p_business,p_location,CASE WHEN entity_value='session_items' THEN row_json.get_string('session_id') ELSE row_json.get_string('id') END);END LOOP;END IF;
   IF op<>'select' AND entity_value IN('session_items','table_sessions') THEN alliance_production.reconcile(p_user,p_business,p_location);alliance_materials.guard_open(p_business,p_location);END IF;
   IF p_body.get_string('single') IN('single','maybeSingle') THEN
-    IF out_json.get_size=0 THEN result_json.put_null('value');ELSIF out_json.get_size=1 THEN result_json.put('value',out_json.get(0))!') || TO_CLOB(q'!;ELSE alliance_security.fail(409,'MULTIPLE_ROWS','El filtro devolvio varios registros.');END IF;
+    IF out_json.get_size=0 THEN result_json.put_null('value');ELSIF out_json.get_size=1 THEN result_json.put('value',out_json.get(0));ELSE alliance_security.fail(409,'MULTIPLE_ROWS','El filtro devolvio varios registros.');END IF;
   ELSE result_json.put('value',out_json);END IF;RETURN result_json;
   END;
   PROCEDURE movement(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_id VARCHAR2,p_product VARCHAR2,p_delta NUMBER,p_kind VARCHAR2,p_reference VARCHAR2,p_session VARCHAR2) IS before_value NUMBER;cost_value NUMBER;n NUMBER;negative_value NUMBER;

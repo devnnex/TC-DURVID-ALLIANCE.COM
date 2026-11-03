@@ -7,6 +7,7 @@ if(window.BRANCH_CONFIG?.slug==='gcobarf')window.GcobarfCalendar=(()=>{
   const appointments=()=>data?.docs.table_sessions.filter(s=>s.delivery_date&&s.status!=='cancelled')||[];
   const lines=s=>data?.docs.session_items.filter(i=>i.session_id===s.id&&i.status!=='cancelled')||[];
   const total=s=>lines(s).reduce((n,i)=>n+i.quantity*i.unit_price,0);
+  const canRemove=()=>OracleDb.user()?.role==='boss'&&OracleDb.permission('service.write')&&OracleDb.permission('sales.write');
   const label=date=>new Date(date+'T12:00:00Z').toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'America/Bogota'});
   function summary(){const rows=appointments().filter(s=>s.delivery_date===day);return {tables:rows.length,open:rows.filter(s=>s.status==='open').length,sales:rows.filter(s=>s.status==='open').reduce((n,s)=>n+total(s),0)};}
   function mount(){
@@ -34,7 +35,7 @@ if(window.BRANCH_CONFIG?.slug==='gcobarf')window.GcobarfCalendar=(()=>{
 
     let dialog=document.querySelector('#deliveryDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='deliveryDialog';dialog.className='materials-dialog delivery-dialog';document.body.append(dialog);}
     dialog.innerHTML='<form data-no-draft><header><div><span class="eyebrow">Agenda de entregas</span><h2>'+(session?'Reprogramar entrega':'Programar entrega')+'</h2></div><button type="button" class="ghost" data-delivery-close>Cerrar</button></header><div class="delivery-dialog-layout"><section class="delivery-day-summary" data-delivery-daily></section><section><h3>Agregar entrega</h3><div class="materials-fields"><label>Fecha de entrega<input type="date" name="date" required value="'+esc(session?.delivery_date||day)+'"></label><label>Hora de entrega<input type="time" name="time" required value="'+esc(session?.delivery_time||'09:00')+'"></label><label class="wide">Cliente<select name="customer" required data-search-ready="true" '+(session?.customer_id&&lines(session).length?'disabled':'')+'><option value="">Selecciona un cliente</option>'+customers.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>').join('')+'</select></label></div><p data-delivery-status role="status"></p><footer><button type="submit" class="primary">Guardar entrega</button></footer></section></div></form>';
-    drawAgenda(dialog);const form=dialog.querySelector('form');form.elements.customer.value=session?.customer_id||'';AllianceForms.searchSelect(form.elements.customer,{label:'Buscar y seleccionar cliente',placeholder:'Buscar cliente…'});
+    drawAgenda(dialog);const form=dialog.querySelector('form');form.dataset.deliveryEditing=session?.id||'';form.elements.customer.value=session?.customer_id||'';AllianceForms.searchSelect(form.elements.customer,{label:'Buscar y seleccionar cliente',placeholder:'Buscar cliente…'});
     dialog.querySelector('[data-delivery-close]').onclick=()=>dialog.close();
     form.onsubmit=async event=>{event.preventDefault();if(saving||!form.reportValidity())return;const customer=customers.find(c=>c.id===form.elements.customer.value);if(!customer)return;saving=true;const button=form.querySelector('[type=submit]');button.disabled=true;
       try{const value={delivery_date:form.elements.date.value,delivery_time:form.elements.time.value,customer_id:customer.id,payer_name:customer.name};
@@ -43,11 +44,24 @@ if(window.BRANCH_CONFIG?.slug==='gcobarf')window.GcobarfCalendar=(()=>{
       }catch(error){form.querySelector('[data-delivery-status]').textContent=error.message;}finally{saving=false;button.disabled=false;}
     };if(!OracleDb.permission('service.write')||!OracleDb.permission('customers.read')||!customers.length){form.querySelectorAll('input,select,[type=submit]').forEach(c=>c.disabled=true);form.querySelector('[data-delivery-status]').textContent=customers.length?'Tu rol permite consultar la agenda.':'Registra un cliente activo en Clientes y cartera para programar su entrega.';}dialog.showModal();
   }
+  async function removeDelivery(id,dialog){
+    if(saving||!canRemove())return;
+    const session=appointments().find(s=>s.id===id&&s.status==='open');if(!session)return;
+    saving=true;
+    try{
+      if(!await AllianceDialogs.confirm({title:'Quitar entrega',message:'¿Quitar la entrega de '+session.payer_name+' del '+label(session.delivery_date)+' a las '+session.delivery_time+'?'+(lines(session).length?' Se cancelarán sus consumos sin cobrar.':'')+' El cliente seguirá en Clientes y cartera.',accept:'Quitar entrega'}))return;
+      const result=await OracleDb.from('table_sessions').update({status:'cancelled'}).eq('id',id).select('*').single();if(result.error)throw result.error;
+      if(navigator.onLine)await window.AllianceOffline?.confirm();
+      accept(await OracleDb.remote('operations_snapshot'));document.dispatchEvent(new CustomEvent('gcobarf-calendar-date'));
+      if(dialog.querySelector('form')?.dataset.deliveryEditing===id){dialog.close();await editor();}
+    }catch(error){dialog.querySelector('[data-delivery-status]').textContent=error.message;}
+    finally{saving=false;}
+  }
   function drawAgenda(dialog){
     const target=dialog.querySelector('[data-delivery-daily]');if(!target)return;
     const selected=appointments().filter(s=>s.delivery_date===day).sort((a,b)=>a.delivery_time.localeCompare(b.delivery_time));
-    target.innerHTML='<h3>'+esc(label(day))+'</h3><p>'+selected.length+' clientes · '+money(selected.reduce((n,s)=>n+total(s),0))+'</p><div class="delivery-agenda">'+(selected.map(s=>'<article data-delivery-card="'+esc(s.id)+'"><div class="delivery-appointment-top"><time>'+esc(s.delivery_time)+'</time><span class="delivery-state">'+(s.status==='open'?'Programada':'Cuenta cerrada')+'</span></div><div class="delivery-client-balance"><h4>'+esc(s.payer_name)+'</h4><strong>'+money(total(s))+'</strong></div><details><summary>'+lines(s).reduce((n,i)=>n+i.quantity,0)+' productos · ver detalle</summary><ul>'+lines(s).map(i=>'<li>'+i.quantity+' × '+esc(i.item_name)+' <b>'+money(i.quantity*i.unit_price)+'</b></li>').join('')+'</ul></details>'+(s.status==='open'?'<div class="delivery-actions"><button type="button" class="primary" data-delivery-open="'+esc(s.id)+'">Agregar / ver consumos</button><button type="button" class="ghost" data-delivery-edit="'+esc(s.id)+'">Reprogramar</button></div>':'')+'</article>').join('')||'<p>No hay entregas para este día.</p>')+'</div>';
-    target.onclick=e=>{const button=e.target.closest('button');if(!button)return;if(button.dataset.deliveryOpen){dialog.close();document.dispatchEvent(new CustomEvent('gcobarf-open-delivery',{detail:{id:button.dataset.deliveryOpen}}));}else if(button.dataset.deliveryEdit)editor(data.docs.table_sessions.find(s=>s.id===button.dataset.deliveryEdit));};
+    target.innerHTML='<h3>'+esc(label(day))+'</h3><p>'+selected.length+' clientes · '+money(selected.reduce((n,s)=>n+total(s),0))+'</p><div class="delivery-agenda">'+(selected.map(s=>'<article data-delivery-card="'+esc(s.id)+'"><div class="delivery-appointment-top"><time>'+esc(s.delivery_time)+'</time><span class="delivery-state">'+(s.status==='open'?'Programada':'Cuenta cerrada')+'</span></div><div class="delivery-client-balance"><h4>'+esc(s.payer_name)+'</h4><strong>'+money(total(s))+'</strong></div><details><summary>'+lines(s).reduce((n,i)=>n+i.quantity,0)+' productos · ver detalle</summary><ul>'+lines(s).map(i=>'<li>'+i.quantity+' × '+esc(i.item_name)+' <b>'+money(i.quantity*i.unit_price)+'</b></li>').join('')+'</ul></details>'+(s.status==='open'?'<div class="delivery-actions"><button type="button" class="primary" data-delivery-open="'+esc(s.id)+'">Agregar / ver consumos</button><button type="button" class="ghost" data-delivery-edit="'+esc(s.id)+'">Reprogramar</button>'+(canRemove()?'<button type="button" class="ghost delivery-remove" data-delivery-remove="'+esc(s.id)+'">Quitar entrega</button>':'')+'</div>':'')+'</article>').join('')||'<p>No hay entregas para este día.</p>')+'</div>';
+    target.onclick=e=>{const button=e.target.closest('button');if(!button)return;if(button.dataset.deliveryOpen){dialog.close();document.dispatchEvent(new CustomEvent('gcobarf-open-delivery',{detail:{id:button.dataset.deliveryOpen}}));}else if(button.dataset.deliveryEdit)editor(data.docs.table_sessions.find(s=>s.id===button.dataset.deliveryEdit));else if(button.dataset.deliveryRemove)void removeDelivery(button.dataset.deliveryRemove,dialog);};
   }
   function accept(next){if(!next?.docs?.table_sessions)return;data=next;mount();const dialog=document.querySelector('#deliveryDialog');if(dialog?.open)drawAgenda(dialog);}
   document.addEventListener('alliance-operations-updated',e=>accept(e.detail));document.addEventListener('DOMContentLoaded',mount);

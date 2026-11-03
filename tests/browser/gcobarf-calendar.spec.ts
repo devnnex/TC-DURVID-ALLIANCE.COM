@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {backend} from './helpers/operational-backend';
+import {backend,product} from './helpers/operational-backend';
 
 async function enter(page:Page){
   await page.goto('/index.html');await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
@@ -37,4 +37,29 @@ test('una entrega sin conexión se conserva al recargar y se envía al reconecta
   await enter(page);await context.setOffline(true);await schedule(page,'Ana Pérez','09:30');await page.locator('[data-delivery-day="2026-11-20"]').click();await expect(page.locator('[data-delivery-card]')).toHaveCount(1);expect(server.state.docs.table_sessions).toHaveLength(0);
   await page.reload();await expect(page.locator('[data-delivery-day="2026-11-20"]')).toBeVisible();await page.locator('[data-delivery-day="2026-11-20"]').click();await expect(page.locator('[data-delivery-card]')).toContainText('Ana Pérez');
   await context.setOffline(false);await expect.poll(()=>server.state.docs.table_sessions.length,{timeout:20000}).toBe(1);await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending),{timeout:20000}).toBe(0);
+});
+
+test('quita entregas individuales sin perder clientes, sincroniza y permite programarlas de nuevo',async({page,context,browser})=>{
+  test.setTimeout(90000);const server=await backend(page);server.context.locations[0].slug='gcobarf';
+  server.state.operations.customers=['Ana Pérez','Juan López','Luz Díaz'].map((name,i)=>({id:'client-'+i,name,active:true,revision:1}));
+  const day='2026-11-20';server.state.docs.table_sessions=server.state.operations.customers.map((c:any,i:number)=>({id:'delivery-'+i,delivery_date:day,delivery_time:String(8+i).padStart(2,'0')+':00',customer_id:c.id,payer_name:c.name,status:'open',sale_channel:'walk_in',table_id:null}));
+  server.state.docs.session_items=[{id:'line',session_id:'delivery-1',menu_item_id:product,item_name:'Producto de prueba',quantity:2,unit_price:10000,status:'confirmed'}];
+  // Some older accounts have already debited finished goods; cancellation returns just that debit.
+  server.state.stock[product].stock=4998;server.state.movements=[{movementId:'old-debit',productId:product,sessionId:'delivery-1',type:'CONSUMO_MESA',delta:-2}];
+  await enter(page);await page.locator('[data-delivery-day="'+day+'"]').click();
+  const cards=page.locator('[data-delivery-card]'),juan=cards.filter({hasText:'Juan López'});
+  await expect(cards).toHaveCount(3);await juan.locator('[data-delivery-remove]').click();await page.locator('.alliance-message button[value=cancel]').click();await expect(cards).toHaveCount(3);
+  await juan.locator('[data-delivery-remove]').click();await expect(page.locator('.alliance-message')).toContainText('Juan López');await page.locator('.alliance-message button[value=accept]').click();
+  await expect(cards).toHaveCount(2);await expect(page.locator('#metricTables')).toHaveText('2');await expect(page.locator('#metricOpen')).toHaveText('2');
+  await expect.poll(()=>server.state.docs.table_sessions.find((s:any)=>s.id==='delivery-1').status).toBe('cancelled');
+  expect(server.state.docs.session_items[0].status).toBe('cancelled');expect(server.state.stock[product].stock).toBe(5000);expect(server.state.operations.customers).toHaveLength(3);
+  await context.setOffline(true);await cards.filter({hasText:'Ana Pérez'}).locator('[data-delivery-remove]').click();await page.locator('.alliance-message button[value=accept]').click();await expect(cards).toHaveCount(1);
+  await page.reload();await expect(page.locator('#deliveryCalendar')).toBeVisible();await page.locator('[data-delivery-day="'+day+'"]').click();await expect(cards).toHaveCount(1);await expect(cards).toContainText('Luz Díaz');
+  await context.setOffline(false);await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending),{timeout:20000}).toBe(0);
+  expect(server.state.docs.table_sessions.find((s:any)=>s.id==='delivery-0').status).toBe('cancelled');expect(server.state.stock[product].stock).toBe(5000);
+  const otherContext=await browser.newContext({baseURL:'http://127.0.0.1:4177',serviceWorkers:'allow'});await server.attach(otherContext);const other=await otherContext.newPage();await enter(other);await other.locator('[data-delivery-day="'+day+'"]').click();await expect(other.locator('[data-delivery-card]')).toHaveCount(1);await otherContext.close();
+  await page.locator('#deliveryDialog [data-delivery-close]').click();await schedule(page,'Juan López','15:30');await page.locator('[data-delivery-day="'+day+'"]').click();await expect(cards).toHaveCount(2);
+  await cards.filter({hasText:'Juan López'}).locator('[data-delivery-remove]').click();await page.locator('.alliance-message button[value=accept]').click();await expect(cards).toHaveCount(1);
+  await cards.locator('[data-delivery-remove]').click();await page.locator('.alliance-message button[value=accept]').click();await expect(cards).toHaveCount(0);await expect(page.locator('#metricTables')).toHaveText('0');
+  expect(server.state.operations.customers).toHaveLength(3);expect(server.state.stock[product].stock).toBe(5000);
 });
