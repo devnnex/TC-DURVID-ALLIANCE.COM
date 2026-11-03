@@ -81,7 +81,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
   END;
   FUNCTION query(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
   entity_value VARCHAR2(32):=p_body.get_string('table');op VARCHAR2(12):=p_body.get_string('op');permission_value VARCHAR2(80);rows_json JSON_ARRAY_T;out_json JSON_ARRAY_T:=JSON_ARRAY_T();filters JSON_ARRAY_T:=p_body.get_array('filters');patch JSON_OBJECT_T;row_json JSON_OBJECT_T;old_json JSON_OBJECT_T;parent JSON_OBJECT_T;keys_json JSON_KEY_LIST;
-  id_value VARCHAR2(80);category_value VARCHAR2(36);name_value VARCHAR2(160);price_value NUMBER;active_value NUMBER;data_value CLOB;n NUMBER;search_value VARCHAR2(80);result_json JSON_OBJECT_T:=JSON_OBJECT_T();
+  id_value VARCHAR2(80);category_value VARCHAR2(36);name_value VARCHAR2(160);price_value NUMBER;active_value NUMBER;data_value CLOB;n NUMBER;search_value VARCHAR2(80);branch_slug VARCHAR2(80);date_value VARCHAR2(10);time_value VARCHAR2(5);customer_value VARCHAR2(80);result_json JSON_OBJECT_T:=JSON_OBJECT_T();
   BEGIN
   alliance_security.keys_only(p_body,'table,op,filters,values,single,order,limit,expected_versions');
   IF entity_value NOT IN('business_settings','restaurant_tables','menu_categories','menu_items','table_sessions','session_items','service_requests') OR op NOT IN('select','insert','update','upsert','delete') OR entity_value IS NULL OR op IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Operacion no permitida.');END IF;
@@ -107,7 +107,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
     ELSIF entity_value='restaurant_tables' THEN alliance_security.keys_only(patch,'id,table_number,table_name,qr_code,qr_image_url,is_active');
     ELSIF entity_value='menu_categories' THEN alliance_security.keys_only(patch,'id,name,sort_order,is_active');
     ELSIF entity_value='menu_items' THEN alliance_security.keys_only(patch,'id,category_id,name,description,price,image_url,is_available,sort_order');
-    ELSIF entity_value='table_sessions' THEN alliance_security.keys_only(patch,'id,table_id,status,sale_channel,assigned_waiter_id,payer_name,discount,tax,service_fee,discount_amount,tax_amount,service_fee_amount,closed_at,payment_method,paid_at,subtotal,total');
+    ELSIF entity_value='table_sessions' THEN alliance_security.keys_only(patch,'id,table_id,status,sale_channel,assigned_waiter_id,payer_name,discount,tax,service_fee,discount_amount,tax_amount,service_fee_amount,closed_at,payment_method,paid_at,subtotal,total,delivery_date,delivery_time,customer_id');
     ELSIF entity_value='session_items' THEN alliance_security.keys_only(patch,'id,session_id,table_id,menu_item_id,item_name,quantity,unit_price,status,notes,created_by_user_id,updated_by_user_id');
     ELSE alliance_security.keys_only(patch,'id,table_id,session_id,request_type,message,status,acknowledged_by_user_id,acknowledged_at,resolved_at');END IF;
   END IF;
@@ -140,6 +140,19 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
           ELSE UPDATE products SET name=name_value,price_minor=price_value,active=active_value,version=version+1,updated_at=SYSTIMESTAMP WHERE id=id_value AND business_id=p_business;END IF;
           row_json.put('price',price_value/100);IF NOT row_json.has('is_available') THEN row_json.put('is_available',TRUE);END IF;
         ELSIF entity_value='table_sessions' THEN
+          IF patch.has('delivery_date') OR patch.has('delivery_time') OR patch.has('customer_id') THEN
+            SELECT slug INTO branch_slug FROM locations WHERE business_id=p_business AND id=p_location;
+            IF branch_slug<>'gcobarf' THEN alliance_security.fail(400,'DELIVERY_SCOPE','La agenda de entregas pertenece a GCOBARF.');END IF;
+            alliance_security.require_location(p_user,p_business,p_location,'customers.read');
+            IF old_json.get_string('status') IS NOT NULL AND old_json.get_string('status')<>'open' THEN alliance_security.fail(409,'DELIVERY_CLOSED','La cuenta ya fue cerrada.');END IF;
+            date_value:=alliance_security.text_value(row_json,'delivery_date',10,'^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+            IF VALIDATE_CONVERSION(date_value AS DATE,'FXYYYY-MM-DD')=0 THEN alliance_security.fail(400,'DELIVERY_DATE','Revisa la fecha de entrega.');END IF;
+            time_value:=alliance_security.text_value(row_json,'delivery_time',5,'^([01][0-9]|2[0-3]):[0-5][0-9]$');customer_value:=alliance_security.text_value(row_json,'customer_id',80);
+            parent:=document(p_business,p_location,'op_customers',customer_value);
+            IF parent IS NULL OR NOT parent.get_boolean('active') THEN alliance_security.fail(400,'DELIVERY_CUSTOMER','Selecciona un cliente activo de esta sucursal.');END IF;
+            IF old_json.get_string('customer_id') IS NOT NULL AND old_json.get_string('customer_id')<>customer_value THEN SELECT COUNT(*) INTO n FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='session_items' AND JSON_VALUE(data_json,'$.session_id')=id_value AND NVL(JSON_VALUE(data_json,'$.status'),'served')<>'cancelled';IF n>0 THEN alliance_security.fail(409,'DELIVERY_CUSTOMER','La cuenta ya tiene consumos. Conserva el cliente o crea otra entrega.');END IF;END IF;
+            row_json.put('payer_name',parent.get_string('name'));
+          END IF;
           IF NOT row_json.has('status') THEN row_json.put('status','open');END IF;
           IF NOT row_json.has('sale_channel') THEN row_json.put('sale_channel','table');END IF;
           IF row_json.get_string('table_id') IS NOT NULL THEN parent:=document(p_business,p_location,'restaurant_tables',row_json.get_string('table_id'));IF parent IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Mesa no disponible.');END IF;END IF;

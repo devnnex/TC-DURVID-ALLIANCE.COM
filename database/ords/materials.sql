@@ -87,17 +87,35 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
   FUNCTION signature(r JSON_OBJECT_T) RETURN CLOB IS lines JSON_ARRAY_T:=r.get_array('lines');arr JSON_ARRAY_T:=JSON_ARRAY_T();row_json JSON_OBJECT_T;v JSON_OBJECT_T;BEGIN
     FOR j IN 0..lines.get_size-1 LOOP row_json:=TREAT(lines.get(j) AS JSON_OBJECT_T);v:=JSON_OBJECT_T();v.put('ingredientId',row_json.get_string('ingredientId'));IF row_json.has('processing') THEN v.put('processing',row_json.get_object('processing'));END IF;IF row_json.has('initialQuantity') THEN v.put('initialQuantity',row_json.get_number('initialQuantity'));v.put('quantity',row_json.get_number('quantity'));v.put('unit',row_json.get_string('unit'));END IF;IF row_json.has('processing') OR row_json.has('initialQuantity') THEN arr.append(v);END IF;END LOOP;RETURN arr.to_clob;
   END;
+  FUNCTION recipe_mappings(b VARCHAR2,l VARCHAR2,recipe JSON_OBJECT_T,model JSON_OBJECT_T,previous JSON_ARRAY_T) RETURN JSON_ARRAY_T IS
+    gco NUMBER;parts JSON_ARRAY_T;ingredients JSON_ARRAY_T;maps JSON_ARRAY_T:=JSON_ARRAY_T();part JSON_OBJECT_T;ing JSON_OBJECT_T;mapping JSON_OBJECT_T;stock_id VARCHAR2(80);seen VARCHAR2(32767):='|';ingredient_id VARCHAR2(80);
+  BEGIN
+    SELECT COUNT(*) INTO gco FROM locations WHERE business_id=b AND id=l AND slug='gcobarf';IF gco=0 THEN RETURN previous;END IF;
+    parts:=recipe.get_array('lines');ingredients:=model.get_array('ingredients');
+    FOR i IN 0..parts.get_size-1 LOOP
+      part:=TREAT(parts.get(i) AS JSON_OBJECT_T);ingredient_id:=part.get_string('ingredientId');
+      IF INSTR(seen,'|'||ingredient_id||'|')=0 THEN
+        seen:=seen||ingredient_id||'|';stock_id:=NULL;
+        FOR j IN 0..ingredients.get_size-1 LOOP ing:=TREAT(ingredients.get(j) AS JSON_OBJECT_T);IF ing.get_string('id')=ingredient_id THEN stock_id:=ing.get_string('stockId');EXIT;END IF;END LOOP;
+        IF stock_id IS NULL THEN FOR j IN 0..previous.get_size-1 LOOP mapping:=TREAT(previous.get(j) AS JSON_OBJECT_T);IF mapping.get_string('ingredientId')=ingredient_id THEN stock_id:=mapping.get_string('stockId');EXIT;END IF;END LOOP;END IF;
+        mapping:=JSON_OBJECT_T();mapping.put('ingredientId',ingredient_id);mapping.put('stockId',stock_id);maps.append(mapping);
+      END IF;
+    END LOOP;RETURN maps;
+  END;
   PROCEDURE sync_processing(u VARCHAR2,b VARCHAR2,l VARCHAR2,old_model JSON_OBJECT_T,new_model JSON_OBJECT_T,revision_value NUMBER) IS
-    before_rows JSON_ARRAY_T;after_rows JSON_ARRAY_T;old_recipe JSON_OBJECT_T;new_recipe JSON_OBJECT_T;row_json JSON_OBJECT_T;linked JSON_OBJECT_T;p JSON_OBJECT_T;result_json JSON_OBJECT_T;
+    before_rows JSON_ARRAY_T;after_rows JSON_ARRAY_T;old_recipe JSON_OBJECT_T;new_recipe JSON_OBJECT_T;row_json JSON_OBJECT_T;linked JSON_OBJECT_T;p JSON_OBJECT_T;result_json JSON_OBJECT_T;maps JSON_ARRAY_T;
   BEGIN
     IF old_model IS NULL THEN RETURN;END IF;before_rows:=old_model.get_array('recipes');after_rows:=new_model.get_array('recipes');
     FOR x IN(SELECT data_json FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_recipes' AND JSON_VALUE(data_json,'$.managed')='true') LOOP
       linked:=JSON_OBJECT_T(x.data_json);old_recipe:=NULL;new_recipe:=NULL;
       FOR j IN 0..before_rows.get_size-1 LOOP row_json:=TREAT(before_rows.get(j) AS JSON_OBJECT_T);IF row_json.get_string('id')=linked.get_string('recipeId') THEN old_recipe:=row_json;EXIT;END IF;END LOOP;
       FOR j IN 0..after_rows.get_size-1 LOOP row_json:=TREAT(after_rows.get(j) AS JSON_OBJECT_T);IF row_json.get_string('id')=linked.get_string('recipeId') THEN new_recipe:=row_json;EXIT;END IF;END LOOP;
-      IF old_recipe IS NOT NULL AND new_recipe IS NOT NULL AND DBMS_LOB.COMPARE(signature(old_recipe),signature(new_recipe))<>0 THEN
-        p:=JSON_OBJECT_T();p.put('productId',linked.get_string('productId'));p.put('recipeId',linked.get_string('recipeId'));p.put('revision',revision_value);p.put('salePortions',linked.get_number('salePortions'));p.put('mappings',linked.get_array('mappings'));
+      IF old_recipe IS NOT NULL AND new_recipe IS NOT NULL THEN
+        maps:=recipe_mappings(b,l,new_recipe,new_model,linked.get_array('mappings'));
+        IF DBMS_LOB.COMPARE(signature(old_recipe),signature(new_recipe))<>0 OR DBMS_LOB.COMPARE(maps.to_clob,linked.get_array('mappings').to_clob)<>0 THEN
+        p:=JSON_OBJECT_T();p.put('productId',linked.get_string('productId'));p.put('recipeId',linked.get_string('recipeId'));p.put('revision',revision_value);p.put('salePortions',linked.get_number('salePortions'));p.put('mappings',maps);
         result_json:=run_action(u,b,l,'materials_link',p,alliance_security.new_id,TRUE);
+        END IF;
       END IF;
     END LOOP;
   END;
@@ -125,7 +143,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
       FOR j IN 0..before_rows.get_size-1 LOOP row_json:=TREAT(before_rows.get(j) AS JSON_OBJECT_T);IF row_json.get_string('id')=linked.get_string('recipeId') THEN old_recipe:=row_json;EXIT;END IF;END LOOP;
       FOR j IN 0..after_rows.get_size-1 LOOP row_json:=TREAT(after_rows.get(j) AS JSON_OBJECT_T);IF row_json.get_string('id')=linked.get_string('recipeId') THEN new_recipe:=row_json;EXIT;END IF;END LOOP;
       IF old_recipe IS NOT NULL AND new_recipe IS NOT NULL AND DBMS_LOB.COMPARE(signature(old_recipe),signature(new_recipe))<>0 THEN
-        maps:=linked.get_array('mappings');FOR j IN 0..maps.get_size-1 LOOP mapping:=TREAT(maps.get(j) AS JSON_OBJECT_T);raw:=alliance_operations.raw_item(b,l,mapping.get_string('stockId'));
+        maps:=recipe_mappings(b,l,new_recipe,new_model,linked.get_array('mappings'));FOR j IN 0..maps.get_size-1 LOOP mapping:=TREAT(maps.get(j) AS JSON_OBJECT_T);raw:=alliance_operations.raw_item(b,l,mapping.get_string('stockId'));
           FOR k IN 0..ingredients.get_size-1 LOOP ing:=TREAT(ingredients.get(k) AS JSON_OBJECT_T);IF ing.get_string('id')=mapping.get_string('ingredientId') THEN
             price_value:=raw.get_number('unitCost')*alliance_operations.convert_quantity(ing.get_number('quantity'),ing.get_string('unit'),raw.get_string('unit'));IF ing.get_boolean('recoverableTax') THEN price_value:=price_value*(1+ing.get_number('purchaseTaxRate')/100);END IF;
             ing.put('purchasePrice',price_value);ingredients.put(k,ing,TRUE);EXIT;

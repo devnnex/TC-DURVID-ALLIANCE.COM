@@ -1163,7 +1163,7 @@ const App = (() => {
       el.textContent = state.business?.business_name || "Tu restaurante";
     });
     $$(".js-business-subtitle").forEach((el) => {
-      el.textContent = state.business?.subtitle || "Servicio a la mesa rapido y claro";
+      el.textContent = state.business?.subtitle || (window.BRANCH_CONFIG?.slug==='gcobarf'?"Programa entregas y organiza los consumos de tus clientes.":"Servicio a la mesa rapido y claro");
     });
     $$(".js-brand-logo").forEach((el) => {
       el.innerHTML = logo;
@@ -3546,6 +3546,7 @@ const App = (() => {
       open: tableSessions.length,
       sales: tableSessions.reduce((sum, session) => sum + sessionTotal(session), 0)
     };
+    if(window.GcobarfCalendar)Object.assign(totals,GcobarfCalendar.summary());
     $("#metricTables").textContent = totals.tables;
     $("#metricAlerts").textContent = totals.alerts;
     $("#metricOpen").textContent = totals.open;
@@ -3698,6 +3699,7 @@ const App = (() => {
     }).join("");
 
   const renderTables = () => {
+    if(window.GcobarfCalendar){GcobarfCalendar.mount();return;}
     const box = $("#tablesGrid");
     if (!box) return;
     state.tableRenderSignature = tablesSignature();
@@ -5492,6 +5494,10 @@ const App = (() => {
     liveSnapshot={...event.detail,viewUser:state.currentUser.id};if(liveSnapshotTimer!==null)return;
     liveSnapshotTimer=window.setTimeout(()=>{
       liveSnapshotTimer=null;const data=liveSnapshot;liveSnapshot=null;if(!state.currentUser||!data||data.viewUser!==state.currentUser.id)return;
+      if(window.GcobarfCalendar&&Array.isArray(data.docs.table_sessions)){
+        const remote=data.docs.table_sessions.filter(s=>s.status==='open').map(s=>({...s,session_items:data.docs.session_items.filter(i=>i.session_id===s.id),restaurant_tables:data.docs.restaurant_tables.find(t=>t.id===s.table_id)||null}));
+        state.sessions=mergeOptimisticSessions(remote);renderAdminShell();
+      }
       let catalogChanged=false;
       if(Array.isArray(data.docs.menu_items)&&Array.isArray(data.docs.menu_categories)){
         const signature=JSON.stringify([data.docs.menu_items,data.docs.menu_categories]);
@@ -6783,7 +6789,7 @@ const App = (() => {
       return;
     }
     form.reset();
-    window.OperationsPanel?.updateCustomers();if(form.customer_id)form.customer_id.value=BranchStorage.getItem("session-customer-selection:"+session.id)||"";if(form.credit_due_date)form.credit_due_date.required=false;if(form.customer_id)form.customer_id.required=false;
+    window.OperationsPanel?.updateCustomers();if(form.customer_id)form.customer_id.value=session.customer_id||BranchStorage.getItem("session-customer-selection:"+session.id)||"";if(form.credit_due_date)form.credit_due_date.required=false;if(form.customer_id)form.customer_id.required=false;
     form.session_id.value = session.id;
     form.payment_method.value = "cash";
     form.mixed_method_one.value = "cash";
@@ -7497,7 +7503,7 @@ const App = (() => {
       return null;
     }
 
-    const temporaryIds = new Set(optimisticItems.map((item) => item.id));
+    const temporaryIds = new Set([...optimisticItems,...savedItems].map((item) => item.id));
     let confirmedSession = null;
     state.sessions = state.sessions.map((entry) => entry.id === persistedSessionId
       ? (confirmedSession = {
@@ -7687,6 +7693,12 @@ const App = (() => {
     }, 0);
   };
 
+  document.addEventListener('gcobarf-calendar-date',()=>renderAdminShell());
+  document.addEventListener('gcobarf-open-delivery',async event=>{
+    let session=state.sessions.find(s=>s.id===event.detail.id);
+    if(!session){const result=await state.sb.from('table_sessions').select('*').eq('id',event.detail.id).maybeSingle();if(result.error||!result.data)return;session=result.data;state.sessions.push(session);}
+    openConsumptionDialog(session.id);if(session.customer_id){await window.OperationsPanel?.refreshCustomers();const form=$('#consumptionForm');if(form.session_id.value===session.id&&form.credit_customer_id){form.credit_customer_id.value=session.customer_id;form.credit_customer_id.dispatchEvent(new Event('change',{bubbles:true}));}}
+  });
   const cancelConsumption = () => {
     const form = $("#consumptionForm");
     if (!form) return;

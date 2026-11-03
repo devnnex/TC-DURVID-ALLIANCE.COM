@@ -10,7 +10,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Admin - Servicio a la mesa</title>
+    <title>GCOBARF - Agenda de entregas</title>
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="manifest" href="manifest.webmanifest" id="appManifest" type="application/manifest+json">
     <link rel="icon" href="../../assets/logo.png" id="appFavicon" type="image/png">
@@ -22,7 +22,7 @@
     <script src="../../operational/currency.js?v=20261011-proposal-2"></script>
     <script src="../../api-config.js"></script>
     <script src="config.js"></script>
-  <style>:root{--accent:#407dd6;} .primary{background:var(--accent)!important;} .eyebrow{color:var(--accent)!important;} .admin-sidebar nav a{border-left-color:var(--accent)!important;} .admin-sidebar nav a.active{border-color:var(--accent)!important;} #costing .cost-excel-table td:has(>[data-sheet-remove]){white-space:nowrap} #costing [data-sheet-remove]{margin-left:6px;color:#a33;background:#fff5f5}</style><link rel="stylesheet" href="../../operational/ingredient-yield.css?v=20261023"><link rel="stylesheet" href="../../operational/materials.css?v=20261023"></head>
+  <style>:root{--accent:#407dd6;} .primary{background:var(--accent)!important;} .eyebrow{color:var(--accent)!important;} .admin-sidebar nav a{border-left-color:var(--accent)!important;} .admin-sidebar nav a.active{border-color:var(--accent)!important;} #costing .cost-excel-table td:has(>[data-sheet-remove]){white-space:nowrap} #costing [data-sheet-remove]{margin-left:6px;color:#a33;background:#fff5f5}</style><link rel="stylesheet" href="../../operational/ingredient-yield.css?v=20261023"><link rel="stylesheet" href="../../operational/materials.css?v=20261023"><link rel="stylesheet" href="../../operational/gcobarf-calendar.css"></head>
   <body data-page="admin">
     <audio id="alarmAudio" src="sound/alarm.mp3" preload="auto"></audio>
 
@@ -100,7 +100,7 @@
           <span class="live-status" id="realtimeStatus"><i data-lucide="wifi"></i> Conectando en vivo</span>
         </div>
         <div class="admin-header-actions">
-          <a class="primary" href="index.html"><i data-lucide="external-link"></i> Tomar pedido</a>
+          <button type="button" class="primary" data-delivery-quick>Programar entrega</button>
         </div>
       </header>
 
@@ -880,5 +880,5 @@
     <script src="../../operational/forms.js?v=20261017-sheet-layout"></script>
     <script src="../../operational/sales-range.js"></script>
     <script>document.write(`<script src="../../operational/app.js?v=${window.__APP_ASSET_VERSION__}"><\/script>`);</script>
-  <script src="../../operational/costing-engine.js?v=20261017-production-prices"></script><script src="../../operational/costing.js?v=20261017-production-prices"></script><script src="../../operational/ingredient-yield.js?v=20261023"></script><script src="../../operational/materials-engine.js?v=20261023"></script><script src="../../operational/materials.js?v=20261023"></script></body>
+  <script src="../../operational/costing-engine.js?v=20261017-production-prices"></script><script src="../../operational/costing.js?v=20261017-production-prices"></script><script src="../../operational/ingredient-yield.js?v=20261023"></script><script src="../../operational/materials-engine.js?v=20261023"></script><script src="../../operational/materials.js?v=20261023"></script><script src="../../operational/gcobarf-calendar.js"></script></body>
 </html>

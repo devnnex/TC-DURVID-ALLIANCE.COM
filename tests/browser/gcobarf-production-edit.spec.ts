@@ -76,12 +76,12 @@ test('GCOBARF: fecha del guardado y recálculo al editar cada dato de la compra'
   await page.clock.setFixedTime(new Date('2026-11-01T05:01:00Z'));
   for(const change of [
     {field:'purchasePrice',value:'18000',cost:'9.000'},
-    {field:'quantity',value:'3',cost:'9.000'},
-    {field:'unit',value:'unit',cost:'9.000'},
-    {field:'unit',value:'l',cost:'9.000'},
-    {field:'unit',value:'kg',cost:'9.000'},
-    {field:'unit',value:'g',cost:'9.000'},
-    {field:'unit',value:'g',purchaseQuantity:'3000',cost:'9.000'}
+    {field:'quantity',value:'3',cost:'3.000'},
+    {field:'unit',value:'unit',cost:'3.000'},
+    {field:'unit',value:'l',cost:'3.000'},
+    {field:'unit',value:'kg',cost:'3.000'},
+    {field:'unit',value:'g',cost:'3.000'},
+    {field:'unit',value:'g',purchaseQuantity:'3000',cost:'3.000'}
   ]){
     await edit.click();await expect(modal.locator('[name=purchaseDate]')).toHaveValue('2026-11-01');
     const control=modal.locator(`[name=${change.field}]`);
@@ -95,7 +95,7 @@ test('GCOBARF: fecha del guardado y recálculo al editar cada dato de la compra'
     if(change.field==='unit')expect(model.recipes[0].lines[0].unit).toBe(change.value);
   }
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
-  await expect(page.locator('[data-sheet-production-unit]')).toContainText('9.000');
+  await expect(page.locator('[data-sheet-production-unit]')).toContainText('3.000');
   await page.getByRole('button',{name:'+ Agregar insumo',exact:true}).click();
   await expect(modal.locator('[name=purchaseDate]')).toHaveValue('2026-11-01');
   await modal.locator('[name=name]').fill('Bolsas nuevas');await modal.locator('[name=quantity]').fill('1');
@@ -104,7 +104,7 @@ test('GCOBARF: fecha del guardado y recálculo al editar cada dato de la compra'
   await modal.locator('[type=submit]').click();await expect(modal).toHaveCount(0);
   await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   expect((await saved()).ingredients.at(-1).purchaseDate).toBe('2026-11-02');
-  await expect(page.locator('[data-sheet-production-unit]')).toContainText('10.000');
+  await expect(page.locator('[data-sheet-production-unit]')).toContainText('4.000');
 });
 
 test('GCOBARF: Libras disponible al crear y editar, con costo y unidad persistidos',async({page})=>{
@@ -129,7 +129,8 @@ test('GCOBARF: Libras disponible al crear y editar, con costo y unidad persistid
   await expect(modal).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
   await expect(row.locator('[data-sheet-line]')).toHaveValue('3');
-  await expect(row.locator('[data-sheet-line-cost]')).toContainText('30.000');
+  await expect(row.locator('[data-sheet-final-weight]')).toHaveValue('2');
+  await expect(row.locator('[data-sheet-line-cost]')).toContainText('20.000');
   await row.getByRole('button',{name:'Editar',exact:true}).click();await expect(modal.locator('[name=unit]')).toHaveValue('lb');
 });
 
@@ -143,6 +144,7 @@ for(const sample of [{name:'Bolsa 500G',unit:'unit'},{name:'Pollo',unit:'kg'},{n
   },sample);
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
   await page.locator('[data-sheet-line]').fill('600');
+  await page.locator('[data-sheet-final-weight]').fill('500');
   await page.locator('[data-sheet-editor=ingredients][data-key=chicken]').click();
   const modal=page.locator('#costSheetEditor');
   await modal.locator('[name=quantity]').fill('500');await modal.locator('[name=purchasePrice]').fill('55000');
@@ -187,6 +189,7 @@ for(const sample of [{name:'Bolsas',unit:'unit'},{name:'Carne',unit:'kg'},{name:
   },sample);
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
   await page.locator('[data-sheet-line]').fill('600');
+  await page.locator('[data-sheet-final-weight]').fill('500');
   const modal=page.locator('#costSheetEditor');
   for(let attempt=0;attempt<2;attempt++){
     await page.locator('[data-sheet-editor=ingredients][data-key=chicken]').click();
@@ -209,11 +212,11 @@ for(const sample of [{name:'Bolsas',unit:'unit'},{name:'Carne',unit:'kg'},{name:
   }
 });
 
-test('GCOBARF: Inicio sólo personas, secciones suspendidas y clientes disponibles',async({page})=>{
+test('GCOBARF: Inicio con calendario, secciones suspendidas y clientes disponibles',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await open(page);
   await page.locator('.admin-sidebar [href="#dashboard"]').click();
-  await expect(page.locator('#tablesGrid .lucide-user-round')).toHaveCount(24);
-  await expect(page.locator('.dashboard-tables-panel h2')).toHaveText('Personas');
+  await expect(page.locator('#tablesGrid')).toBeHidden();
+  await expect(page.locator('#deliveryCalendar')).toContainText('Entregas programadas');
   for(const section of ['service','accounts','menu']){
     await expect(page.locator(`.admin-sidebar [href="#${section}"]`)).toHaveCount(0);
     await expect(page.locator(`template[data-gcobarf-suspended="${section}"]`)).toHaveCount(1);
@@ -221,9 +224,8 @@ test('GCOBARF: Inicio sólo personas, secciones suspendidas y clientes disponibl
   await expect(page.locator('.admin-sidebar [href="#customers"]')).toBeVisible();
   await page.locator('.admin-sidebar [href="#customers"]').click();await expect(page.locator('#customers')).toBeVisible();
   await page.locator('.admin-sidebar [href="#dashboard"]').click();
-  await page.locator('#tablesGrid [data-open-table]').first().click();await expect(page.locator('#consumptionContextIcon .lucide-user-round')).toBeVisible();
-  await page.locator('[data-cancel-consumption]').first().click();
-  await page.reload();await expect(page.locator('#tablesGrid .lucide-user-round')).toHaveCount(24);expect(errors).toEqual([]);
+  await expect(page.locator('[data-delivery-new]')).toBeVisible();
+  await page.reload();await expect(page.locator('#deliveryCalendar')).toBeVisible();await expect(page.locator('#tablesGrid')).toBeHidden();expect(errors).toEqual([]);
 });
 
 for(const branch of ['gcobarf','cocteleria','cafeteria','sucursal'])test(`borrador de merma al cerrar por accidente: ${branch}`,async({page})=>{

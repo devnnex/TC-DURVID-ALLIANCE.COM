@@ -61,7 +61,7 @@ test('GCOBARF: macro directa, precio unitario, historial y costeo con el insumo 
   await editor.locator('[name=name]').fill('Producción con bolsas');await editor.locator('[name=newChannelName]').fill('Directa');
   await editor.locator('[type=submit]').click();await expect(editor).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await page.locator('[data-sheet-editor=ingredients]').click();editor=page.locator('#costSheetEditor');
-  await editor.locator('[name=stockId]').selectOption(stockId!);await editor.locator('[name=quantity]').fill('20');
+  await editor.getByRole('combobox',{name:'Buscar y seleccionar insumo'}).fill('Bolsa');await editor.getByRole('option',{name:/Bolsa 500G/}).click();await editor.locator('[name=quantity]').fill('20');
   await expect(editor.locator('[name=purchasePrice]')).toHaveValue('$2.000');await editor.locator('[type=submit]').click();
   await expect(editor).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('2.000');
@@ -125,7 +125,7 @@ test('GCOBARF usa la unidad de la macro al seleccionar o editar y convierte los 
   await expect(editor.locator('[name=unit]')).toHaveValue('kg');await expect(editor.locator('[name=unit]')).toBeDisabled();
   await expect(editor.locator('[name=quantity]')).toHaveValue('1');await editor.locator('[data-sheet-close]').click();
   await page.locator('[data-sheet-editor=ingredients][data-key=""]').click();
-  await editor.locator('[name=stockId]').selectOption(stockId!);await expect(editor.locator('[name=unit]')).toHaveValue('kg');
+  await editor.getByRole('combobox',{name:'Buscar y seleccionar insumo'}).fill('Carne');await editor.getByRole('option',{name:'Carne macro · kg',exact:true}).click();await expect(editor.locator('[name=unit]')).toHaveValue('kg');
   await expect(editor.locator('[name=unit]')).toBeDisabled();await editor.locator('[name=quantity]').fill('2');
   await editor.locator('[type=submit]').click();await expect(editor).toHaveCount(0);await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await expect(page.locator('[data-sheet-line]').nth(1)).toHaveValue('2');

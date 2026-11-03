@@ -29,7 +29,7 @@ globalThis.AllianceCosting = (() => {
   }
   // Correcting the purchase presentation also corrects its recipe references.
   // Within a family keep physical quantities; across families keep purchase quantities.
-  function updateIngredient(model,row,{recipeId,syncQuantity=false}={}){
+  function updateIngredient(model,row,{recipeId,syncQuantity=false,preserveFinal=false}={}){
     const previous=model.ingredients.find(i=>i.id===row.id);
     const yields=new Map(model.recipes.flatMap(recipe=>recipe.lines.filter(line=>line.ingredientId===row.id&&line.initialQuantity!==undefined).map(line=>[line,processingFactor(line)])));
     if(previous&&units[previous.unit]&&units[row.unit]&&units[previous.unit].family!==units[row.unit].family){
@@ -40,7 +40,7 @@ globalThis.AllianceCosting = (() => {
     // A correction made from a production row must update that row's inputs too.
     if(previous&&recipeId&&(syncQuantity||previous.unit!==row.unit||Number(previous.quantity)!==Number(row.quantity))){
       const recipe=model.recipes.find(r=>r.id===recipeId);
-      for(const line of recipe?.lines||[])if(line.ingredientId===row.id){line.quantity=row.quantity;line.unit=row.unit;if(line.initialQuantity!==undefined){line.initialQuantity=row.quantity;line.quantity=row.quantity*yields.get(line);}}
+      for(const line of recipe?.lines||[])if(line.ingredientId===row.id){const final=preserveFinal&&line.initialQuantity!==undefined?(units[line.unit]?.family===units[row.unit]?.family?convert(line.quantity,line.unit,row.unit):line.quantity):null;line.quantity=row.quantity;line.unit=row.unit;if(line.initialQuantity!==undefined){line.initialQuantity=row.quantity;line.quantity=final??row.quantity*yields.get(line);if(final!==null)line.processing={...processingDefaults(),clean:Math.max(0,(line.initialQuantity-final)/line.initialQuantity*100)};}}
     }
     const index=model.ingredients.findIndex(i=>i.id===row.id);if(index<0)model.ingredients.push(row);else model.ingredients[index]=row;
     return model;

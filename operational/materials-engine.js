@@ -53,6 +53,17 @@ globalThis.AllianceMaterialsEngine=(()=>{
     }
     return state;
   }
-  function syncProcessing(state,oldModel,actor){if(!oldModel)return;for(const linked of [...state.operations.recipes].filter(r=>r.managed)){const before=oldModel.recipes.find(r=>r.id===linked.recipeId),after=state.costing.model.recipes.find(r=>r.id===linked.recipeId),key=r=>JSON.stringify(r.lines.filter(l=>l.processing||l.initialQuantity!==undefined).map(l=>({ingredientId:l.ingredientId,...(l.initialQuantity!==undefined?{initialQuantity:l.initialQuantity,quantity:l.quantity,unit:l.unit}:{}),...(l.processing?{processing:l.processing}:{})})));if(before&&after&&key(before)!==key(after)){for(const map of linked.mappings){const ing=state.costing.model.ingredients.find(i=>i.id===map.ingredientId),raw=state.operations.ingredients.find(i=>i.id===map.stockId);if(ing&&raw)ing.purchasePrice=raw.unitCost*E().convert(ing.quantity,ing.unit,raw.unit,state.units)*(ing.recoverableTax?1+ing.purchaseTaxRate/100:1);}apply(state,{id:crypto.randomUUID(),command:'materials_link',payload:{productId:linked.productId,recipeId:linked.recipeId,revision:state.costing.revision,salePortions:linked.salePortions,mappings:linked.mappings}},actor);}}}
+  function syncProcessing(state,oldModel,actor){
+    if(!oldModel)return;
+    for(const linked of [...state.operations.recipes].filter(r=>r.managed)){
+      const before=oldModel.recipes.find(r=>r.id===linked.recipeId),after=state.costing.model.recipes.find(r=>r.id===linked.recipeId);
+      if(!before||!after)continue;
+      const key=r=>JSON.stringify(r.lines.filter(l=>l.processing||l.initialQuantity!==undefined).map(l=>({ingredientId:l.ingredientId,...(l.initialQuantity!==undefined?{initialQuantity:l.initialQuantity,quantity:l.quantity,unit:l.unit}:{}),...(l.processing?{processing:l.processing}:{})})));
+      const mappings=globalThis.BRANCH_CONFIG?.slug==='gcobarf'?[...new Set(after.lines.map(l=>l.ingredientId))].map(ingredientId=>({ingredientId,stockId:state.costing.model.ingredients.find(i=>i.id===ingredientId)?.stockId||linked.mappings.find(m=>m.ingredientId===ingredientId)?.stockId})):linked.mappings;
+      if(key(before)===key(after)&&JSON.stringify(mappings)===JSON.stringify(linked.mappings))continue;
+      for(const map of mappings){const ing=state.costing.model.ingredients.find(i=>i.id===map.ingredientId),raw=state.operations.ingredients.find(i=>i.id===map.stockId);if(ing&&raw)ing.purchasePrice=raw.unitCost*E().convert(ing.quantity,ing.unit,raw.unit,state.units)*(ing.recoverableTax?1+ing.purchaseTaxRate/100:1);}
+      apply(state,{id:crypto.randomUUID(),command:'materials_link',payload:{productId:linked.productId,recipeId:linked.recipeId,revision:state.costing.revision,salePortions:linked.salePortions,mappings}},actor);
+    }
+  }
   return {norm,base,stockSuggestion,reserved,shortages,guard,portions,apply,syncProcessing};
 })();
