@@ -3,6 +3,19 @@ globalThis.AllianceMaterialsEngine=(()=>{
   const E=()=>AllianceOperationsEngine,round=n=>Math.round(n*1e8)/1e8;
   const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLowerCase();
   const base=u=>['g','kg','lb','oz'].includes(u)?'g':['ml','l'].includes(u)?'ml':'u';
+  function stockSuggestion(state,ingredient){
+    const compatible=state.operations.ingredients.filter(raw=>!raw.archived&&base(raw.unit)===base(ingredient.unit));
+    const unique=ids=>{const matches=compatible.filter(raw=>ids.has(raw.id));return {stockId:matches.length===1?matches[0].id:null,ambiguous:matches.length>1};};
+    if(ingredient.stockId){const result=unique(new Set([ingredient.stockId]));if(result.stockId)return result;}
+    const linked=state.operations.recipes.filter(r=>r.managed&&state.docs.menu_items.some(p=>p.id===r.productId));
+    const same=unique(new Set(linked.flatMap(r=>(r.mappings||[]).filter(m=>m.ingredientId===ingredient.id).map(m=>m.stockId))));
+    if(same.stockId||same.ambiguous)return same;
+    const exact=unique(new Set(compatible.filter(raw=>norm(raw.name)===norm(ingredient.name)).map(raw=>raw.id)));
+    if(exact.stockId||exact.ambiguous)return exact;
+    const catalog=state.costing?.model?.ingredients||[];
+    const commonIds=new Set(catalog.filter(i=>norm(i.name)===norm(ingredient.name)&&base(i.unit)===base(ingredient.unit)).map(i=>i.id));
+    return unique(new Set(linked.flatMap(r=>(r.mappings||[]).filter(m=>commonIds.has(m.ingredientId)).map(m=>m.stockId))));
+  }
   function fail(message,code='MATERIALS_INPUT',details){const e=new Error(message);e.code=code;e.materials=details;throw e;}
   function number(v,label,min=0,max=1e12){if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)fail('Revisa '+label+'.');return v;}
   function reserved(state,excludeSession){const sums=new Map();for(const line of state.docs.session_items||[]){if(line.status==='cancelled'||line.session_id===excludeSession||!state.docs.table_sessions.some(s=>s.id===line.session_id&&s.status==='open'))continue;const r=state.operations.recipes.find(r=>r.productId===line.menu_item_id&&r.managed);if(!r)continue;for(const p of r.lines){const i=state.operations.ingredients.find(i=>i.id===p.ingredientId);if(i)sums.set(i.id,(sums.get(i.id)||0)+E().convert(p.quantity,p.unit,i.unit,state.units)*line.quantity);}}return sums;}
@@ -41,5 +54,5 @@ globalThis.AllianceMaterialsEngine=(()=>{
     return state;
   }
   function syncProcessing(state,oldModel,actor){if(!oldModel)return;for(const linked of [...state.operations.recipes].filter(r=>r.managed)){const before=oldModel.recipes.find(r=>r.id===linked.recipeId),after=state.costing.model.recipes.find(r=>r.id===linked.recipeId),key=r=>JSON.stringify(r.lines.filter(l=>l.processing||l.initialQuantity!==undefined).map(l=>({ingredientId:l.ingredientId,...(l.initialQuantity!==undefined?{initialQuantity:l.initialQuantity,quantity:l.quantity,unit:l.unit}:{}),...(l.processing?{processing:l.processing}:{})})));if(before&&after&&key(before)!==key(after)){for(const map of linked.mappings){const ing=state.costing.model.ingredients.find(i=>i.id===map.ingredientId),raw=state.operations.ingredients.find(i=>i.id===map.stockId);if(ing&&raw)ing.purchasePrice=raw.unitCost*E().convert(ing.quantity,ing.unit,raw.unit,state.units)*(ing.recoverableTax?1+ing.purchaseTaxRate/100:1);}apply(state,{id:crypto.randomUUID(),command:'materials_link',payload:{productId:linked.productId,recipeId:linked.recipeId,revision:state.costing.revision,salePortions:linked.salePortions,mappings:linked.mappings}},actor);}}}
-  return {norm,base,reserved,shortages,guard,portions,apply,syncProcessing};
+  return {norm,base,stockSuggestion,reserved,shortages,guard,portions,apply,syncProcessing};
 })();

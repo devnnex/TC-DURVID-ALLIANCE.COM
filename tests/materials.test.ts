@@ -9,6 +9,24 @@ const apply=(s:any,command:string,payload:any)=>{const next=structuredClone(s);r
 const link={productId:'product',recipeId:'recipe',revision:1,salePortions:1,mappings:[{ingredientId:'tartara',stockId:'raw-tartara'},{ingredientId:'milk',stockId:'raw-milk'}]};
 function ready(){let s=apply(initial(),'materials_link',link);for(const [id,unit]of [['raw-tartara','g'],['raw-milk','ml']])s=apply(s,'materials_adjust',{ingredientId:id,quantity:1000,unit,kind:'in',totalCost:10000,reason:'Abastecer'});return s;}
 describe('Macro de insumos y recetas por unidad vendida',()=>{
+  it('reutiliza el insumo compartido para ingredientes nuevos aunque cambie el nombre en la macro',()=>{
+    const s=ready(),raw=s.operations.ingredients.find((i:any)=>i.id==='raw-milk');raw.name='Leche entera central';
+    const ingredient={...s.costing.model.ingredients.find((i:any)=>i.id==='milk'),id:'future-milk',name:'  LECHE  '};
+    s.costing.model.ingredients.push(ingredient);
+    expect(M.stockSuggestion(s,ingredient)).toEqual({stockId:'raw-milk',ambiguous:false});
+    expect(s.operations.ingredients).toHaveLength(2);expect(raw.quantity).toBe(1000);
+    raw.archived=true;expect(M.stockSuggestion(s,ingredient)).toEqual({stockId:null,ambiguous:false});
+  });
+  it('conserva las referencias explícitas y pide elegir cuando las recetas usan saldos diferentes',()=>{
+    const s=ready();s.operations.ingredients.find((i:any)=>i.id==='raw-milk').name='Leche A';
+    s.operations.ingredients.push({id:'other-milk',name:'Leche B',unit:'ml',quantity:500});
+    s.docs.menu_items.push({id:'other-product',name:'Otro producto'});
+    s.operations.recipes.push({productId:'other-product',managed:true,mappings:[{ingredientId:'milk',stockId:'other-milk'}]});
+    const ingredient={id:'future-milk',name:'Leche',unit:'ml'};
+    expect(M.stockSuggestion(s,ingredient)).toEqual({stockId:null,ambiguous:true});
+    expect(M.stockSuggestion(s,{...ingredient,stockId:'raw-milk'})).toEqual({stockId:'raw-milk',ambiguous:false});
+    expect(M.stockSuggestion(s,{...ingredient,unit:'g'})).toEqual({stockId:null,ambiguous:false});
+  });
   it('descuenta el peso inicial medido de la macro y conserva la pérdida al vincular',()=>{
     const s=ready(),before=structuredClone(s.costing.model),recipe=s.costing.model.recipes[0];
     delete recipe.sheet;recipe.lines.forEach((l:any)=>delete l.stage);

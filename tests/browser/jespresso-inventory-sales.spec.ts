@@ -83,5 +83,34 @@ for(const branch of ['cafeteria','cocteleria'])test(`inventario y dos recetas co
   expect(server.state.operations.ingredients.find((i:any)=>i.id==='milk').quantity).toBe(600);
   expect(server.state.sales).toHaveLength(1);
   expect(server.counts().ackLost).toBe(true);
+  // A product created later has its own costing ingredient, but shares the same physical stock.
+  await page.locator('#receiptResultDialog').evaluate((d:HTMLDialogElement)=>d.close());
+  await page.evaluate(async()=>{
+    const w=window as any,s=await w.OracleDb.remote('operations_snapshot'),raw=s.model.ingredients.find((i:any)=>i.id==='milk'),id=crypto.randomUUID();
+    await w.OracleDb.remote('operations_apply',{id,command:'materials_save',payload:{id:raw.id,revision:raw.revision,name:'Leche entera central',unit:raw.unit,quantity:raw.quantity,minStock:raw.minStock}},id);
+  });
+  await page.locator('.admin-sidebar [href="#costing"]').click();
+  await page.getByRole('button',{name:'+ Nuevo producto',exact:true}).click();
+  await page.locator('[data-j-path=name]').fill('Receta futura');
+  await page.locator('[data-j-ingredient=name]').fill('LECHE');
+  await page.locator('[data-j-path="lines.0.unit"]').selectOption('ml');
+  await page.locator('[data-j-path="lines.0.quantity"]').fill('80');
+  await page.locator('[data-j-ingredient=purchasePrice]').fill('4000');
+  await page.getByRole('button',{name:'Agregar al inventario',exact:true}).click();
+  const futureForm=page.locator('#inventoryForm');
+  await expect(futureForm.locator('[data-material-map]')).toHaveValue('milk');
+  await expect(futureForm.locator('[data-material-inventory-status]')).toContainText('7 unidades disponibles');
+  await futureForm.locator('button[type=submit]').click();
+  await expect(page.locator('#inventoryDialog')).toBeHidden();
+  const future=await page.evaluate(async()=>{
+    const w=window as any,s=await w.OracleDb.remote('operations_snapshot'),product=s.docs.menu_items.find((p:any)=>p.name==='Receta futura'),id=crypto.randomUUID();
+    const invoice={id,number:'FUTURE-'+id,sessionId:'walk-'+id,saleChannel:'walk_in',table:'Venta individual',createdAt:new Date().toISOString(),items:[{id:crypto.randomUUID(),menu_item_id:product.id,item_name:product.name,quantity:2,unit_price:product.price}],totals:{subtotal:2*product.price,total:2*product.price,discount:0,tax:0,serviceFee:0,tip:0},payments:[{method:'transfer',amount:2*product.price}]};
+    await w.OracleDb.remote('record_sale',{invoice},id);return w.OracleDb.remote('operations_snapshot');
+  });
+  expect(future.model.ingredients).toHaveLength(2);expect(future.model.recipes).toHaveLength(3);
+  expect(future.model.ingredients.find((i:any)=>i.id==='milk').quantity).toBe(440);
+  expect(future.model.ingredients.find((i:any)=>i.id==='sauce').quantity).toBeCloseTo(1-5*75/8/1000,8);
+  await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending),{timeout:30000}).toBe(0);
+  expect(server.state.operations.ingredients.find((i:any)=>i.id==='milk').quantity).toBe(440);
   expect(errors).toEqual([]);
 });
