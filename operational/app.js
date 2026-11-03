@@ -33,6 +33,7 @@ const App = (() => {
   const USER_LIST_CACHE_KEY = "tienda_napoles_users_v1";
   const USER_CREDENTIALS_CACHE_KEY = "tienda_napoles_user_credentials_v1";
   const PWA_BRAND_CACHE = "alliance-"+window.BRANCH_CONFIG.slug+"-pwa-brand-v1";
+  const recipeInventory = () => ['cafeteria', 'cocteleria'].includes(window.BRANCH_CONFIG?.slug);
   const ADMIN_SECTION_KEYS = ["dashboard", "service", "accounts", "tips", "inventory", "movements", "income", "costing", /* "assistant", -- activar de nuevo cuando se solicite */ "menu", "brand", "supplies", "kitchen", "customers", "cash"];
   const CATEGORY_PRESETS = ["Snack", "Bebidas", "Medicina", "Otros"];
   const REQUEST_IMAGES = {
@@ -4087,11 +4088,16 @@ const App = (() => {
       ? products.map((item, index) => {
           const inventory = inventoryFor(item);
           const tracked = Object.prototype.hasOwnProperty.call(state.inventoryMeta, item.id);
-          const out = tracked && inventory.stock <= 0 && window.MaterialsPanel?.available(item.id)==null;
+          const portions = window.MaterialsPanel?.available(item.id);
+          const prepared = recipeInventory() && (portions != null || OracleDb.isPrepared?.(item.id));
+          const out = tracked && inventory.stock <= 0 && portions==null && !prepared;
+          const balance = recipeInventory() && portions != null
+            ? `${portions.toLocaleString('es-CO')} disponibles según insumos`
+            : tracked ? `${inventory.stock.toLocaleString('es-CO', { maximumFractionDigits: 2 })} ${escapeHTML(inventory.unit)}` : 'Sin stock configurado';
           return `<button type="button" class="product-combobox-option${products.length === 1 ? " is-selected" : ""}" role="option"
             id="consumption-product-${index}" data-consumption-product="${escapeHTML(item.id)}" aria-selected="${products.length === 1}" ${out ? "disabled" : ""}>
             <span class="product-option-code">${escapeHTML(inventory.code)}</span>
-            <span><strong>${escapeHTML(item.name)}</strong><small>${money(item.price)} · ${tracked ? `${inventory.stock.toLocaleString("es-CO", { maximumFractionDigits: 2 })} ${escapeHTML(inventory.unit)}` : "Sin stock configurado"}</small></span>
+            <span><strong>${escapeHTML(item.name)}</strong><small>${money(item.price)} · ${balance}</small></span>
             <em class="${out ? "is-out" : ""}">${out ? "Agotado" : icon("check", 16)}</em>
           </button>`;
         }).join("")
@@ -4101,6 +4107,12 @@ const App = (() => {
       : "Sin coincidencias: el nombre escrito puede guardarse como consumo personalizado.";
     refreshIcons();
   };
+
+  document.addEventListener('alliance-materials-updated', () => {
+    if (!recipeInventory() || !state.currentUser) return;
+    if ($('#consumptionDialog')?.open) renderConsumptionProductOptions($('#consumptionProductSearch')?.value || '');
+    if (state.activeAdminSection === 'inventory') renderInventory();
+  });
 
   const showConsumptionProductOptions = () => {
     const options = $("#consumptionProductOptions");
@@ -4691,6 +4703,9 @@ const App = (() => {
     delete form.dataset.costingSource;delete form.dataset.noDraft;
     form.querySelector('[data-costing-inventory-note]')?.remove();
     form.stock.required = false;
+    form.stock.disabled = false;
+    form.stock.closest('label').hidden = false;
+    form.stock.closest('label').style.removeProperty('display');
     form.min_stock.required = false;
     renderCategorySelects();
     form.product_id.value = "";
@@ -4792,8 +4807,16 @@ const App = (() => {
     form.new_category.value = assignment.category ? '' : assignment.name;
     setCurrencyInputValue(form.cost_price, draft.cost);
     setCurrencyInputValue(form.sale_price, draft.price);
-    form.stock.required = true;
-    form.min_stock.required = true;
+    const fromIngredients = recipeInventory() && !!draft.recipeId && !!window.MaterialsPanel;
+    form.stock.required = !fromIngredients;
+    form.stock.disabled = fromIngredients;
+    form.stock.closest('label').hidden = fromIngredients;
+    if (fromIngredients) form.stock.closest('label').style.display = 'none';
+    if (fromIngredients) {
+      if (!existing) form.stock.value = '0';
+      if (!form.min_stock.value) form.min_stock.value = '0';
+    }
+    form.min_stock.required = !fromIngredients;
     form.dataset.noDraft='true';form.dataset.costingSource = draft.recipeId;
     if(window.MaterialsPanel){form.materialRequired=true;void MaterialsPanel.attachInventory(form,draft).catch(e=>toast(e.message,'error'));}
     const note = document.createElement('div');
@@ -4804,6 +4827,7 @@ const App = (() => {
     title.textContent = existing ? 'Este producto ya está en tu inventario' : 'Tu producto ya está completado';
     const detail = document.createElement('p');
     detail.textContent = existing ? 'Actualizamos el costo y el precio en esta ficha. Conservamos las existencias y el stock mínimo: revísalos y guarda para confirmar.' : 'Trajimos el nombre, las siglas, la categoría, el costo por producto y el precio de venta. Solo escribe la existencia actual y el stock mínimo; puedes usar 0.';
+    if (fromIngredients) detail.textContent = 'La disponibilidad se calcula con los ingredientes de la macro. Vincula cada insumo: al vender se descontará la cantidad por unidad multiplicada por las unidades vendidas.';
     const explanation = document.createElement('small');
     explanation.textContent = 'Categoría: ' + assignment.name + (assignment.category ? ' · existente.' : ' · se creará al guardar.') + ' Costo: producción de una unidad. Los gastos mensuales se revisan por separado. Precio: total que paga el cliente' + (draft.taxAdded ? ', con el impuesto adicional incluido una sola vez' : '') + '. El margen de esta ficha es estimado; consulta impuestos y comisiones por canal en Costeo.';
     const summary = document.createElement('dl');
@@ -4832,13 +4856,14 @@ const App = (() => {
     $('#inventoryFormTitle').textContent = existing ? 'Actualizar desde costeo' : 'Agregar desde costeo';
     renderInventoryLiveCalculation();
     if (!$('#inventoryDialog').open) $('#inventoryDialog').showModal();
-    requestAnimationFrame(() => form.stock.focus({ preventScroll: true }));
+    requestAnimationFrame(() => (fromIngredients ? form.min_stock : form.stock).focus({ preventScroll: true }));
   };
 
   const saveInventoryProduct = async (form) => {
     if(form.materialRequired&&!form.materialScope){toast('Espera a que se carguen los vínculos de insumos.','error');return;}
     if(form.materialScope&&!form.reportValidity())return;
     if(!OracleDb.permission("inventory.write")||!OracleDb.permission("products.write")){toast("No tienes permiso para modificar el inventario.","error");return;}
+    if(recipeInventory()&&form.materialScope&&!await MaterialsPanel.canAddInventory(form))return;
     const name = form.product_name.value.trim();
     const costPrice = currencyInputNumber(form.cost_price);
     const salePrice = currencyInputNumber(form.sale_price);
