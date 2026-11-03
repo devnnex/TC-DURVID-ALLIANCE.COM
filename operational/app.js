@@ -4909,9 +4909,7 @@ const App = (() => {
     if(form.materialScope){form.product_id.value=saved.id;if(!await MaterialsPanel.linkFromInventory(form,saved.id))return;saved.is_available=form.is_available.checked;}
     const category = state.categories.find((entry) => entry.id === categoryId);
     const hydrated = { ...saved, menu_categories: category ? { name: category.name } : null };
-    state.items = id
-      ? state.items.map((item) => item.id === id ? hydrated : item)
-      : [...state.items, hydrated];
+    state.items = [...state.items.filter((item) => item.id !== saved.id), hydrated];
     state.inventoryMeta[saved.id] = {
       code: (form.product_code.value.trim() || productAcronym(name)).toUpperCase(),
       costPrice,
@@ -5489,15 +5487,29 @@ const App = (() => {
   };
 
   // The durable local snapshot is committed before this event. Keep all views on that same state.
-  let liveSnapshotTimer=null,liveSnapshot=null,liveInventorySignature='',liveMovementSignature='',liveSalesSignature='',liveAccountSignature='',liveViewUser='';
+  let liveSnapshotTimer=null,liveSnapshot=null,liveInventorySignature='',liveMovementSignature='',liveSalesSignature='',liveAccountSignature='',liveCatalogSignature='',liveViewUser='';
   document.addEventListener('alliance-operations-updated',event=>{
     if(state.page!=='admin'||!state.currentUser||!event.detail?.docs)return;
-    if(liveViewUser!==state.currentUser.id){liveViewUser=state.currentUser.id;liveInventorySignature=liveMovementSignature=liveSalesSignature=liveAccountSignature='';}
+    if(liveViewUser!==state.currentUser.id){liveViewUser=state.currentUser.id;liveInventorySignature=liveMovementSignature=liveSalesSignature=liveAccountSignature=liveCatalogSignature='';}
     liveSnapshot={...event.detail,viewUser:state.currentUser.id};if(liveSnapshotTimer!==null)return;
     liveSnapshotTimer=window.setTimeout(()=>{
       liveSnapshotTimer=null;const data=liveSnapshot;liveSnapshot=null;if(!state.currentUser||!data||data.viewUser!==state.currentUser.id)return;
+      let catalogChanged=false;
+      if(recipeInventory()&&Array.isArray(data.docs.menu_items)&&Array.isArray(data.docs.menu_categories)){
+        const signature=JSON.stringify([data.docs.menu_items,data.docs.menu_categories]);
+        if(signature!==liveCatalogSignature){
+          liveCatalogSignature=signature;catalogChanged=true;state.categories=data.docs.menu_categories;
+          state.items=data.docs.menu_items.map(item=>({...item,menu_categories:state.categories.find(c=>c.id===item.category_id)||item.menu_categories||null}));
+          persistBootstrapCache();
+        }
+      }
       const inventorySignature=JSON.stringify(data.inventory),accountSignature=JSON.stringify([data.docs.table_sessions,data.docs.session_items]);
       if(inventorySignature!==liveInventorySignature){liveInventorySignature=inventorySignature;applyRemoteInventoryItems(data.inventory);}
+      if(catalogChanged){
+        if($('#consumptionDialog')?.open)renderConsumptionProductOptions($('#consumptionProductSearch')?.value||'');
+        if(state.activeAdminSection==='inventory')renderInventory();
+        if(state.activeAdminSection==='menu')renderMenuManager();
+      }
       if(accountSignature!==liveAccountSignature){liveAccountSignature=accountSignature;if(state.activeAdminSection==='inventory')renderInventory();}
       if(Array.isArray(data.movements)&&canAccessAdminSection('movements')){
         const signature=JSON.stringify(data.movements);

@@ -10,6 +10,8 @@ En Jesspreso Oliva (Cafetería) y Coctelería, **Agregar al inventario** calcula
 
 Esto también se aplica a productos creados después. Al vincularlos, se reutiliza el insumo de la macro indicado por su referencia guardada, su nombre y medida compatibles, o por los vínculos de ingredientes comunes en recetas anteriores. Por ejemplo, una receta nueva con «Leche» reutiliza el saldo que otras recetas ya vincularon a «Leche entera central». No se crean existencias por cada producto. Si las recetas anteriores apuntan a varios insumos posibles, el formulario pide elegir cuál compartir.
 
+Al habilitar u ocultar una receta en Cafetería o Coctelería, Oracle actualiza conjuntamente el documento del menú y la disponibilidad del producto que devuelve Inventario. La sincronización del navegador incorpora los productos nuevos y sus cambios de disponibilidad al buscador de consumos, incluso si ya está abierto. Los productos ocultos intencionalmente siguen excluidos. `scripts/test-materials-live.ts` verifica este circuito contra Oracle con datos temporales aislados.
+
 Las cantidades del lote se dividen por las porciones producidas; las adiciones por porción se conservan. Ambas se multiplican por las porciones de una unidad vendida. Peso, volumen y unidades se convierten dentro de su propia dimensión. Ejemplo: 75 g de salsa para 8 porciones descuentan 9,375 g por porción.
 
 Vender 5 de esas porciones descuenta 46,875 g de salsa. Si además cada porción usa 80 ml de leche, se descuentan 400 ml. El descuento se registra una vez al cobrar, incluso al reintentar después de perder conexión.

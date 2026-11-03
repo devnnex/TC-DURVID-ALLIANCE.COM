@@ -14,6 +14,28 @@ async function enter(page:Page,branch:string){
   await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().lastSync)).not.toBeNull();
 }
 
+for(const branch of ['cafeteria','cocteleria'])test(`el buscador abierto recibe productos habilitados y nuevos del inventario · ${branch}`,async({page})=>{
+  const server=await backend(page);server.context.locations[0].slug=branch;
+  server.state.docs.menu_items[0].is_available=false;server.state.stock[product].isAvailable=false;
+  await enter(page,branch);await page.locator('#tablesGrid [data-open-table]').first().click();
+  await page.locator('#consumptionProductSearch').focus();await expect(page.locator('[data-consumption-product]')).toHaveCount(0);
+  server.state.docs.menu_items[0].is_available=true;server.state.stock[product].isAvailable=true;
+  const added='55555555-5555-4555-8555-555555555555';
+  server.state.docs.menu_items.push({id:added,name:'Producto nuevo compartido',category_id:'category',price:8000,is_available:true});
+  server.state.stock[added]={productId:added,name:'Producto nuevo compartido',code:'PNC',stock:5,costPrice:1000,salePrice:8000,minStock:0,isAvailable:true,version:1};
+  server.state.docs.menu_items.push({id:'hidden',name:'Producto oculto intencional',category_id:'category',price:1,is_available:false});
+  await page.evaluate(()=>void (window as any).AllianceOffline.prime(true));
+  await expect(page.locator('[data-consumption-product]')).toHaveCount(2);
+  await expect(page.locator('#consumptionProductOptions')).toContainText('Producto de prueba');
+  await expect(page.locator('#consumptionProductOptions')).toContainText('Producto nuevo compartido');
+  await expect(page.locator('#consumptionProductOptions')).not.toContainText('oculto intencional');
+  await page.locator(`[data-consumption-product="${added}"]`).click();
+  await expect(page.locator('#consumptionForm [name=menu_item_id]')).toHaveValue(added);
+  await page.locator('#consumptionDialog').evaluate((d:HTMLDialogElement)=>d.close());
+  await page.locator('.admin-sidebar [href="#inventory"]').click();
+  await expect(page.locator('#inventoryList')).toContainText('Producto nuevo compartido');
+});
+
 for(const branch of ['cafeteria','cocteleria'])test(`inventario y dos recetas comparten insumos; cinco ventas descuentan cinco porciones · ${branch}`,async({page,context})=>{
   test.setTimeout(90000);
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
