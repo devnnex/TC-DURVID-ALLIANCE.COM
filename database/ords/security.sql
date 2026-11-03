@@ -128,11 +128,13 @@ CREATE OR REPLACE PACKAGE BODY alliance_security AS
     SELECT expires_at-INTERVAL '7' DAY INTO login_time FROM alliance_api_sessions WHERE user_id=p_user AND access_hash=hash_text(p_access);
     ctx:=context_for(p_user);actor:=ctx.get_object('user');actor.put('last_login_at',TO_CHAR(login_time AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));ctx.put('user',actor);
     r.put('access_token',p_access);r.put('refresh_token',p_refresh);r.put('context',ctx);r.put('provider','oracle-ords');RETURN r;END;
-  FUNCTION issue_session(p_user VARCHAR2) RETURN JSON_OBJECT_T IS u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);
+  FUNCTION issue_session(p_user VARCHAR2) RETURN JSON_OBJECT_T IS u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);slug_value VARCHAR2(80);
   BEGIN SELECT * INTO u FROM users WHERE id=p_user AND active=1;
     access_value:=LOWER(RAWTOHEX(DBMS_CRYPTO.RANDOMBYTES(32)));refresh_value:=LOWER(RAWTOHEX(DBMS_CRYPTO.RANDOMBYTES(32)));
     DELETE FROM alliance_api_sessions WHERE expires_at<SYSTIMESTAMP-INTERVAL '1' DAY;
     INSERT INTO alliance_api_sessions(id,business_id,user_id,access_hash,refresh_hash,access_expires,expires_at) VALUES(new_id,u.business_id,u.id,hash_text(access_value),hash_text(refresh_value),SYSTIMESTAMP+INTERVAL '15' MINUTE,SYSTIMESTAMP+INTERVAL '7' DAY);
+    SELECT slug INTO slug_value FROM businesses WHERE id=u.business_id;
+    DELETE FROM alliance_login_limits WHERE bucket IN(hash_text('login:'||slug_value||':'||u.username),hash_text('challenge:'||slug_value||':'||u.username));
     RETURN session_result(u.id,access_value,refresh_value);
   END;
   FUNCTION login(p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS slug_value VARCHAR2(80);username_value users.username%TYPE;password_value VARCHAR2(128);u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);valid BOOLEAN;

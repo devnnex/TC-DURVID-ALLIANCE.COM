@@ -9525,17 +9525,18 @@ const App = (() => {
       form?.addEventListener("submit", async (event) => {
         event.preventDefault();
         const button = form.querySelector("[type='submit']");
+        if (button?.disabled) return;
         const errorBox = $("#loginError");
         if (button) { button.disabled = true; button.dataset.originalText=button.innerHTML; button.textContent="Verificando acceso…"; }
         if (errorBox) errorBox.textContent = "";
         window.AllianceLoginFeedback?.show();
-        const session = await dbQuiet(state.sb.rpc("login", {
+        const {data:session,error:loginError} = await state.sb.rpc("login", {
           username: form.username.value.trim(),
           pin: form.pin.value
-        }), null);
+        });
         if (!session?.token || !session?.user) {
           window.AllianceLoginFeedback?.hide();
-          if (errorBox) errorBox.textContent = "Usuario o contraseña incorrectos, o sucursal sin acceso.";
+          if (errorBox) errorBox.textContent = loginError?.message || "Usuario o contraseña incorrectos, o sucursal sin acceso.";
           if (button) { button.disabled = false; button.innerHTML=button.dataset.originalText; }
           return;
         }

@@ -1,5 +1,18 @@
 import {test,expect} from '@playwright/test';
 
+for(const [status,message] of [[429,'Demasiados intentos. Intenta nuevamente mas tarde.'],[401,'Usuario o contrasena incorrectos.']] as const)test(`muestra el motivo real del rechazo de acceso: ${status}`,async({page})=>{
+  await page.context().route('**/ords/**',async route=>{
+    await route.fulfill({contentType:'application/json',body:JSON.stringify({status,data:{error:{message}}})});
+  });
+  await page.goto('/negocios/cocteleria/admin.html');
+  await page.locator('#loginForm [name=username]').fill('tester');await page.locator('#loginForm [name=pin]').fill('test-password');
+  await page.locator('#loginForm button[type=submit]').click();
+  await expect(page.locator('#loginError')).toHaveText(message);
+  await expect(page.locator('#loginForm button[type=submit]')).toBeEnabled();
+  await expect(page.locator('#adminLogin')).toBeVisible();
+  expect(await page.evaluate(()=>sessionStorage.getItem('alliance-ords-refresh'))).toBeNull();
+});
+
 test('ingreso responde al clic, usa la vista autorizada de Oracle y salir no espera la red',async({page})=>{
   await page.route('**/api-config.js*',route=>route.fulfill({contentType:'application/javascript',body:"window.ALLIANCE_CONFIG={API_URL:'https://example.oraclecloudapps.com/ords/admin/alliance/api/v1'};"}));
   const branchId='11111111-1111-4111-8111-111111111111',userId='22222222-2222-4222-8222-222222222222';

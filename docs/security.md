@@ -2,6 +2,8 @@
 
 **Actualización 2026-10-09:** la conexión principal está activa mediante Oracle ORDS. Live Server y GitHub Pages usan la misma API HTTPS. Ver [conexión y mantenimiento](public-api.md). Los pasos Node/TLS siguientes corresponden a la alternativa técnica conservada.
 
+Los límites de acceso de Oracle conservan los intentos incorrectos consecutivos. Un ingreso verificado reinicia los contadores de contraseña y desafío de esa cuenta; los accesos correctos no se acumulan hasta bloquear al usuario. El formulario muestra el mensaje real del servidor para distinguir credenciales incorrectas, límites de intentos y errores de conexión. `scripts/test-auth-proof-live.ts` comprueba accesos correctos repetidos y el bloqueo ante contraseñas incorrectas en una cuenta temporal.
+
 Oracle solo desde API; bind parameters y pool Thin. Contraseña con scrypt y salt aleatorio, comparación timingSafeEqual. JWT firmado con secret externo, expires, issuer y audience; cada request comprueba auth_session activa y usuario habilitado. Refresh hash persistido, rotación y logout revocable. No se reutilizan PIN/tokens Supabase ni claves de servicio en frontend.
 
 Contexto se resuelve desde sesión + grants de usuario; FK compuestas y queries scoped aportan aislamiento adicional. Registro de device validado por usuario y sucursal; eventos con actor, versión y hash. products.write se verifica antes de procesar o devolver recibos. Logs redaccionan Authorization/cookie/password/setup token, errores Oracle no se muestran al usuario.
