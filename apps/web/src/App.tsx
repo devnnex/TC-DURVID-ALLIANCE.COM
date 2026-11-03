@@ -1,3 +1,4 @@
+import '../../../operational/browser-storage.js';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type CSSProperties } from 'react';
 import { Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -17,15 +18,16 @@ import { ConnectionStatus, useInstallation } from './ConnectionStatus';
 
 type SessionView={context:Context;provider:string;validated_at:number};
 const storageKey='tc-alliance-session-view-v1';
+const browserStorage=(globalThis as unknown as {AllianceBrowserStorage:Pick<Storage,'getItem'|'setItem'|'removeItem'>}).AllianceBrowserStorage;
 const message=(e:unknown)=>e instanceof Error?e.message:'No se pudo completar la operación.';
 const when=(value?:string)=>value?new Intl.DateTimeFormat('es-CO',{timeZone:'America/Bogota',hour:'numeric',minute:'2-digit',day:'2-digit',month:'short'}).format(new Date(value)):'Aún sin conexión central';
 
 export function App(){
   const [session,setSession]=useState<SessionView|undefined>(()=>new URLSearchParams(location.search).get('demo')==='1'?{context:demoContext,provider:'local-demo',validated_at:Date.now()}:undefined);const [loading,setLoading]=useState(true);const navigate=useNavigate();
-  const apply=(result:LoginResult)=>{setAccess(result.access_token);const s={context:result.context,provider:result.provider,validated_at:Date.now()};localStorage.setItem(storageKey,JSON.stringify(s));localStorage.removeItem('tc-alliance-logged-out');setSession(s);};
+  const apply=(result:LoginResult)=>{setAccess(result.access_token);const s={context:result.context,provider:result.provider,validated_at:Date.now()};browserStorage.setItem(storageKey,JSON.stringify(s));browserStorage.removeItem('tc-alliance-logged-out');setSession(s);};
   useEffect(()=>{
     const renewed=(e:Event)=>apply((e as CustomEvent<LoginResult>).detail);
-    const expired=()=>{setAccess('');setSession(undefined);localStorage.removeItem(storageKey);localStorage.setItem('tc-alliance-logged-out','1');};
+    const expired=()=>{setAccess('');setSession(undefined);browserStorage.removeItem(storageKey);browserStorage.setItem('tc-alliance-logged-out','1');};
     window.addEventListener('alliance-session-renewed',renewed);window.addEventListener('alliance-session-expired',expired);
     return()=>{window.removeEventListener('alliance-session-renewed',renewed);window.removeEventListener('alliance-session-expired',expired);};
   },[]);
@@ -34,20 +36,20 @@ export function App(){
     const restore=async()=>{
       try{
         if(new URLSearchParams(location.search).get('demo')==='1')return;
-        if(localStorage.getItem('tc-alliance-logged-out'))return;
-        let cached:SessionView|undefined;try{cached=JSON.parse(localStorage.getItem(storageKey)||'null')||undefined;}catch{localStorage.removeItem(storageKey);}
+        if(browserStorage.getItem('tc-alliance-logged-out'))return;
+        let cached:SessionView|undefined;try{cached=JSON.parse(browserStorage.getItem(storageKey)||'null')||undefined;}catch{browserStorage.removeItem(storageKey);}
         if(cached?.provider==='local-demo'){if(alive)setSession({...cached,context:demoContext});return;}
         if(cached&&Date.now()-cached.validated_at<86400000){if(alive)setSession(cached);}
-        if(navigator.onLine){try{const result=await refresh();if(alive)apply(result);}catch(e){if(e instanceof HttpError&&e.status===401&&alive){setSession(undefined);localStorage.removeItem(storageKey);}}}
+        if(navigator.onLine){try{const result=await refresh();if(alive)apply(result);}catch(e){if(e instanceof HttpError&&e.status===401&&alive){setSession(undefined);browserStorage.removeItem(storageKey);}}}
       }finally{if(alive)setLoading(false);}
     };void restore();return()=>{alive=false;};
   },[]);
   const demo=()=>{window.location.href='../negocios/cocteleria/admin.html?demo=1';};
-  const logout=async()=>{if(session?.provider==='local-demo'){window.location.href='../index.html';return;}logoutSession();localStorage.removeItem(storageKey);localStorage.setItem('tc-alliance-logged-out','1');setSession(undefined);navigate('/');};
+  const logout=async()=>{if(session?.provider==='local-demo'){window.location.href='../index.html';return;}logoutSession();browserStorage.removeItem(storageKey);browserStorage.setItem('tc-alliance-logged-out','1');setSession(undefined);navigate('/');};
   if(loading)return <div className="splash"><Sparkles size={32}/><span>Abriendo tu espacio…</span></div>;
   if(!session)return <Routes><Route path="/setup" element={<SetupPage/>}/><Route path="*" element={<LoginPage onLogin={apply} onDemo={demo}/>}/></Routes>;
-  if(session.provider==='oracle-ords'||session.provider==='local-demo')return <AdministrationCentre session={session} onLogout={logout} onContext={context=>{const next={...session,context,validated_at:Date.now()};setSession(next);localStorage.setItem(storageKey,JSON.stringify(next));}}/>;
-  return <Workspace session={session} onLogout={logout} onContext={context=>{const s={...session,context,validated_at:Date.now()};setSession(s);localStorage.setItem(storageKey,JSON.stringify(s));}}/>;
+  if(session.provider==='oracle-ords'||session.provider==='local-demo')return <AdministrationCentre session={session} onLogout={logout} onContext={context=>{const next={...session,context,validated_at:Date.now()};setSession(next);browserStorage.setItem(storageKey,JSON.stringify(next));}}/>;
+  return <Workspace session={session} onLogout={logout} onContext={context=>{const s={...session,context,validated_at:Date.now()};setSession(s);browserStorage.setItem(storageKey,JSON.stringify(s));}}/>;
 }
 
 function LoginPage({onLogin,onDemo}:{onLogin:(r:LoginResult)=>void;onDemo:()=>void}){
@@ -63,7 +65,7 @@ function SetupPage(){
 }
 
 function Workspace({session,onLogout,onContext}:{session:SessionView;onLogout:()=>Promise<void>;onContext:(c:Context)=>void}){
-  const active=session.context.locations.filter(l=>l.active);const [locationId,setLocationId]=useState(()=>localStorage.getItem('tc-alliance-location')||active[0]?.id||'');
+  const active=session.context.locations.filter(l=>l.active);const [locationId,setLocationId]=useState(()=>browserStorage.getItem('tc-alliance-location')||active[0]?.id||'');
   const selected=active.find(l=>l.id===locationId)||active[0];const [online,setOnline]=useState(navigator.onLine);const [busy,setBusy]=useState(false);const [notice,setNotice]=useState('');const [storage,setStorage]=useState<boolean>();
   const [editor,setEditor]=useState<Product|'new'>();const navigate=useNavigate();const demo=session.provider==='local-demo';
   const permissions=selected?session.context.permissions[selected.id]||[]:[];const canRead=permissions.includes('products.read');const canManage=!!session.context.is_owner;const allowed=(code:string)=>permissions.includes(code);
@@ -99,7 +101,7 @@ function Workspace({session,onLogout,onContext}:{session:SessionView;onLogout:()
   if(!selected||!db)return <main className="setup-page"><h1>No hay sucursales disponibles.</h1><button className="secondary" onClick={onLogout}>Cerrar sesión</button></main>;
   const legacySystem=['gcobarf','cocteleria','cafeteria'].includes(selected.slug);
   const shortName=selected.slug==='gcobarf'?'GCOBARF':['cocteleria','cafeteria'].includes(selected.slug)?'Olivia':selected.name;
-  const changeLocation=(id:string)=>{setLocationId(id);localStorage.setItem('tc-alliance-location',id);navigate('/');};
+  const changeLocation=(id:string)=>{setLocationId(id);browserStorage.setItem('tc-alliance-location',id);navigate('/');};
   const download=async()=>{const data=await db.exportPending();const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`alliance-pendientes-${selected.slug}.json`;a.click();URL.revokeObjectURL(url);};
   const persist=async()=>{setStorage(await navigator.storage?.persist?.());};
   return <div className="workspace" style={{'--accent':selected.color} as CSSProperties}>
@@ -147,7 +149,7 @@ function AccessDenied(){return <section className="panel"><ShieldCheck/><h2>Secc
 function AdministrationCentre({session,onLogout,onContext}:{session:SessionView;onLogout:()=>Promise<void>;onContext:(c:Context)=>void}){
   const branches=session.context.locations.filter(l=>l.active);
   const selectedKey=session.provider==='local-demo'?'alliance-demo-selected-branch':'alliance-selected-branch';
-  const [selected,setSelected]=useState(branches.find(l=>l.slug===new URLSearchParams(location.search).get('branch'))?.id||localStorage.getItem(selectedKey)||branches[0]?.id||'');
+  const [selected,setSelected]=useState(branches.find(l=>l.slug===new URLSearchParams(location.search).get('branch'))?.id||browserStorage.getItem(selectedKey)||branches[0]?.id||'');
   const current=branches.find(l=>l.id===selected)||branches[0];
-  return <main className="setup-page team-centre"><a className="back-link" href="../index.html"><ArrowLeft size={18}/>Sucursales</a><section className="panel team-hero"><div className="section-head"><div><span className="eyebrow">CENTRO OPERATIVO</span><h1>Usuarios y accesos</h1><p className="team-subtitle">Tu equipo. Cada sucursal. Un solo lugar.</p>{session.provider==='local-demo'&&<p role="status">Demostración local · Datos de ejemplo</p>}<p className="muted">{session.context.user.name}</p></div><button className="secondary" onClick={()=>void onLogout()}><LogOut size={16}/>Cerrar sesión</button></div><div className="team-branch-bar"><label>Sucursal actual<select value={current?.id||''} onChange={e=>{setSelected(e.target.value);localStorage.setItem(selectedKey,e.target.value);}}>{branches.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>{current&&<a className="primary" href={['gcobarf','cocteleria','cafeteria'].includes(current.slug)?'../negocios/'+current.slug+'/admin.html'+(session.provider==='local-demo'?'?demo=1':''):'../negocios/sucursal/admin.html?branch='+encodeURIComponent(current.slug)+(session.provider==='local-demo'?'&demo=1':'')}><ExternalLink size={16}/>Abrir panel de sucursal</a>}</div></section>{<AdministrationPage key={current?.id} context={session.context} selectedLocation={current?.id} demo={session.provider==='local-demo'} onContext={onContext}/>}</main>;
+  return <main className="setup-page team-centre"><a className="back-link" href="../index.html"><ArrowLeft size={18}/>Sucursales</a><section className="panel team-hero"><div className="section-head"><div><span className="eyebrow">CENTRO OPERATIVO</span><h1>Usuarios y accesos</h1><p className="team-subtitle">Tu equipo. Cada sucursal. Un solo lugar.</p>{session.provider==='local-demo'&&<p role="status">Demostración local · Datos de ejemplo</p>}<p className="muted">{session.context.user.name}</p></div><button className="secondary" onClick={()=>void onLogout()}><LogOut size={16}/>Cerrar sesión</button></div><div className="team-branch-bar"><label>Sucursal actual<select value={current?.id||''} onChange={e=>{setSelected(e.target.value);browserStorage.setItem(selectedKey,e.target.value);}}>{branches.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>{current&&<a className="primary" href={['gcobarf','cocteleria','cafeteria'].includes(current.slug)?'../negocios/'+current.slug+'/admin.html'+(session.provider==='local-demo'?'?demo=1':''):'../negocios/sucursal/admin.html?branch='+encodeURIComponent(current.slug)+(session.provider==='local-demo'?'&demo=1':'')}><ExternalLink size={16}/>Abrir panel de sucursal</a>}</div></section>{<AdministrationPage key={current?.id} context={session.context} selectedLocation={current?.id} demo={session.provider==='local-demo'} onContext={onContext}/>}</main>;
 }

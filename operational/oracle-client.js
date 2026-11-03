@@ -1,5 +1,6 @@
 /* Shared transport for every branch. Database credentials stay in servicio seguro. */
 window.OracleDb = (() => {
+  const browserStorage=globalThis.AllianceBrowserStorage||localStorage;
   const base = window.ALLIANCE_CONFIG.API_URL.replace(/\/$/, '');
   const branch = window.BRANCH_CONFIG.slug;
   let initialBootstrap, access = '', context, renewal, tableCode = new URLSearchParams(location.search).get('mesa') || '';
@@ -21,7 +22,7 @@ window.OracleDb = (() => {
     const result = await response.json();
     if(generation!==authGeneration&&path!=='/auth/refresh')throw Object.assign(new Error('La sesión se cerró.'),{status:401});
     if (result.status === 401 && retry && !path.startsWith('/auth/')) {await renew(false); return request(path, body, false, method, selectedLocation);}
-    if (result.status >= 400) {if(path==='/auth/refresh'&&result.status===401&&generation===authGeneration){sessionStorage.removeItem(refreshKey);access='';localStorage.removeItem('tc-alliance-session-view-v1');if(document.body.classList.contains('admin-authenticated'))location.reload();}const e = new Error(result.data?.error?.message || 'No se pudo completar la operación.'); e.status = result.status; throw e;}
+    if (result.status >= 400) {if(path==='/auth/refresh'&&result.status===401&&generation===authGeneration){sessionStorage.removeItem(refreshKey);access='';browserStorage.removeItem('tc-alliance-session-view-v1');if(document.body.classList.contains('admin-authenticated'))location.reload();}const e = new Error(result.data?.error?.message || 'No se pudo completar la operación.'); e.status = result.status; throw e;}
     return result.data;
   }
   function apply(data) {
@@ -30,10 +31,10 @@ window.OracleDb = (() => {
     void window.AllianceOffline?.prime(true);void window.AllianceOfflineAuth?.cacheSession(data);
     const businessInput=document.querySelector('#loginForm [name="business"]');if(businessInput)businessInput.value='TC-DURVID';
     sessionStorage.setItem(refreshKey, data.refresh_token);
-    localStorage.setItem('tc-alliance-session-view-v1', JSON.stringify({context, provider:'oracle-ords', validated_at:Date.now()}));
-    localStorage.removeItem('tc-alliance-logged-out');
+    browserStorage.setItem('tc-alliance-session-view-v1', JSON.stringify({context, provider:'oracle-ords', validated_at:Date.now()}));
+    browserStorage.removeItem('tc-alliance-logged-out');
     if (!locationId()) throw new Error('Tu usuario no tiene acceso a esta sucursal.');
-    localStorage.setItem('alliance-selected-branch',locationId());
+    browserStorage.setItem('alliance-selected-branch',locationId());
     window.dispatchEvent(new CustomEvent('alliance-session-verified'));
     return user();
   }
@@ -43,7 +44,7 @@ window.OracleDb = (() => {
   async function renew(allowOffline=true) {
     // Resume only an active, encrypted, previously verified device session. Fresh
     // logins still wait for server validation; protected network calls await renewal.
-    if(allowOffline&&navigator.onLine&&!access&&!cachedSession&&!pendingOnlineLogin&&window.AllianceOffline){const generation=authGeneration,saved=await AllianceOffline.restoreContext();if(generation!==authGeneration)throw Object.assign(new Error('La sesión se cerró.'),{status:401});if(saved){cachedSession=true;context=saved.context;initialBootstrap=saved.bootstrap;preparedProducts=new Set(saved.bootstrap.preparedProductIds||[]);if(saved.refresh_token)sessionStorage.setItem(refreshKey,saved.refresh_token);void renew(false).catch(error=>{if(generation===authGeneration&&[401,403].includes(error.status)){void window.AllianceOfflineAuth?.logout(context);access='';context=undefined;sessionStorage.removeItem(refreshKey);localStorage.removeItem('tc-alliance-session-view-v1');localStorage.setItem('tc-alliance-logged-out','1');location.reload();}});return user();}}
+    if(allowOffline&&navigator.onLine&&!access&&!cachedSession&&!pendingOnlineLogin&&window.AllianceOffline){const generation=authGeneration,saved=await AllianceOffline.restoreContext();if(generation!==authGeneration)throw Object.assign(new Error('La sesión se cerró.'),{status:401});if(saved){cachedSession=true;context=saved.context;initialBootstrap=saved.bootstrap;preparedProducts=new Set(saved.bootstrap.preparedProductIds||[]);if(saved.refresh_token)sessionStorage.setItem(refreshKey,saved.refresh_token);void renew(false).catch(error=>{if(generation===authGeneration&&[401,403].includes(error.status)){void window.AllianceOfflineAuth?.logout(context);access='';context=undefined;sessionStorage.removeItem(refreshKey);browserStorage.removeItem('tc-alliance-session-view-v1');browserStorage.setItem('tc-alliance-logged-out','1');location.reload();}});return user();}}
 
     if(!navigator.onLine&&allowOffline&&window.AllianceOffline){const saved=await AllianceOffline.restoreContext();if(saved){cachedSession=true;context=saved.context;if(saved.refresh_token)sessionStorage.setItem(refreshKey,saved.refresh_token);initialBootstrap=saved.bootstrap;preparedProducts=new Set(saved.bootstrap.preparedProductIds||[]);return user();}throw new Error('Esta sucursal necesita una sesión reciente con conexión antes de trabajar sin internet.');}
 
@@ -57,7 +58,7 @@ window.OracleDb = (() => {
     }
     return renewal;
   }
-  async function offlineLogin(payload){const cached=await AllianceOfflineAuth.login(businessSlug(),payload.username,payload.pin);cachedSession=true;context=cached.context;access='';if(!locationId())throw new Error('Esta cuenta no tiene acceso a la sucursal.');const bootstrap=await AllianceOffline.bootstrapFor(cached.context);if(!bootstrap)throw new Error('Abre esta sucursal con internet una vez para descargar sus datos.');initialBootstrap=bootstrap;preparedProducts=new Set(bootstrap.preparedProductIds||[]);if(cached.refresh_token)sessionStorage.setItem(refreshKey,cached.refresh_token);else sessionStorage.removeItem(refreshKey);pendingOnlineLogin=cached.requireOnlineLogin?{business_slug:businessSlug(),username:payload.username,password:payload.pin}:undefined;localStorage.setItem('tc-alliance-session-view-v1',JSON.stringify({context,provider:'oracle-ords',validated_at:cached.verifiedAt}));localStorage.removeItem('tc-alliance-logged-out');await AllianceOfflineAuth.activate(cached);return {token:'offline-session',user:user()};}
+  async function offlineLogin(payload){const cached=await AllianceOfflineAuth.login(businessSlug(),payload.username,payload.pin);cachedSession=true;context=cached.context;access='';if(!locationId())throw new Error('Esta cuenta no tiene acceso a la sucursal.');const bootstrap=await AllianceOffline.bootstrapFor(cached.context);if(!bootstrap)throw new Error('Abre esta sucursal con internet una vez para descargar sus datos.');initialBootstrap=bootstrap;preparedProducts=new Set(bootstrap.preparedProductIds||[]);if(cached.refresh_token)sessionStorage.setItem(refreshKey,cached.refresh_token);else sessionStorage.removeItem(refreshKey);pendingOnlineLogin=cached.requireOnlineLogin?{business_slug:businessSlug(),username:payload.username,password:payload.pin}:undefined;browserStorage.setItem('tc-alliance-session-view-v1',JSON.stringify({context,provider:'oracle-ords',validated_at:cached.verifiedAt}));browserStorage.removeItem('tc-alliance-logged-out');await AllianceOfflineAuth.activate(cached);return {token:'offline-session',user:user()};}
   function user() {
     if(!context)return null;
     const p = context?.permissions?.[locationId()] || [];
@@ -106,9 +107,9 @@ window.OracleDb = (() => {
     }).then(resolve,reject);}
   }
   const local = {
-    getItem(key){if(key.includes('admin_token')){if(sessionStorage.getItem(refreshKey))return 'oracle-session';if(localStorage.getItem('tc-alliance-logged-out')!=='1'){try{const saved=JSON.parse(localStorage.getItem('tc-alliance-session-view-v1')||'null');if(saved?.provider==='oracle-ords'&&Date.now()-saved.validated_at<(window.AllianceOfflineAuth?.ttl||7*86400000))return 'offline-session';}catch{}}return '';}if(key.includes('credentials'))return null;return localStorage.getItem(this.key(key));},
-    setItem(key,value){if(key.includes('admin_token')||key.includes('credentials'))return;localStorage.setItem(this.key(key),value);},
-    removeItem(key){if(key.includes('admin_token')){sessionStorage.removeItem(refreshKey);access='';return;}localStorage.removeItem(this.key(key));},
+    getItem(key){if(key.includes('admin_token')){if(sessionStorage.getItem(refreshKey))return 'oracle-session';if(browserStorage.getItem('tc-alliance-logged-out')!=='1'){try{const saved=JSON.parse(browserStorage.getItem('tc-alliance-session-view-v1')||'null');if(saved?.provider==='oracle-ords'&&Date.now()-saved.validated_at<(window.AllianceOfflineAuth?.ttl||7*86400000))return 'offline-session';}catch{}}return '';}if(key.includes('credentials'))return null;return browserStorage.getItem(this.key(key));},
+    setItem(key,value){if(key.includes('admin_token')||key.includes('credentials'))return;if(key==='la_licorera_17_admin_user_v1'||key.startsWith('la_licorera_17_supabase_bootstrap_v2_'))browserStorage.setItem(this.key(key),value);else if(browserStorage.setRequiredItem)browserStorage.setRequiredItem(this.key(key),value);else localStorage.setItem(this.key(key),value);},
+    removeItem(key){if(key.includes('admin_token')){sessionStorage.removeItem(refreshKey);access='';return;}browserStorage.removeItem(this.key(key));},
     key(key){return 'alliance-pos:'+ (context?.user?.business_id || businessSlug()) +':'+ (locationId() || branch) +':'+ (context?.user?.id || 'client-'+tableCode) +':'+key;}
   };
   function channel(name){
@@ -146,7 +147,7 @@ window.OracleDb = (() => {
     const payload=options.body?JSON.parse(options.body):{};
     const result=await request(path,payload,true,method,selectedLocation);
     if(path==='/account'&&method==='PUT'&&(payload.password||payload.username!==context?.user?.username))await window.AllianceOfflineAuth?.logout(context);
-    if(path==='/context'){if(result.user?.id===context?.user?.id&&!result.user.last_login_at)result.user.last_login_at=context.user.last_login_at;context=result;localStorage.setItem('tc-alliance-session-view-v1',JSON.stringify({context,provider:'oracle-ords',validated_at:Date.now()}));window.dispatchEvent(new CustomEvent('alliance-session-verified'));}
+    if(path==='/context'){if(result.user?.id===context?.user?.id&&!result.user.last_login_at)result.user.last_login_at=context.user.last_login_at;context=result;browserStorage.setItem('tc-alliance-session-view-v1',JSON.stringify({context,provider:'oracle-ords',validated_at:Date.now()}));window.dispatchEvent(new CustomEvent('alliance-session-verified'));}
     return result;
   }
   return {adminRequest,networkBatch,identity:()=>({context,user:user(),location:locationId(),endpoint:base}),networkPos:(a,p={},id,metadata={})=>pos(a,p,id,true,metadata),networkVisit:(section,metadata={})=>request('/activity/visit',{section,...metadata}),isPrepared:id=>preparedProducts.has(id),setPreparedProducts:ids=>{preparedProducts=new Set(ids);},offlineStatus:()=>window.AllianceOffline?.status(),takeInitialBootstrap:()=>{const data=initialBootstrap;initialBootstrap=undefined;return data;},init:()=>true,from:table=>new Query(table),storage:{from:()=>imageStore},
@@ -155,7 +156,7 @@ window.OracleDb = (() => {
     rpc:(name,payload={})=>result(async()=>{
       if(name==='login'){if(!navigator.onLine&&window.AllianceOfflineAuth)return offlineLogin(payload);try{const generation=authGeneration,credentials={business_slug:businessSlug(),username:payload.username,password:payload.pin};const data=await AllianceAuthProof.login((path,body)=>{if(generation!==authGeneration)throw Object.assign(new Error('La sesión se cerró.'),{status:401});return request(path,body,false);},credentials,branch);if(generation!==authGeneration){void revoke(data.access_token,data.refresh_token);throw Object.assign(new Error('La sesión se cerró.'),{status:401});}const current=apply(data);void window.AllianceOfflineAuth?.remember(payload.username,payload.pin,data);return {token:'oracle-session',user:current};}catch(error){if(window.AllianceOfflineAuth&&(!error.status||error.status>=500))return offlineLogin(payload);throw error;}}
       if(name==='getCurrentUser')return await renew();
-      if(name==='logout'){window.AllianceForms?.flush?.();void window.AllianceOfflineAuth?.logout(context);pendingOnlineLogin=undefined;const token=access,refreshToken=sessionStorage.getItem(refreshKey)||'';authGeneration++;renewal=undefined;sessionStorage.removeItem(refreshKey);access='';context=undefined;readRequests.clear();localStorage.removeItem('tc-alliance-session-view-v1');localStorage.setItem('tc-alliance-logged-out','1');void revoke(token,refreshToken);return true;}
+      if(name==='logout'){window.AllianceForms?.flush?.();void window.AllianceOfflineAuth?.logout(context);pendingOnlineLogin=undefined;const token=access,refreshToken=sessionStorage.getItem(refreshKey)||'';authGeneration++;renewal=undefined;sessionStorage.removeItem(refreshKey);access='';context=undefined;readRequests.clear();browserStorage.removeItem('tc-alliance-session-view-v1');browserStorage.setItem('tc-alliance-logged-out','1');void revoke(token,refreshToken);return true;}
       if(name==='listUsers')return [user()];
       return pos(name==='getBootstrapData'?'bootstrap':name,payload);
     }), trackSection:section=>!navigator.onLine&&window.AllianceOffline?AllianceOffline.visit(section):access?request('/activity/visit',{section}):Promise.resolve(), user, locationId, permission

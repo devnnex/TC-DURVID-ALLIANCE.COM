@@ -1,5 +1,6 @@
 /* Offline sign-in for accounts previously verified by servicio seguro on this device. */
 globalThis.AllianceOfflineAuth=(()=>{
+  const browserStorage=globalThis.AllianceBrowserStorage||localStorage;
   const memory=new Map(),prepared=new Set(),latest=new Map(),generations=new Map(),writes=new Map(),ttl=60*86400000,encoder=new TextEncoder();
   const base=()=>ALLIANCE_CONFIG.API_URL.replace(/\/$/,''),storage=()=>AllianceOffline.authStore;
   const name=(business,username)=>'credential:'+base()+':'+business+':'+username.trim();
@@ -19,11 +20,11 @@ globalThis.AllianceOfflineAuth=(()=>{
     const wrapped=raw?await seal(await deviceKey(),raw,aad(profile)):null;
     await write(id,async()=>{
       if(!valid())return;
-      const active=OracleDb.user()?.id===id&&localStorage.getItem('tc-alliance-logged-out')!=='1';
+      const active=OracleDb.user()?.id===id&&browserStorage.getItem('tc-alliance-logged-out')!=='1';
       profile.activeWrap=active?wrapped:null;if(!active)profile.requireOnlineLogin=true;
       await storage().put(profile);
       if(!valid())return;
-      if(active&&!profile.requireOnlineLogin)localStorage.removeItem(revoked(profile));
+      if(active&&!profile.requireOnlineLogin)browserStorage.removeItem(revoked(profile));
       if(active)prepared.add(id);else prepared.delete(id);window.AllianceOffline?.authenticationPrepared();
     });
   }
@@ -36,15 +37,15 @@ globalThis.AllianceOfflineAuth=(()=>{
       await persist(profile,saved.key,data.refresh_token,saved.raw);
     }catch{}
   }
-  async function restore(context){const id=context.user.id,generation=generations.get(id)||0;try{const profile=await storage().get(name(context.user.business_slug,context.user.username));if(!profile?.activeWrap||Date.now()-profile.verifiedAt>ttl||profile.requireOnlineLogin||localStorage.getItem(revoked(profile)))return null;let saved=memory.get(context.user.id);if(!saved){const raw=new Uint8Array(await unseal(await deviceKey(),profile.activeWrap,aad(profile)));saved={raw,key:await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']),profileKey:profile.scope,proof:profile.proof};if(generation!==(generations.get(id)||0)||localStorage.getItem('tc-alliance-logged-out')==='1')return null;memory.set(id,saved);}if(generation!==(generations.get(id)||0)||localStorage.getItem('tc-alliance-logged-out')==='1')return null;const token=profile.renewal?new TextDecoder().decode(await unseal(saved.key,profile.renewal,aad(profile))):null;if(generation!==(generations.get(id)||0))return null;prepared.add(id);return token;}catch{return null;}}
-  async function restoreSession(context){const id=context.user.id,generation=generations.get(id)||0,token=await restore(context);if(!token)return null;const profile=await storage().get(name(context.user.business_slug,context.user.username));if(!profile?.activeWrap||profile.requireOnlineLogin||profile.context.user.id!==id||profile.context.user.business_id!==context.user.business_id||generation!==(generations.get(id)||0)||localStorage.getItem(revoked(profile)))return null;return {context:structuredClone(profile.context),refresh_token:token};}
-  async function login(business,username,password){const profile=await storage().get(name(business,username));if(!profile||Date.now()-profile.verifiedAt>ttl)throw new Error('Esta cuenta necesita iniciar sesión con internet una vez en este equipo.');const derived=await passwordKey(password,profile.salt);let difference=0;for(let i=0;i<profile.proof.length;i++)difference|=profile.proof.charCodeAt(i)^derived.proof.charCodeAt(i);if(difference)throw new Error('Usuario o contraseña incorrectos.');profile.requireOnlineLogin=!!(profile.requireOnlineLogin||localStorage.getItem(revoked(profile)));memory.set(profile.context.user.id,{...derived,profileKey:profile.scope});let token='';if(profile.renewal&&!profile.requireOnlineLogin)token=new TextDecoder().decode(await unseal(derived.key,profile.renewal,aad(profile)));return {profile,key:derived.key,raw:derived.raw,context:structuredClone(profile.context),refresh_token:token,verifiedAt:profile.verifiedAt,requireOnlineLogin:profile.requireOnlineLogin};}
+  async function restore(context){const id=context.user.id,generation=generations.get(id)||0;try{const profile=await storage().get(name(context.user.business_slug,context.user.username));if(!profile?.activeWrap||Date.now()-profile.verifiedAt>ttl||profile.requireOnlineLogin||browserStorage.getItem(revoked(profile)))return null;let saved=memory.get(context.user.id);if(!saved){const raw=new Uint8Array(await unseal(await deviceKey(),profile.activeWrap,aad(profile)));saved={raw,key:await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']),profileKey:profile.scope,proof:profile.proof};if(generation!==(generations.get(id)||0)||browserStorage.getItem('tc-alliance-logged-out')==='1')return null;memory.set(id,saved);}if(generation!==(generations.get(id)||0)||browserStorage.getItem('tc-alliance-logged-out')==='1')return null;const token=profile.renewal?new TextDecoder().decode(await unseal(saved.key,profile.renewal,aad(profile))):null;if(generation!==(generations.get(id)||0))return null;prepared.add(id);return token;}catch{return null;}}
+  async function restoreSession(context){const id=context.user.id,generation=generations.get(id)||0,token=await restore(context);if(!token)return null;const profile=await storage().get(name(context.user.business_slug,context.user.username));if(!profile?.activeWrap||profile.requireOnlineLogin||profile.context.user.id!==id||profile.context.user.business_id!==context.user.business_id||generation!==(generations.get(id)||0)||browserStorage.getItem(revoked(profile)))return null;return {context:structuredClone(profile.context),refresh_token:token};}
+  async function login(business,username,password){const profile=await storage().get(name(business,username));if(!profile||Date.now()-profile.verifiedAt>ttl)throw new Error('Esta cuenta necesita iniciar sesión con internet una vez en este equipo.');const derived=await passwordKey(password,profile.salt);let difference=0;for(let i=0;i<profile.proof.length;i++)difference|=profile.proof.charCodeAt(i)^derived.proof.charCodeAt(i);if(difference)throw new Error('Usuario o contraseña incorrectos.');profile.requireOnlineLogin=!!(profile.requireOnlineLogin||browserStorage.getItem(revoked(profile)));memory.set(profile.context.user.id,{...derived,profileKey:profile.scope});let token='';if(profile.renewal&&!profile.requireOnlineLogin)token=new TextDecoder().decode(await unseal(derived.key,profile.renewal,aad(profile)));return {profile,key:derived.key,raw:derived.raw,context:structuredClone(profile.context),refresh_token:token,verifiedAt:profile.verifiedAt,requireOnlineLogin:profile.requireOnlineLogin};}
   async function activate(data){await persist(data.profile,data.key,data.refresh_token,data.raw);}
   async function logout(context){
     if(!context?.user)return;const id=context.user.id;
     generations.set(id,(generations.get(id)||0)+1);latest.delete(id);memory.delete(id);prepared.delete(id);
     // Persist the revocation immediately, including when the page navigates before IndexedDB finishes.
-    localStorage.setItem('alliance-offline-revoked:'+name(context.user.business_slug,context.user.username),'1');
+    browserStorage.setItem('alliance-offline-revoked:'+name(context.user.business_slug,context.user.username),'1');
     try{await write(id,async()=>{const profile=await storage().get(name(context.user.business_slug,context.user.username));if(profile){profile.activeWrap=null;profile.requireOnlineLogin=true;await storage().put(profile);}});}catch{}
   }
   return {ready:id=>prepared.has(id),remember,cacheSession,restore,restoreSession,login,activate,logout,ttl};

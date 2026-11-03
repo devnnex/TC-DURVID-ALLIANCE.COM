@@ -596,14 +596,12 @@ const App = (() => {
     if(window.requestIdleCallback)requestIdleCallback(run,{timeout:200});else setTimeout(run,16);
   };
   const queuedQr=(text,size)=>new Promise((resolve,reject)=>{const job={text,size,resolve,reject};if(size>=720)qrJobs.unshift(job);else qrJobs.push(job);runNextQr();});
-  const qrStorageKey = () => 'qr-thumbnails-v2';
-  let qrThumbnails;
+  const qrThumbnails={};
   const cachedQrDataUrl = async (text,size=720) => {
     const key=size+':'+text;
-    if(!qrThumbnails){try{qrThumbnails=JSON.parse(BranchStorage.getItem(qrStorageKey())||'{}');}catch{qrThumbnails={};}}
     if(size===420&&qrThumbnails[key])return qrThumbnails[key];
     if(!state.qrCache.has(key)){
-      const pending=queuedQr(text,size).then(url=>{if(size===420){qrThumbnails[key]=url;const keys=Object.keys(qrThumbnails);while(keys.length>48)delete qrThumbnails[keys.shift()];try{BranchStorage.setItem(qrStorageKey(),JSON.stringify(qrThumbnails));}catch{}}return url;}).catch(error=>{state.qrCache.delete(key);throw error;});
+      const pending=queuedQr(text,size).then(url=>{if(size===420){qrThumbnails[key]=url;const keys=Object.keys(qrThumbnails);while(keys.length>48)delete qrThumbnails[keys.shift()];}return url;}).catch(error=>{state.qrCache.delete(key);throw error;});
       state.qrCache.set(key,pending);while(state.qrCache.size>64)state.qrCache.delete(state.qrCache.keys().next().value);
     }return state.qrCache.get(key);
   };
