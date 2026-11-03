@@ -30,6 +30,17 @@ try{
     check(inventory.find((p:any)=>p.productId===product).isAvailable===available,'Inventario y catálogo coinciden al activar u ocultar: '+available);
   }
   for(const [id,unit]of [['raw-sauce','g'],['raw-milk','ml']])check((await command('materials_adjust',{ingredientId:id,kind:'in',quantity:1000,unit,totalCost:10000,reason:'Abastecimiento'})).status===200,'Abastece '+id);
+  const readerId=randomUUID(),ownerToken=token,ownerStock=(await action('get_inventory')).data.value.items,ownerMacro=(await snap()).data.value.model;
+  await executeSql(`BEGIN INSERT INTO users(id,business_id,username,full_name,password_hash)VALUES('${readerId}','${b}','reader','Consulta de inventario','${hash}');INSERT INTO user_location_roles VALUES('${b}','${readerId}','${l}','WORKER');INSERT INTO user_location_permissions VALUES('${b}','${readerId}','${l}','inventory.read','ALLOW');COMMIT;END;`);
+  const readerLogin=await rpc('/auth/login',{business_slug:slug,username:'reader',password});check(readerLogin.status===200,'Un usuario de consulta inicia su propia sesión');
+  token=readerLogin.data.access_token;
+  check(readerLogin.data.context.permissions[l].includes('inventory.read')&&!readerLogin.data.context.permissions[l].includes('inventory.write'),'Consulta de inventario sin permisos de edición');
+  const readerStock=(await action('get_inventory')).data.value.items,readerMacro=(await snap()).data.value.model;
+  check(JSON.stringify(readerStock.map((i:any)=>[i.productId,i.stock,i.isAvailable]))===JSON.stringify(ownerStock.map((i:any)=>[i.productId,i.stock,i.isAvailable])),'Otra sesión y rol ven el mismo inventario confirmado');
+  check(JSON.stringify(readerMacro.ingredients.map((i:any)=>[i.id,i.quantity]))===JSON.stringify(ownerMacro.ingredients.map((i:any)=>[i.id,i.quantity])),'Otra sesión y rol ven los mismos saldos de la macro');
+  check(readerMacro.recipes.length===ownerMacro.recipes.length,'Los vínculos de recetas llegan al usuario con acceso a inventario');
+  check((await command('materials_adjust',{ingredientId:'raw-milk',kind:'in',quantity:1,unit:'ml',totalCost:0})).status===403,'El acceso de consulta no permite modificar insumos');
+  token=ownerToken;
   const sid=randomUUID(),lineId=randomUUID();check((await query('table_sessions',{id:sid,status:'open',sale_channel:'walk_in'})).status===200,'Abre cuenta');check((await query('session_items',{id:lineId,session_id:sid,menu_item_id:product,item_name:'Pizza en porciones',quantity:8,unit_price:5000,status:'confirmed'})).status===200,'Reserva ocho porciones');
   const sid2=randomUUID();await query('table_sessions',{id:sid2,status:'open',sale_channel:'walk_in'});const failed=await query('session_items',{id:randomUUID(),session_id:sid2,menu_item_id:product,item_name:'Pizza',quantity:8,unit_price:5000});check(failed.status===409,'Otra cuenta no usa los insumos ya comprometidos');check((await command('materials_delete',{ingredientId:'raw-sauce'})).status===409,'Protege el insumo vinculado');
   check((await command('materials_link',{productId:product,recipeId:'pizza',revision:1,salePortions:8,mappings:[{ingredientId:'sauce',stockId:'raw-sauce'},{ingredientId:'milk',stockId:'raw-milk'}]})).status===409,'Impide cambiar receta con cuentas abiertas');

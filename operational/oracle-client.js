@@ -73,11 +73,12 @@ window.OracleDb = (() => {
     if (isPublic) return (await request('/pos/public', {action,payload,business_slug:context?.user?.business_slug || new URLSearchParams(location.search).get('business') || 'tc-alliance',branch_slug:branch,table_code:payload.table_access_code || tableCode})).value;
     if (!access&&!(cachedSession&&context&&!skipLocal)) await renew(!skipLocal);
     if(!isPublic&&!skipLocal&&window.AllianceOffline?.canHandle(action,payload))return AllianceOffline.execute(action,payload,operationId,()=>pos(action,payload,operationId,true));
-    const body = {action, payload,...metadata}; if(operationId) body.operation_id = operationId;
+    const {fresh=false,...requestMetadata}=metadata;
+    const body = {action, payload,...requestMetadata}; if(operationId) body.operation_id = operationId;
     const isRead=['customer_history','orders_revision','getAdminSnapshot','get_inventory','get_income_report','get_inventory_movements','costing_load','costing_product_load','operations_snapshot','operations_device','getEvents','status','remote_bootstrap','listChatMessages'].includes(action)||(action==='query'&&payload.op==='select');
     if(!isRead){writeGeneration++;readRequests.clear();try{return (await request('/pos',body)).value;}finally{writeGeneration++;readRequests.clear();}}
     const key=locationId()+':'+writeGeneration+':'+JSON.stringify(body);let entry=readRequests.get(key);
-    if(!entry||Date.now()-entry.at>1000){entry={at:Date.now(),promise:request('/pos',body).then(r=>r.value)};readRequests.set(key,entry);entry.promise.catch(()=>{if(readRequests.get(key)===entry)readRequests.delete(key);});if(readRequests.size>80)readRequests.delete(readRequests.keys().next().value);}
+    if(fresh||!entry||Date.now()-entry.at>1000){entry={at:Date.now(),promise:request('/pos',body).then(r=>r.value)};readRequests.set(key,entry);entry.promise.catch(()=>{if(readRequests.get(key)===entry)readRequests.delete(key);});if(readRequests.size>80)readRequests.delete(readRequests.keys().next().value);}
     return structuredClone(await entry.promise);
   }
   async function networkBatch(operations,expected){const same=()=>!expected||context?.user?.id===expected.user&&context?.user?.business_id===expected.business&&locationId()===expected.location;if(!same())throw new Error('La sesión cambió.');if(!access)await renew(false);if(!same())throw new Error('La sesión cambió.');writeGeneration++;readRequests.clear();try{return await request('/pos/batch',{operations});}finally{writeGeneration++;readRequests.clear();}}

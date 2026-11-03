@@ -69,11 +69,64 @@ globalThis.AllianceOffline=(()=>{
   function recipeExpectations(state,invoice){return Object.fromEntries(invoice.items.filter(l=>l.menu_item_id).map(l=>{const r=state.operations.recipes.find(r=>r.productId===l.menu_item_id);return [l.menu_item_id,r?{recipeId:r.recipeId,lines:clone(r.lines)}:null];}));}
   function normalise(action,payload,state){const p=clone(payload);if(action==='order_accept')p.expectedSessionId=state.docs.table_sessions.find(s=>s.table_id===state.docs.service_requests.find(r=>r.id===p.requestId)?.table_id&&s.status==='open')?.id||state.docs.service_requests.find(r=>r.id===p.requestId)?.currentSessionId||null;if(action==='record_sale')p.expected_recipes=recipeExpectations(state,p.invoice);if(action==='query'&&p.op!=='select'){state.docVersions||={};const versions=state.docVersions[p.table]||{},matches=r=>(p.filters||[]).every(f=>f.op==='in'?f.value.includes(r[f.field]):f.op==='neq'?r[f.field]!==f.value:r[f.field]===f.value);const rows=['insert','upsert'].includes(p.op)?(Array.isArray(p.values)?p.values:[p.values]):(state.docs[p.table]||[]).filter(matches);for(const row of rows)row.id||=uuid();p.expected_versions=Object.fromEntries(rows.map(r=>[r.id,versions[r.id]||0]));}if(action==='upsert_inventory'&&state.stock[p.item.productId])p.item.expectedStockVersion=state.stock[p.item.productId].version;if(action==='query'&&['insert','upsert'].includes(p.op)){for(const row of Array.isArray(p.values)?p.values:[p.values])if(!row.id)row.id=uuid();}return p;}
   const label=(action,p)=>action==='operations_apply'?({materials_link:'Vínculo de receta e insumos',materials_save:'Insumo de la macro',materials_adjust:'Existencias de insumos',materials_delete:'Retiro de insumo',supplier_save:'Proveedor',ingredient_save:'Insumo',purchase_record:'Compra · costo por unidad',purchase_add:'Compra',purchase_pay:'Pago a proveedor',recipe_link:'Receta para vender',ingredient_adjust:'Movimiento de insumos',customer_save:'Cliente',debt_add:'Saldo anterior',debt_pay:'Abono de cliente',cash_shift_update:'Actualización del turno y base',cash_open:'Apertura de caja',cash_move:'Movimiento de caja',cash_close:'Cierre de caja',ticket_send:'Comanda',ticket_status:'Preparación de comanda'}[p.command]||'Registro de operación'):action.startsWith('order_')?({order_submit:'Comanda enviada',order_accept:'Comanda aceptada',order_reject:'Comanda rechazada',order_cancel:'Comanda eliminada'}[action]):action==='customer_payment'?'Pago de cartera':action==='record_sale'?'Venta y pago':action.startsWith('costing_')?'Costeo de productos':action==='query'?'Cambio en '+({table_sessions:'cuentas',session_items:'consumos',menu_items:'productos',restaurant_tables:'mesas'}[p.table]||'la sucursal'):'Registro de atención o inventario';
-  async function prime(force=false){const i=identity(),key=scope(i);if(!key||!navigator.onLine||OracleDb.isDemo)return;const pending=await jobs(key);if(pending.length){notify(await record(key));await updateStatus(key);void flush();return;}if(priming)return priming;if(!force&&Date.now()-updatedAt<15000)return;updatedAt=Date.now();priming=(async()=>{try{const data=await OracleDb.networkPos('operations_snapshot',{});if(scope(identity())!==key)return;let prior=await record(key);const state=stateFrom(data);if(prior?.state.costing)state.costing=prior.state.costing;state.receipts=Object.fromEntries(Object.entries(prior?.state.receipts||{}).slice(-2000));try{if(OracleDb.permission('inventory.read'))state.costing=await OracleDb.networkPos('costing_load',{});}catch{}try{if(OracleDb.permission('movements.read')){const movementPage=await OracleDb.networkPos('get_inventory_movements',{});state.movements=movementPage.movements||[];state.movementsHistoryPartial=!!movementPage.hasMore;state.movementCursor=movementPage.nextCursor||null;state.movementRevision=movementPage.revision||'';}}catch{}
-      const d=await db(),tx=d.transaction(['snapshots','jobs'],'readwrite'),done=finished(tx);const outstanding=await result(tx.objectStore('jobs').index('scope').getAll(key));if(!outstanding.some(job=>job.status!=='superseded')){void navigator.storage?.persist?.().catch(()=>{});const row={scope:key,state,sequence:prior?.sequence||0,context:clone(i.context)};tx.objectStore('snapshots').put(row);notify(row);}await done;await updateStatus(key);
-    }catch{/* Keep the last confirmed snapshot; an API failure never erases local work. */}finally{priming=undefined;}})();return priming;}
+  const supplementJobs=new Map();
+  async function cacheSupplement(key,apply,generation,sequence){
+    if(scope(identity())!==key)return;
+    const d=await db(),tx=d.transaction(['snapshots','jobs'],'readwrite'),done=finished(tx);
+    const row=await result(tx.objectStore('snapshots').get(key)),pending=await result(tx.objectStore('jobs').index('scope').getAll(key));
+    if(row&&!pending.some(j=>j.status!=='superseded')&&scope(identity())===key&&(!generation||row.coreGeneration===generation)&&(sequence===undefined||row.sequence===sequence)){
+      apply(row.state);tx.objectStore('snapshots').put(row);notify(row);
+    }
+    await done;
+  }
+  function loadSupplement(key,action,generation,sequence){
+    const jobKey=key+':'+action;if(supplementJobs.has(jobKey))return;
+    const pending=(async()=>{try{
+      const value=await OracleDb.networkPos(action,{});
+      await cacheSupplement(key,state=>{
+        if(action==='costing_load'){
+          if((value.revision||0)>=(state.costing?.revision||0))state.costing=value;
+        }else{
+          state.movements=value.movements||[];state.movementsHistoryPartial=!!value.hasMore;
+          state.movementCursor=value.nextCursor||null;state.movementRevision=value.revision||'';
+        }
+      },generation,sequence);
+    }catch{/* Optional history and costing never hold back stock or erase local work. */}
+    finally{supplementJobs.delete(jobKey);}})();supplementJobs.set(jobKey,pending);
+  }
+  async function prime(force=false){
+    const i=identity(),key=scope(i);if(!key||!navigator.onLine||OracleDb.isDemo)return;
+    const pending=await jobs(key);if(pending.length){notify(await record(key));await updateStatus(key);void flush();return;}
+    if(priming)return priming;if(!force&&Date.now()-updatedAt<15000)return;updatedAt=Date.now();
+    priming=(async()=>{try{
+      const data=await OracleDb.networkPos('operations_snapshot',{},undefined,{fresh:force});if(scope(identity())!==key)return;
+      const prior=await record(key),state=stateFrom(data),generation=uuid();
+      if(prior?.state.costing)state.costing=prior.state.costing;
+      if(!Array.isArray(data.movements)&&prior?.state)for(const field of ['movements','movementsHistoryPartial','movementCursor','movementRevision'])state[field]=clone(prior.state[field]);
+      state.receipts=Object.fromEntries(Object.entries(prior?.state.receipts||{}).slice(-2000));
+      // Publish the shared catalog and raw stock as soon as their snapshot arrives.
+      const d=await db(),tx=d.transaction(['snapshots','jobs'],'readwrite'),done=finished(tx);
+      const outstanding=await result(tx.objectStore('jobs').index('scope').getAll(key));let published=false;
+      if(scope(identity())===key&&!outstanding.some(job=>job.status!=='superseded')){
+        void navigator.storage?.persist?.().catch(()=>{});
+        const row={scope:key,state,sequence:prior?.sequence||0,context:clone(i.context),coreGeneration:generation};
+        tx.objectStore('snapshots').put(row);notify(row);published=true;
+      }
+      await done;await updateStatus(key);
+      if(published){
+        if(OracleDb.permission('inventory.read'))loadSupplement(key,'costing_load',generation,prior?.sequence||0);
+        if(OracleDb.permission('movements.read'))loadSupplement(key,'get_inventory_movements',generation,prior?.sequence||0);
+      }
+    }catch{/* Keep the last confirmed snapshot; an API failure never erases local work. */}
+    finally{priming=undefined;}})();return priming;
+  }
   async function execute(action,payload,operationId,network){const i=identity(),key=scope(i);if(!key)return network();const row=await record(key);if(!row){if(!navigator.onLine)throw new Error('Abre esta sucursal una vez con conexión para preparar el trabajo sin internet.');const value=await network();void prime();return value;}
-    if(['get_inventory','get_income_report','get_inventory_movements','customer_history'].includes(action)&&navigator.onLine&&!(await jobs(key)).length){try{return await network();}catch(e){if(e.status&&e.status<500)throw e;}}if(reads.has(action)||(action==='query'&&payload.op==='select')){if(navigator.onLine)void prime();return clone(reduce(row.state,action,payload,i.user));}
+    const sharedCatalog=action==='query'&&payload.op==='select'&&['menu_items','menu_categories'].includes(payload.table);
+    if((sharedCatalog||['get_inventory','get_income_report','get_inventory_movements','customer_history','costing_load'].includes(action))&&navigator.onLine&&!(await jobs(key)).length){
+      try{const value=await network();if(action==='costing_load')await cacheSupplement(key,state=>{if((value.revision||0)>=(state.costing?.revision||0))state.costing=clone(value);});return value;}
+      catch(e){if(e.status&&e.status<500)throw e;}
+    }
+    if(reads.has(action)||(action==='query'&&payload.op==='select')){if(navigator.onLine)void prime();return clone(reduce(row.state,action,payload,i.user));}
     checkPermission(action,payload);const run=async()=>{const latest=await record(key),id=operationId||uuid(),fingerprint=JSON.stringify({action,payload}),receipt=latest.state.receipts[id];if(receipt){if(receipt.fingerprint&&receipt.fingerprint!==fingerprint)throw new Error('Este identificador ya se us? con otros datos.');if(action==='operations_apply')return snapshot(latest.state);const value=clone(receipt.value||receipt);if(value._inventory){delete value._inventory;value.items=AllianceLocalPOS(i.user).inventory(latest.state);}return value;}const p=normalise(action,payload,latest.state);const state=clone(latest.state),value=reduce(state,action,p,i.user);if(action==='query'&&p.op!=='select'){state.docVersions[p.table]||={};for(const [id,version]of Object.entries(p.expected_versions||{})){if(p.op==='delete')delete state.docVersions[p.table][id];else state.docVersions[p.table][id]=version+1;}}const compact=action==='operations_apply'?{ok:true}:clone(value);if(!Array.isArray(compact)&&compact.items){delete compact.items;compact._inventory=true;}state.receipts[id]={value:compact,fingerprint};const sequence=(latest.sequence||0)+1;const job={key:key+':'+id,scope:key,id,sequence,action,payload:p,status:'pending',at:new Date().toISOString(),actorId:i.user.id,label:label(action,p),attempts:0};if(scope(identity())!==key)throw new Error('La sesión cambió. El registro no se guardó.');await commit({...latest,state,sequence},job);notify({...latest,state});await updateStatus(key);void flush();return clone(value);};
     if(navigator.locks)return navigator.locks.request('alliance-local:'+key,run);const pending=tail.then(run);tail=pending.catch(()=>{});return pending;
   }

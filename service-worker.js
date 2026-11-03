@@ -1,5 +1,5 @@
 /* Cache public application files only. API requests and account data never enter this cache. */
-const BUILD_VERSION='9edd93d64d3419306fd7a2e7';
+const BUILD_VERSION='3aebcd16a2ca23a0ea17dfa2';
 const ROOT=new URL(self.location.pathname.includes('/negocios/')?'../../':'./',self.location.href);
 const CACHE_PREFIX='alliance-portal-'+encodeURIComponent(ROOT.pathname)+':';
 const PORTAL_CACHE=CACHE_PREFIX+BUILD_VERSION;

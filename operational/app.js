@@ -5495,7 +5495,7 @@ const App = (() => {
     liveSnapshotTimer=window.setTimeout(()=>{
       liveSnapshotTimer=null;const data=liveSnapshot;liveSnapshot=null;if(!state.currentUser||!data||data.viewUser!==state.currentUser.id)return;
       let catalogChanged=false;
-      if(recipeInventory()&&Array.isArray(data.docs.menu_items)&&Array.isArray(data.docs.menu_categories)){
+      if(Array.isArray(data.docs.menu_items)&&Array.isArray(data.docs.menu_categories)){
         const signature=JSON.stringify([data.docs.menu_items,data.docs.menu_categories]);
         if(signature!==liveCatalogSignature){
           liveCatalogSignature=signature;catalogChanged=true;state.categories=data.docs.menu_categories;
