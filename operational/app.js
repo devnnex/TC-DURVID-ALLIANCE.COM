@@ -4800,7 +4800,7 @@ const App = (() => {
       while (used.has(code)) code = base.slice(0, 12 - String(suffix).length) + suffix++;
       form.product_code.value = code;
       form.stock.value = '';
-      form.min_stock.value = '';
+      form.min_stock.value = '0';
     }
     const assignment = categoryForCostedProduct(draft, existing);
     form.category_id.value = assignment.category?.id || '';
@@ -4808,6 +4808,7 @@ const App = (() => {
     setCurrencyInputValue(form.cost_price, draft.cost);
     setCurrencyInputValue(form.sale_price, draft.price);
     const fromIngredients = recipeInventory() && !!draft.recipeId && !!window.MaterialsPanel;
+    const fromProduction = window.BRANCH_CONFIG?.slug==='gcobarf' && Number.isFinite(draft.productionOutput);
     form.stock.readOnly=false;form.stock.required = !fromIngredients;
     form.stock.disabled = fromIngredients;
     form.stock.closest('label').hidden = fromIngredients;
@@ -4816,9 +4817,10 @@ const App = (() => {
       if (!existing) form.stock.value = '0';
       if (!form.min_stock.value) form.min_stock.value = '0';
     }
-    form.min_stock.required = !fromIngredients;
+    if (fromProduction) { form.stock.value=String(draft.productionOutput);form.stock.readOnly=true; }
+    form.min_stock.required = false;
     form.dataset.noDraft='true';form.dataset.costingSource = draft.recipeId;
-    if(window.MaterialsPanel){form.materialRequired=true;const submit=form.querySelector('button[type=submit]');if(submit)submit.disabled=true;void MaterialsPanel.attachInventory(form,draft).catch(e=>toast(e.message,'error')).finally(()=>{if(submit)submit.disabled=false;});}
+    if(window.MaterialsPanel){form.materialRequired=true;const submit=form.querySelector('button[type=submit]');if(submit)submit.disabled=true;void MaterialsPanel.attachInventory(form,draft).catch(e=>toast(e.message,'error')).finally(()=>{renderInventoryLiveCalculation();if(submit)submit.disabled=false;});}
     const note = document.createElement('div');
     note.dataset.costingInventoryNote = '';
     note.className = 'inventory-costing-note wide';
@@ -4828,6 +4830,7 @@ const App = (() => {
     const detail = document.createElement('p');
     detail.textContent = existing ? 'Actualizamos el costo y el precio en esta ficha. Conservamos las existencias y el stock mínimo: revísalos y guarda para confirmar.' : 'Trajimos el nombre, las siglas, la categoría, el costo por producto y el precio de venta. Solo escribe la existencia actual y el stock mínimo; puedes usar 0.';
     if (fromIngredients) detail.textContent = 'La disponibilidad se calcula con los ingredientes de la macro. Vincula cada insumo: al vender se descontará la cantidad por unidad multiplicada por las unidades vendidas.';
+    if (fromProduction) detail.textContent = 'Trajimos la cantidad producida, el costo por unidad y el precio de venta. El stock mínimo es opcional y solo define cuándo avisarte que quedan pocas existencias.';
     const explanation = document.createElement('small');
     explanation.textContent = 'Categoría: ' + assignment.name + (assignment.category ? ' · existente.' : ' · se creará al guardar.') + ' Costo: producción de una unidad. Los gastos mensuales se revisan por separado. Precio: total que paga el cliente' + (draft.taxAdded ? ', con el impuesto adicional incluido una sola vez' : '') + '. El margen de esta ficha es estimado; consulta impuestos y comisiones por canal en Costeo.';
     const summary = document.createElement('dl');

@@ -66,6 +66,8 @@ En GCOBARF, **Macro de insumos** abre los insumos por defecto y ofrece los boton
 
 En las filas de ingredientes de GCOBARF, los campos de peso inicial y final quedan alineados. La merma se muestra debajo del peso final sin desplazar el campo, y **Editar** y **×** permanecen juntos.
 
+Al abrir **Agregar al inventario** desde una hoja de GCOBARF, la cantidad producida se completa automáticamente y se calculan de inmediato el valor del inventario y la venta potencial. El stock mínimo es opcional: vacío equivale a cero y solo define la alerta de existencias; no modifica esos importes. Si la consulta de producción actualiza la cantidad, la ficha recalcula los importes automáticamente.
+
 Las fichas guardadas conservan **Agregar al inventario**. Se completan nombre, variante, categoría, costo de producción y precio; solo se piden existencia y stock mínimo. El impuesto adicional se incluye una sola vez. Las categorías se resuelven dentro de la sucursal y no se crean hasta confirmar el producto.
 
 La descarga XLSX conserva valores numéricos y el detalle de ingredientes, recetas, gastos y canales. La presentación COP usa pesos completos y las cantidades mostradas se redondean; los cálculos mantienen su precisión interna.
