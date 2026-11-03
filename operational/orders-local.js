@@ -20,7 +20,7 @@ globalThis.AllianceOrdersLocal=(state,action,p,user)=>{
     if(ticket.status==='cancelled')return copy(ticket);
     const session=state.docs.table_sessions.find(s=>s.id===ticket.sessionId);if(!session||session.status!=='open')fail('Esta cuenta ya fue cobrada o cerrada. No se puede eliminar su consumo.');
     const ids=new Set(ticket.items.map(i=>i.id));for(const line of state.docs.session_items)if(line.session_id===session.id&&ids.has(line.id)){Object.assign(line,{status:'cancelled',updated_by_user_id:user.id});allianceOrderVersion(state,'session_items',line.id);}
-    ticket.status='cancelled';AllianceReconcileSession(state,session.id,user);return copy(ticket);
+    globalThis.AllianceMaterialsEngine?.guard(state,[],undefined,user);ticket.status='cancelled';AllianceReconcileSession(state,session.id,user);return copy(ticket);
   }
   if(action==='order_submit'){
     const table=tables.find(t=>t.id===p.tableId&&t.is_active!==false);
@@ -54,5 +54,5 @@ globalThis.AllianceOrdersLocal=(state,action,p,user)=>{
     Object.assign(request,{session_id:session.id,ticket_id:request.id,status:'acknowledged',acknowledged_at:now,acknowledged_by_user_id:user.id,accepted_by_name:user.full_name});
   }else if(action==='order_reject')Object.assign(request,{status:'resolved',resolved_at:now,resolved_by_user_id:user.id,resolved_by_name:user.full_name});
   else fail('Acción no disponible.');
-  allianceOrderVersion(state,'service_requests',request.id);return copy(request);
+  globalThis.AllianceMaterialsEngine?.guard(state,[],undefined,user);allianceOrderVersion(state,'service_requests',request.id);return copy(request);
 };

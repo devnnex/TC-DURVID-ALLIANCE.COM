@@ -96,7 +96,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
       FOR j IN 0..ingredients.get_size-1 LOOP ingredient:=TREAT(ingredients.get(j) AS JSON_OBJECT_T);EXIT WHEN ingredient.get_string('id')=line.get_string('ingredientId');END LOOP;
       unit_price:=ingredient.get_number('purchasePrice');IF ingredient.get_boolean('recoverableTax') THEN unit_price:=unit_price/(1+ingredient.get_number('purchaseTaxRate')/100);END IF;
       unit_price:=unit_price/ingredient.get_number('quantity');
-      quantity:=(CASE WHEN line.has('initialQuantity') THEN line.get_number('quantity') ELSE line.get_number('quantity')/alliance_yield.factor(line) END)*factor(line.get_string('unit'))/factor(ingredient.get_string('unit'));batch:=batch+quantity*unit_price;
+      quantity:=(CASE WHEN line.has('initialQuantity') THEN line.get_number('initialQuantity') ELSE line.get_number('quantity')/alliance_yield.factor(line) END)*factor(line.get_string('unit'))/factor(ingredient.get_string('unit'));batch:=batch+quantity*unit_price;
     END LOOP;
     FOR i IN 0..expenses.get_size-1 LOOP
       expense:=TREAT(expenses.get(i) AS JSON_OBJECT_T);
@@ -157,10 +157,16 @@ CREATE OR REPLACE PACKAGE BODY alliance_costing AS
       END IF;
       INSERT INTO administration_audit(id,business_id,actor_user_id,action,entity_id,before_json,after_json) VALUES(alliance_security.new_id,p_business,p_user,CASE WHEN p_action='costing_approve' THEN 'COSTING_APPROVE' ELSE 'COSTING_UNSAVE' END,p_location,old_json,new_json);RETURN r;
     ELSIF p_action='costing_save' THEN
-      alliance_security.require_location(p_user,p_business,p_location,'products.write');alliance_security.keys_only(p_payload,'model,revision');numeric_value(p_payload,'revision',0,1e12);
+      alliance_security.require_location(p_user,p_business,p_location,'products.write');alliance_security.keys_only(p_payload,'model,revision,recordProduction');numeric_value(p_payload,'revision',0,1e12);
       alliance_pos_store.lock_scope(p_business,p_location);o:=alliance_pos_store.document(p_business,p_location,'costing','primary');revision_value:=0;IF o IS NOT NULL THEN revision_value:=o.get_number('revision');old_json:=o.to_clob;END IF;
       IF revision_value<>p_payload.get_number('revision') THEN alliance_security.fail(409,'COSTING_CONFLICT','Otra persona modifico el costeo. Recarga antes de guardar. Tu borrador se conserva.');END IF;
       model_json:=p_payload.get_object('model');validate_model(model_json);alliance_materials.processing_prices(p_business,p_location,CASE WHEN old_json IS NULL THEN NULL ELSE JSON_OBJECT_T(old_json).get_object('model') END,model_json);stamp_value:=alliance_pos_store.stamp;
+      IF p_payload.has('recordProduction') THEN alliance_production.post_batch(p_user,p_business,p_location,model_json,alliance_security.text_value(p_payload,'recordProduction',80));END IF;
+      new_json:=model_json.to_clob;
+      recipe_id:=p_payload.get_string('recordProduction');
+      FOR batch_row IN(SELECT id FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='op_productions' AND id<>NVL(recipe_id,'~')) LOOP
+        FOR batch_recipe IN(SELECT recipe_id FROM JSON_TABLE(new_json,'$.recipes[*]' COLUMNS(recipe_id VARCHAR2(80) PATH '$.id')) WHERE recipe_id=batch_row.id) LOOP alliance_production.post_batch(p_user,p_business,p_location,model_json,batch_row.id);END LOOP;
+      END LOOP;
       o:=JSON_OBJECT_T();o.put('model',model_json);o.put('revision',revision_value+1);o.put('updatedAt',stamp_value);o.put('actor',p_user);
       alliance_pos_store.put_document(p_business,p_location,'costing','primary',o);alliance_materials.sync_processing(p_user,p_business,p_location,CASE WHEN old_json IS NULL THEN NULL ELSE JSON_OBJECT_T(old_json).get_object('model') END,model_json,revision_value+1);new_json:=o.to_clob;
       INSERT INTO administration_audit(id,business_id,actor_user_id,action,entity_id,before_json,after_json) VALUES(alliance_security.new_id,p_business,p_user,'COSTING_SAVE',p_location,old_json,new_json);

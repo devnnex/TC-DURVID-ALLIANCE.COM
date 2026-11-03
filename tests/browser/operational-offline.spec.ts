@@ -49,7 +49,9 @@ test('una receta cambiada mientras no había internet se revisa antes de descont
 
 
 test('el registro local responde sin esperar una confirmación lenta de Oracle',async({page})=>{
- const server=await backend(page,{syncDelay:1200});await ready(page);const started=Date.now();await sell(page);expect(Date.now()-started).toBeLessThan(350);expect(await page.evaluate(()=>(window as any).AllianceOffline.status().pending)).toBeGreaterThan(0);await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending),{timeout:30000}).toBe(0);expect(server.state.sales).toHaveLength(1);
+ const server=await backend(page,{syncDelay:1200});await ready(page);await sell(page);
+ // The local result exists before the delayed server accepts it, independently of disk or CI scheduling speed.
+ expect(server.state.sales).toHaveLength(0);expect(await page.evaluate(()=>(window as any).AllianceOffline.status().pending)).toBeGreaterThan(0);await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending),{timeout:30000}).toBe(0);expect(server.state.sales).toHaveLength(1);
 });
 
 

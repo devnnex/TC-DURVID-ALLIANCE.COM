@@ -182,7 +182,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
     END IF;
   END LOOP;
   IF op='update' AND (entity_value='session_items' OR (entity_value='table_sessions' AND patch.get_string('status') IN('closed','paid'))) THEN FOR i IN 0..out_json.get_size-1 LOOP row_json:=TREAT(out_json.get(i) AS JSON_OBJECT_T);reconcile_session(p_user,p_business,p_location,CASE WHEN entity_value='session_items' THEN row_json.get_string('session_id') ELSE row_json.get_string('id') END);END LOOP;END IF;
-  IF op<>'select' AND entity_value IN('session_items','table_sessions') THEN alliance_materials.guard_open(p_business,p_location);END IF;
+  IF op<>'select' AND entity_value IN('session_items','table_sessions') THEN alliance_production.reconcile(p_user,p_business,p_location);alliance_materials.guard_open(p_business,p_location);END IF;
   IF p_body.get_string('single') IN('single','maybeSingle') THEN
     IF out_json.get_size=0 THEN result_json.put_null('value');ELSIF out_json.get_size=1 THEN result_json.put('value',out_json.get(0));ELSE alliance_security.fail(409,'MULTIPLE_ROWS','El filtro devolvio varios registros.');END IF;
   ELSE result_json.put('value',out_json);END IF;RETURN result_json;
@@ -211,7 +211,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
       SELECT stock INTO before_value FROM alliance_pos_stock WHERE business_id=p_business AND location_id=p_location AND product_id=id_value;
       IF item.has('expectedStockVersion') THEN SELECT version INTO cost_current FROM alliance_pos_stock WHERE business_id=p_business AND location_id=p_location AND product_id=id_value;IF cost_current<>item.get_number('expectedStockVersion') THEN alliance_security.fail(409,'STOCK_CONFLICT','Las existencias cambiaron en otro equipo. Revisa el registro pendiente.');END IF;END IF;
       UPDATE alliance_pos_stock SET cost_minor=cost_value,min_stock=min_value,code=code_value,unit_name=unit_value,updated_at=SYSTIMESTAMP WHERE business_id=p_business AND location_id=p_location AND product_id=id_value;
-      event_value:=NVL(item.get_string('movementEventId'),alliance_security.new_id);movement(p_user,p_business,p_location,event_value,id_value,stock_value-before_value,CASE WHEN n=0 THEN 'NUEVO_PRODUCTO' WHEN stock_value>=before_value THEN 'ENTRADA_EDICION' ELSE 'SALIDA_EDICION' END,'FICHA_PRODUCTO',NULL);
+      IF item.has('productionRecipeId') THEN stock_value:=before_value;END IF;
+      event_value:=NVL(item.get_string('movementEventId'),alliance_security.new_id);movement(p_user,p_business,p_location,event_value,id_value,stock_value-before_value,CASE WHEN n=0 THEN 'NUEVO_PRODUCTO' WHEN stock_value>=before_value THEN 'ENTRADA_EDICION' ELSE 'SALIDA_EDICION' END,'FICHA_PRODUCTO',NULL);IF item.has('productionRecipeId') THEN ctx:=JSON_OBJECT_T();ctx.put('recipeId',alliance_security.text_value(item,'productionRecipeId',80));ctx.put('productId',id_value);ctx:=alliance_production.transfer_batch(p_user,p_business,p_location,ctx);END IF;
     END LOOP;
   ELSIF p_action='adjust_inventory' THEN
     item:=p_payload.get_object('adjustment');id_value:=item.get_string('productId');event_value:=alliance_security.text_value(item,'eventId',160);

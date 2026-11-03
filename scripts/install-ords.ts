@@ -1,14 +1,17 @@
 import { readFile,writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { executeSql } from './ords-sql.js';
-const files=['008_ords_schema.sql','009_operational_schema.sql','010_activity_schema.sql','011_operations_schema.sql','012_offline_review_schema.sql','013_fast_auth_schema.sql','014_team_roles.sql','015_flexible_usernames.sql','security.sql','auth_proof.sql','activity.sql','ingredient_yield.sql','materials_spec.sql','pos_store.sql','operations.sql','orders.sql','customer_schedule.sql','operations_commands.sql','operations_sales.sql','customer_payments.sql','pos_sales.sql','jespresso.sql','costing.sql','materials.sql','pos_api.sql','pos_batch.sql','administration.sql','catalog.sql','api.sql','publish.sql'];
+const files=['008_ords_schema.sql','009_operational_schema.sql','010_activity_schema.sql','011_operations_schema.sql','012_offline_review_schema.sql','013_fast_auth_schema.sql','014_team_roles.sql','015_flexible_usernames.sql','security.sql','auth_proof.sql','activity.sql','ingredient_yield.sql','materials_spec.sql','production_spec.sql','pos_store.sql','operations.sql','production.sql','orders.sql','customer_schedule.sql','operations_commands.sql','operations_sales.sql','customer_payments.sql','pos_sales.sql','jespresso.sql','costing.sql','materials.sql','pos_api.sql','pos_batch.sql','administration.sql','catalog.sql','api.sql','publish.sql'];
 const root=new URL('../database/ords/',import.meta.url);
 const pieces:string[]=[],publishPieces:string[]=[];
 for(const name of files){
   const sql=await readFile(new URL(name,root),'utf8');
   for(const statement of sql.split(/^\/\s*$/m).filter(s=>s.trim())){
-    if(Buffer.byteLength(statement)>32700||statement.includes("!'"))throw new Error('Revisa el tamaño o delimitador del bloque '+name);
-    (name==='publish.sql'?publishPieces:pieces).push(`  EXECUTE IMMEDIATE q'!${statement.trim()}!';`);
+    if(statement.includes("!'"))throw new Error('Revisa el delimitador del bloque '+name);
+    const text=statement.trim(),chunks:string[]=[];let chunk='',bytes=0;
+    for(const character of text){const size=Buffer.byteLength(character);if(bytes+size>24000){chunks.push(chunk);chunk='';bytes=0;}chunk+=character;bytes+=size;}if(chunk)chunks.push(chunk);
+    const literal=chunks.length===1?`q'!${text}!'`:chunks.map(part=>`TO_CLOB(q'!${part}!')`).join(' || ');
+    (name==='publish.sql'?publishPieces:pieces).push(`  EXECUTE IMMEDIATE ${literal};`);
   }
 }
 const source=`-- API ORDS: copiar TODO y pulsar el boton verde una sola vez.\n-- Conserva las tablas y datos de 001-007. Reejecutable para actualizar la API.\nDECLARE\n  invalid_count NUMBER;\nBEGIN\n${pieces.join('\n')}\n  SELECT COUNT(*) INTO invalid_count FROM user_errors WHERE name LIKE 'ALLIANCE_%';\n  IF invalid_count>0 THEN RAISE_APPLICATION_ERROR(-20002,'Hay errores de compilacion: consultar USER_ERRORS para ALLIANCE_%');END IF;\n${publishPieces.join('\n')}\n  COMMIT;\nEXCEPTION WHEN OTHERS THEN ROLLBACK;RAISE;\nEND;\n`;

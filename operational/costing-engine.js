@@ -64,7 +64,7 @@ globalThis.AllianceCosting = (() => {
     if(Math.abs(total-output)>1e-8*Math.max(1,total))throw new Error('El total de producción debe coincidir con la suma de sus cantidades.');
     return output;
   }
-  const lineCost=(i,line)=>line.manualCost!=null?number(line.manualCost,'Importe directo')/processingFactor(line):convert(line.initialQuantity!==undefined?number(line.quantity,'Peso final'):lineQuantity(line),line.unit,i.unit)*ingredientCost(i);
+  const lineCost=(i,line)=>line.manualCost!=null?number(line.manualCost,'Importe directo')/processingFactor(line):convert(lineQuantity(line),line.unit,i.unit)*ingredientCost(i);
   function calculate(model,recipe,channelId=recipe.channelId){
     if(recipe.sheet){if(!globalThis.AllianceJespresso)throw new Error('No se pudo cargar la hoja de recetas.');return AllianceJespresso.calculate(model,recipe);}
     const missing=[], operatingMissing=[],assumptions=[],lines=[];const s=model.settings,productionBasis=recipe.pricingBasis==='production',allocationMissing=productionBasis?operatingMissing:missing;

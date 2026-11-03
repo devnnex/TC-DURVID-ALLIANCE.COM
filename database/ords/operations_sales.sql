@@ -23,7 +23,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_operations_sales AS
     FOR i IN 0..lines.get_size-1 LOOP o:=TREAT(lines.get(i) AS JSON_OBJECT_T);ingredient:=alliance_operations.raw_item(b,l,o.get_string('ingredientId'));total:=total+alliance_operations.convert_quantity(o.get_number('quantity'),o.get_string('unit'),ingredient.get_string('unit'))*ingredient.get_number('unitCost');END LOOP;RETURN ROUND(total+NVL(recipe.get_number('overheadCost'),0),2);
   END;
   PROCEDURE after_sale(u VARCHAR2,b VARCHAR2,l VARCHAR2,invoice IN OUT JSON_OBJECT_T) IS
-    lines JSON_ARRAY_T:=invoice.get_array('items');payments JSON_ARRAY_T:=invoice.get_array('payments');line JSON_OBJECT_T;pay JSON_OBJECT_T;recipe JSON_OBJECT_T;parts JSON_ARRAY_T;part JSON_OBJECT_T;ingredient JSON_OBJECT_T;customer JSON_OBJECT_T;debt JSON_OBJECT_T;cash_session JSON_OBJECT_T;settings JSON_OBJECT_T;
+    lines JSON_ARRAY_T:=invoice.get_array('items');payments JSON_ARRAY_T:=invoice.get_array('payments');line JSON_OBJECT_T;prep JSON_OBJECT_T;pay JSON_OBJECT_T;recipe JSON_OBJECT_T;parts JSON_ARRAY_T;part JSON_OBJECT_T;ingredient JSON_OBJECT_T;customer JSON_OBJECT_T;debt JSON_OBJECT_T;cash_session JSON_OBJECT_T;settings JSON_OBJECT_T;
     quantity_value NUMBER;credit_value NUMBER:=0;cash_value NUMBER:=0;owed NUMBER;customer_id VARCHAR2(80):=invoice.get_string('customerId');sale_id VARCHAR2(80):=invoice.get_string('id');due_value VARCHAR2(10);date_check DATE;
   BEGIN
     IF customer_id IS NOT NULL THEN customer:=alliance_operations.get_row(b,l,'customers',customer_id);IF customer IS NULL OR NOT customer.get_boolean('active') THEN alliance_security.fail(403,'CUSTOMER_MISSING','Cliente no disponible en esta sucursal.');END IF;invoice.put('customerName',customer.get_string('name'));invoice.put('payerName',customer.get_string('name'));END IF;
@@ -38,16 +38,27 @@ CREATE OR REPLACE PACKAGE BODY alliance_operations_sales AS
     cash_session:=alliance_operations.open_cash(b,l);settings:=alliance_operations.get_row(b,l,'settings','primary');IF cash_session IS NULL AND settings IS NOT NULL AND settings.get_boolean('cashRequired') THEN alliance_security.fail(409,'REGISTER_NOT_OPEN','Abre la caja antes de registrar una venta.');END IF;IF cash_session IS NOT NULL THEN invoice.put('cashSessionId',cash_session.get_string('id'));END IF;
     alliance_operations.cash_entry(u,b,l,alliance_security.new_id,cash_value,'cash',sale_id);
     FOR i IN 0..lines.get_size-1 LOOP line:=TREAT(lines.get(i) AS JSON_OBJECT_T);recipe:=recipe_for(b,l,line.get_string('menu_item_id'));IF recipe IS NOT NULL THEN
+      prep:=alliance_operations.get_row(b,l,'preparations',line.get_string('id'));
+      IF prep IS NOT NULL AND prep.get_string('status')<>'active' THEN prep:=NULL;END IF;
+      IF prep IS NOT NULL AND (NVL(prep.get_string('sessionId'),'~')<>NVL(invoice.get_string('sessionId'),'~') OR NVL(prep.get_string('productId'),'~')<>NVL(line.get_string('menu_item_id'),'~')) THEN prep:=NULL;END IF;IF prep IS NOT NULL AND prep.get_string('status')='active' THEN
+        IF prep.get_number('quantity')<>line.get_number('quantity') THEN alliance_security.fail(409,'ACCOUNT_CHANGED','El consumo cambió. Actualiza antes de cobrar.');END IF;
+        prep.put('status','sold');prep.put('saleId',sale_id);alliance_operations.put_row(u,b,l,'preparations',line.get_string('id'),prep);
+      END IF;
       line.put('recipeId',recipe.get_string('recipeId'));parts:=recipe.get_array('lines');line.put('recipeConsumption',parts);lines.put(i,line,TRUE);
       FOR j IN 0..parts.get_size-1 LOOP part:=TREAT(parts.get(j) AS JSON_OBJECT_T);ingredient:=alliance_operations.raw_item(b,l,part.get_string('ingredientId'));quantity_value:=alliance_operations.convert_quantity(part.get_number('quantity'),part.get_string('unit'),ingredient.get_string('unit'))*line.get_number('quantity');
-        IF recipe.get_boolean('managed') AND quantity_value>ingredient.get_number('quantity')+0.00000001 THEN alliance_security.fail(409,'MATERIALS_INSUFFICIENT','No alcanza '||ingredient.get_string('name')||'. Abastece la macro de insumos.');END IF;
-        alliance_operations.raw_move(u,b,l,alliance_security.new_id,ingredient.get_string('id'),-quantity_value,'sale',sale_id);
+        IF (prep IS NULL OR prep.get_string('saleId')<>sale_id) AND recipe.get_boolean('managed') AND quantity_value>ingredient.get_number('quantity')+0.00000001 THEN alliance_security.fail(409,'MATERIALS_INSUFFICIENT','No alcanza '||ingredient.get_string('name')||'. Abastece la macro de insumos.');END IF;
+        IF prep IS NULL OR prep.get_string('saleId')<>sale_id THEN alliance_operations.raw_move(u,b,l,alliance_security.new_id,ingredient.get_string('id'),-quantity_value,'sale',sale_id);END IF;
       END LOOP;
     END IF;END LOOP;alliance_materials.guard_open(b,l,invoice.get_string('sessionId'));invoice.put('items',lines);
   END;
   PROCEDURE reverse_sale(u VARCHAR2,b VARCHAR2,l VARCHAR2,invoice JSON_OBJECT_T) IS debt JSON_OBJECT_T;payments JSON_ARRAY_T:=invoice.get_array('payments');pay JSON_OBJECT_T;sale_id VARCHAR2(80):=invoice.get_string('id');cash_value NUMBER:=0;BEGIN
     debt:=alliance_operations.get_row(b,l,'debts',sale_id);IF debt IS NOT NULL THEN IF debt.get_number('paid')>0 THEN alliance_security.fail(409,'CREDIT_ALREADY_PAID','La venta tiene abonos. Revisa la cartera antes de anular o corregir.');END IF;debt.put('voided',TRUE);alliance_operations.put_row(u,b,l,'debts',sale_id,debt);END IF;
     FOR x IN(SELECT ingredient_id,SUM(delta) delta FROM alliance_raw_movements WHERE business_id=b AND location_id=l AND reference=sale_id AND kind IN('sale','return') GROUP BY ingredient_id HAVING SUM(delta)<0) LOOP alliance_operations.raw_move(u,b,l,alliance_security.new_id,x.ingredient_id,-x.delta,'return',sale_id);END LOOP;
+    FOR prep_row IN(SELECT id,data_json FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_preparations' AND JSON_VALUE(data_json,'$.saleId')=sale_id AND JSON_VALUE(data_json,'$.status')='sold') LOOP
+      DECLARE preparation JSON_OBJECT_T:=JSON_OBJECT_T(prep_row.data_json);parts JSON_ARRAY_T:=preparation.get_array('parts');part JSON_OBJECT_T;BEGIN
+        FOR j IN 0..parts.get_size-1 LOOP part:=TREAT(parts.get(j) AS JSON_OBJECT_T);alliance_operations.raw_move(u,b,l,alliance_security.new_id,part.get_string('ingredientId'),part.get_number('quantity'),'return',sale_id);END LOOP;preparation.put('status','returned');alliance_operations.put_row(u,b,l,'preparations',prep_row.id,preparation);
+      END;
+    END LOOP;
     FOR i IN 0..payments.get_size-1 LOOP pay:=TREAT(payments.get(i) AS JSON_OBJECT_T);IF pay.get_string('method')='cash' THEN cash_value:=cash_value+pay.get_number('amount');END IF;END LOOP;alliance_operations.cash_entry(u,b,l,alliance_security.new_id,-cash_value,'cash',sale_id);
   END;
 END;

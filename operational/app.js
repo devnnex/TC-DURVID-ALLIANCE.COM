@@ -33,7 +33,7 @@ const App = (() => {
   const USER_LIST_CACHE_KEY = "tienda_napoles_users_v1";
   const USER_CREDENTIALS_CACHE_KEY = "tienda_napoles_user_credentials_v1";
   const PWA_BRAND_CACHE = "alliance-"+window.BRANCH_CONFIG.slug+"-pwa-brand-v1";
-  const recipeInventory = () => ['cafeteria', 'cocteleria'].includes(window.BRANCH_CONFIG?.slug);
+  const recipeInventory = () => !!window.BRANCH_CONFIG?.slug && window.BRANCH_CONFIG.slug!=='gcobarf';
   const ADMIN_SECTION_KEYS = ["dashboard", "service", "accounts", "tips", "inventory", "movements", "income", "costing", /* "assistant", -- activar de nuevo cuando se solicite */ "menu", "brand", "supplies", "kitchen", "customers", "cash"];
   const CATEGORY_PRESETS = ["Snack", "Bebidas", "Medicina", "Otros"];
   const REQUEST_IMAGES = {
@@ -4092,7 +4092,7 @@ const App = (() => {
           const prepared = recipeInventory() && (portions != null || OracleDb.isPrepared?.(item.id));
           const out = tracked && inventory.stock <= 0 && portions==null && !prepared;
           const balance = recipeInventory() && portions != null
-            ? `${portions.toLocaleString('es-CO')} disponibles según insumos`
+            ? `Puedes preparar ${portions.toLocaleString('es-CO')} con los insumos actuales`
             : tracked ? `${inventory.stock.toLocaleString('es-CO', { maximumFractionDigits: 2 })} ${escapeHTML(inventory.unit)}` : 'Sin stock configurado';
           return `<button type="button" class="product-combobox-option${products.length === 1 ? " is-selected" : ""}" role="option"
             id="consumption-product-${index}" data-consumption-product="${escapeHTML(item.id)}" aria-selected="${products.length === 1}" ${out ? "disabled" : ""}>
@@ -4247,7 +4247,7 @@ const App = (() => {
 
   const inventorySummary = () => state.items.reduce((summary, item) => {
     const inventory = inventoryFor(item);
-    summary.units += inventory.stock;
+    summary.units += window.MaterialsPanel?.available(item.id)??inventory.stock;
     summary.costValue += inventory.stock * inventory.costPrice;
     summary.saleValue += inventory.stock * Number(item.price || 0);
     const status = inventoryStatus(item);
@@ -4297,7 +4297,7 @@ const App = (() => {
     if (!metrics || !list) return;
     const summary = inventorySummary();
     metrics.innerHTML = `
-      <article><span>${icon("package-check", 19)} Unidades</span><strong>${summary.units.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong><small>Existencia total registrada</small></article>
+      <article><span>${icon("package-check", 19)} ${recipeInventory()?'Capacidad de preparación':'Unidades'}</span><strong>${summary.units.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong><small>${recipeInventory()?'Potencial por receta; los insumos se comparten':'Existencia total registrada'}</small></article>
       <article><span>${icon("circle-dollar-sign", 19)} Inversion</span><strong>${money(summary.costValue)}</strong><small>Inventario registrado</small></article>
       <article><span>${icon("trending-up", 19)} Venta potencial</span><strong>${money(summary.saleValue)}</strong><small>Estimado al vender todo</small></article>
       <article class="${summary.low || summary.out ? "inventory-alert-metric" : ""}"><span>${icon("triangle-alert", 19)} Alertas</span><strong>${summary.low + summary.out}</strong><small>${summary.out} agotados · ${summary.low} por reponer</small></article>`;
@@ -4323,7 +4323,7 @@ const App = (() => {
                 <div><strong>${escapeHTML(item.name)}</strong><small>${escapeHTML(item.menu_categories?.name || "Sin categoria")} · ${escapeHTML(inventory.unit)}</small></div>
               </div>
               <div class="inventory-stock-block">
-                <small>${window.MaterialsPanel?.available(item.id)!=null?"Disponible según insumos":"Existencia"}</small>
+                <small>${window.MaterialsPanel?.available(item.id)!=null?"Puedes preparar":"Existencia"}</small>
                 <strong>${inventory.stock.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong>
                 <span class="inventory-status">${statusLabel}</span>
               </div>
@@ -4808,7 +4808,7 @@ const App = (() => {
     setCurrencyInputValue(form.cost_price, draft.cost);
     setCurrencyInputValue(form.sale_price, draft.price);
     const fromIngredients = recipeInventory() && !!draft.recipeId && !!window.MaterialsPanel;
-    form.stock.required = !fromIngredients;
+    form.stock.readOnly=false;form.stock.required = !fromIngredients;
     form.stock.disabled = fromIngredients;
     form.stock.closest('label').hidden = fromIngredients;
     if (fromIngredients) form.stock.closest('label').style.display = 'none';
@@ -4818,7 +4818,7 @@ const App = (() => {
     }
     form.min_stock.required = !fromIngredients;
     form.dataset.noDraft='true';form.dataset.costingSource = draft.recipeId;
-    if(window.MaterialsPanel){form.materialRequired=true;void MaterialsPanel.attachInventory(form,draft).catch(e=>toast(e.message,'error'));}
+    if(window.MaterialsPanel){form.materialRequired=true;const submit=form.querySelector('button[type=submit]');if(submit)submit.disabled=true;void MaterialsPanel.attachInventory(form,draft).catch(e=>toast(e.message,'error')).finally(()=>{if(submit)submit.disabled=false;});}
     const note = document.createElement('div');
     note.dataset.costingInventoryNote = '';
     note.className = 'inventory-costing-note wide';
@@ -4899,13 +4899,16 @@ const App = (() => {
       price: salePrice,
       description: state.items.find((item) => item.id === id)?.description || "",
       image_url: state.items.find((item) => item.id === id)?.image_url || "",
-      is_available: form.materialScope?false:form.is_available.checked,
+      is_available: form.materialScope&&!form.materialScope.production?false:form.is_available.checked,
       sort_order: state.items.find((item) => item.id === id)?.sort_order || 0
     };
     const saved = await db(id
       ? state.sb.from("menu_items").update(payload).eq("id", id).select("*").single()
       : state.sb.from("menu_items").insert(payload).select("*").single(), null);
     if (!saved) return;
+    if(form.materialScope?.production){
+      try{const previous=state.inventoryMeta[saved.id],result=await OracleDb.remote('upsert_inventory',{item:{productId:saved.id,code:(form.product_code.value.trim()||productAcronym(name)).toUpperCase(),unit:form.unit.value||'unidad',costPrice,salePrice,stock:previous?.stock||0,minStock,productionRecipeId:form.materialScope.recipeId}});applyRemoteInventoryItems(result.items||[]);state.items=[...state.items.filter(i=>i.id!==saved.id),{...saved,menu_categories:state.categories.find(c=>c.id===categoryId)||null}];persistBootstrapCache();AllianceForms.clear(form);resetInventoryForm();$('#inventoryDialog').close();renderInventory();toast('Producción incorporada al inventario.','ok');return;}catch(error){toast(error.message,'error');return;}
+    }
     if(form.materialScope){form.product_id.value=saved.id;if(!await MaterialsPanel.linkFromInventory(form,saved.id))return;saved.is_available=form.is_available.checked;}
     const category = state.categories.find((entry) => entry.id === categoryId);
     const hydrated = { ...saved, menu_categories: category ? { name: category.name } : null };

@@ -18,7 +18,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_orders AS
       alliance_security.keys_only(p,'ticketId');id_value:=alliance_security.text_value(p,'ticketId',80);ticket:=alliance_pos_store.document(b,l,'op_tickets',id_value);IF ticket IS NULL THEN alliance_security.fail(404,'NOT_FOUND','Comanda no disponible.');END IF;IF ticket.get_string('status')='cancelled' THEN RETURN ticket;END IF;
       session_id:=ticket.get_string('sessionId');session_value:=alliance_pos_store.document(b,l,'table_sessions',session_id);IF session_value IS NULL OR session_value.get_string('status')<>'open' THEN alliance_security.fail(409,'CLOSED_ACCOUNT','La cuenta ya fue cobrada o cerrada.');END IF;
       items:=ticket.get_array('items');FOR i IN 0..items.get_size-1 LOOP item:=TREAT(items.get(i) AS JSON_OBJECT_T);line_id:=item.get_string('id');line:=alliance_pos_store.document(b,l,'session_items',line_id);IF line IS NOT NULL AND line.get_string('session_id')=session_id THEN line.put('status','cancelled');line.put('updated_by_user_id',u);alliance_pos_store.put_document(b,l,'session_items',line_id,line);END IF;END LOOP;
-      ticket.put('status','cancelled');alliance_pos_store.put_document(b,l,'op_tickets',id_value,ticket);alliance_pos_store.reconcile_session(u,b,l,session_id);alliance_pos_store.audit(u,b,'ORDER_CANCEL',id_value,NULL,ticket.to_clob);alliance_activity.record_event(u,b,l,'service','ORDER_CANCEL','Retiró la comanda y sus consumos de la cuenta',id_value);RETURN ticket;
+      alliance_production.reconcile(u,b,l);ticket.put('status','cancelled');alliance_pos_store.put_document(b,l,'op_tickets',id_value,ticket);alliance_pos_store.reconcile_session(u,b,l,session_id);alliance_pos_store.audit(u,b,'ORDER_CANCEL',id_value,NULL,ticket.to_clob);alliance_activity.record_event(u,b,l,'service','ORDER_CANCEL','Retiró la comanda y sus consumos de la cuenta',id_value);RETURN ticket;
     END IF;
     IF a='order_submit' THEN
       alliance_security.keys_only(p,'id,tableId,items,notes');id_value:=alliance_security.text_value(p,'id',60,'^[a-zA-Z0-9_-]+$');
@@ -64,7 +64,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_orders AS
       ELSE r.put('status','resolved');r.put('resolved_at',stamp);r.put('resolved_by_user_id',u);r.put('resolved_by_name',actor_name);END IF;
       alliance_pos_store.put_document(b,l,'service_requests',id_value,r);alliance_pos_store.audit(u,b,UPPER(a),id_value,NULL,r.to_clob);alliance_activity.record_event(u,b,l,'service',UPPER(a),CASE WHEN a='order_accept' THEN 'Acepto y agrego la comanda a la mesa' ELSE 'Rechazo la comanda sin agregar consumos' END,id_value);
     ELSE alliance_security.fail(404,'NOT_FOUND','Accion no disponible.');END IF;
-    touch(b,l);RETURN r;
+    alliance_production.reconcile(u,b,l);alliance_materials.guard_open(b,l);touch(b,l);RETURN r;
   END;
 END;
 /
