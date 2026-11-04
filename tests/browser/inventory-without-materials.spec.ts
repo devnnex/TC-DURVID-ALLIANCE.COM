@@ -23,7 +23,7 @@ for(const slug of ['cafeteria','cocteleria'])test(slug+': abastece según las po
     await page.locator('[data-j-select]').selectOption(recipe);
     if(recipe==='manual'){await page.locator('[data-j-path=output]').fill('4');await page.locator('#costingSave').click();await expect(page.locator('#costingStatus')).toContainText(/Receta guardada|Receta confirmada/);await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending),{timeout:20000}).toBe(0);await context.setOffline(true);}
     await page.locator('[data-j-action=inventory]').click();const form=page.locator('#inventoryForm');
-    await expect(form.locator('[data-material-inventory-status]')).toContainText('Al guardar se registrarán los faltantes');await expect(form.locator('[data-material-inventory-status]')).toContainText(recipe==='manual'?'4 porciones':'3 porciones');
+    await expect(form.locator('[data-material-inventory-status]')).toContainText('No tienes que agregarlos uno por uno');await expect(form.locator('[data-material-inventory-status]')).toContainText(recipe==='manual'?'4 porciones':'3 porciones');
     if(recipe==='manual'){
       await form.locator('details').first().locator('summary').click();await form.locator('[name=product_name]').fill('Producto modificado manualmente');await form.locator('[name=sale_price]').fill('25000');
     }
