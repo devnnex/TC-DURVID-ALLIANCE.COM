@@ -9,6 +9,32 @@ const apply=(s:any,command:string,payload:any)=>{const next=structuredClone(s);r
 const link={productId:'product',recipeId:'recipe',revision:1,salePortions:1,mappings:[{ingredientId:'tartara',stockId:'raw-tartara'},{ingredientId:'milk',stockId:'raw-milk'}]};
 function ready(){let s=apply(initial(),'materials_link',link);for(const [id,unit]of [['raw-tartara','g'],['raw-milk','ml']])s=apply(s,'materials_adjust',{ingredientId:id,quantity:1000,unit,kind:'in',totalCost:10000,reason:'Abastecer'});return s;}
 describe('Macro de insumos y recetas por unidad vendida',()=>{
+  it('abastece las porciones guardadas, respeta existencias y no rellena lo consumido al guardar de nuevo',()=>{
+    ctx.BRANCH_CONFIG={slug:'cocteleria'};
+    try{
+      const s=initial();s.operations.ingredients=[{id:'raw-tartara',name:'Salsa tártara',unit:'g',quantity:25,unitCost:10,minStock:0,revision:1}];
+      const command={...link,supplyRecipe:true};let next=apply(s,'materials_link',command);
+      expect(next.operations.ingredients.find((i:any)=>i.id==='raw-tartara').quantity).toBe(75);expect(next.operations.ingredients.find((i:any)=>i.id==='raw-milk').quantity).toBe(640);expect(M.portions(next,'product')).toBe(8);
+      expect(next.operations.materialMovements.map((m:any)=>m.delta)).toEqual([50,640]);next=apply(next,'materials_link',command);expect(next.operations.materialMovements).toHaveLength(2);
+      next.operations.ingredients.forEach((i:any)=>i.quantity=0);next=apply(next,'materials_link',command);expect(next.operations.ingredients.every((i:any)=>i.quantity===0)).toBe(true);expect(next.operations.materialMovements).toHaveLength(2);
+      next.costing.model.recipes[0].output=10;next.costing.revision++;next=apply(next,'materials_link',{...command,revision:2});expect(next.operations.ingredients.find((i:any)=>i.id==='raw-milk').quantity).toBe(160);expect(next.operations.ingredients.find((i:any)=>i.id==='raw-tartara').quantity).toBe(0);
+      next.costing.model.recipes[0].output=8;next.costing.revision++;next=apply(next,'materials_link',{...command,revision:3});expect(next.operations.ingredients.find((i:any)=>i.id==='raw-milk').quantity).toBe(160);expect(next.operations.materialMovements).toHaveLength(3);
+    }finally{delete ctx.BRANCH_CONFIG;}
+  });
+  it('usa cambios manuales, cantidades con merma y unidades compatibles en el abastecimiento',()=>{
+    ctx.BRANCH_CONFIG={slug:'cafeteria'};
+    try{
+      let s=initial();s.costing.model.recipes[0].lines[0]={ingredientId:'tartara',initialQuantity:100,quantity:95,unit:'g',stage:'batch'};
+      s=apply(s,'materials_link',{...link,supplyRecipe:true});expect(s.operations.ingredients.find((i:any)=>i.id==='raw-tartara').quantity).toBe(100);
+      s.costing.model.recipes[0].lines[0].initialQuantity=150;s.costing.revision=2;
+      s=apply(s,'materials_link',{...link,revision:2,supplyRecipe:true});expect(s.operations.ingredients.find((i:any)=>i.id==='raw-tartara').quantity).toBe(150);
+      s.operations.ingredients.find((i:any)=>i.id==='raw-milk').quantity=1000;s=apply(s,'materials_link',{...link,revision:2,supplyRecipe:true});expect(s.operations.ingredients.find((i:any)=>i.id==='raw-milk').quantity).toBe(1000);
+    }finally{delete ctx.BRANCH_CONFIG;}
+  });
+  it('conserva la lógica de otros negocios sin abastecimiento de receta',()=>{
+    ctx.BRANCH_CONFIG={slug:'gcobarf'};try{expect(()=>apply(initial(),'materials_link',{...link,supplyRecipe:true})).toThrow('Jesspreso Olivia');}finally{delete ctx.BRANCH_CONFIG;}
+    expect(apply(initial(),'materials_link',link).operations.ingredients.every((i:any)=>i.quantity===0)).toBe(true);
+  });
   it('GCOBARF sustituye el vínculo del insumo desde el costeo sin tocar otras recetas',()=>{
     ctx.BRANCH_CONFIG={slug:'gcobarf'};
     try{

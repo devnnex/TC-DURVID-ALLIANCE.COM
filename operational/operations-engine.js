@@ -1,6 +1,6 @@
 /* Pure rules shared by demonstration and the durable offline queue. servicio seguro validates independently. */
 globalThis.AllianceOperationsEngine=(()=>{
-  const collections=['suppliers','ingredients','recipes','purchases','customers','debts','settlements','cashSessions','cashMovements','tickets','customerPayments','materialMovements','cashReviews','productions','preparations'];
+  const collections=['suppliers','ingredients','recipes','purchases','customers','debts','settlements','cashSessions','cashMovements','tickets','customerPayments','materialMovements','cashReviews','productions','preparations','recipeSupplies'];
   const empty=()=>Object.fromEntries([...collections.map(k=>[k,[]]),['settings',{cashRequired:false,allowNegative:false}]]);
   const clone=v=>structuredClone(v),money=n=>Math.round(n*100)/100;
   function fail(message,code='INVALID_INPUT'){const e=new Error(message);e.code=code;throw e;}
