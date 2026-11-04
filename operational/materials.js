@@ -6,6 +6,7 @@ globalThis.MaterialsPanel=(()=>{
   let historyView=false,historyQuery='',historyActor='',historyAction='',historyFrom='',historyTo='';
   let data=null,loading,visible=false,query='',filter='all',busy=false,linkCosting=null,highlight='',availability=new Map();
   const recipeInventory=()=>!gcobarf();
+  const catalogBeforeStock=()=>['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug);
   const host=()=>document.querySelector('#materialsContent'),write=()=>OracleDb.permission('inventory.write'),state=()=>({operations:data.model,docs:data.docs,units:data.units,costing:linkCosting});
   const historyLabels={production:'Producción / corrección de hoja',preparation:'Consumos preparados',return:'Devolución',sale:'Venta',create:'Insumo agregado',edit:'Insumo editado',in:'Entrada de existencias',out:'Retiro de existencias',delete:'Insumo eliminado',adjustment:'Corrección de existencias',waste:'Merma'};
   function historyRows(){
@@ -65,9 +66,10 @@ globalThis.MaterialsPanel=(()=>{
     if(!feedback){feedback=document.createElement('p');feedback.dataset.materialInventoryStatus='';feedback.setAttribute('role','status');form.materialScope.element.append(feedback);}
     try{
       const result=inventoryPreview(form);
-      feedback.classList.toggle('cost-error',result.missing.length>0);
-      feedback.textContent=result.missing.length?'Abastece la macro antes de agregar: '+result.missing.map(i=>i.name+' (disponible '+qty(i.available)+' '+unit(i.unit)+', necesario '+qty(i.needed)+' '+unit(i.unit)+')').join('; ')+'.':qty(result.portions)+' productos que puedes preparar con los insumos actuales. La capacidad se comparte con las otras recetas.';
-      return result.missing.length===0;
+      feedback.classList.toggle('cost-error',result.missing.length>0&&!catalogBeforeStock());
+      const capacity=qty(result.portions)+' productos que puedes preparar con los insumos actuales. La capacidad se comparte con las otras recetas.';
+      feedback.textContent=result.missing.length?(catalogBeforeStock()?capacity+' Puedes agregar el producto y abastecer la macro después. Para preparar una unidad falta: ':'Abastece la macro antes de agregar: ')+result.missing.map(i=>i.name+' (disponible '+qty(i.available)+' '+unit(i.unit)+', necesario '+qty(i.needed)+' '+unit(i.unit)+')').join('; ')+'.':capacity;
+      return catalogBeforeStock()||result.missing.length===0;
     }catch(e){feedback.classList.add('cost-error');feedback.textContent=e.message;return false;}
   }
   async function canAddInventory(form){await refresh();if(form.materialScope?.production){if(!data.model.productions?.some(p=>p.recipeId===form.materialScope.recipeId)){status('Guarda primero la hoja de producción para registrar sus insumos.',true);return false;}return true;}return previewInventory(form);}
@@ -78,7 +80,8 @@ globalThis.MaterialsPanel=(()=>{
       const batch=data.model.productions?.find(p=>p.recipeId===r.id);form.materialScope={recipeId:r.id,production:true,element:box};form.stock.value=String(batch?.output??r.output);form.stock.readOnly=true;form.stock.closest('label').firstChild.textContent='Cantidad producida';form.stock.dispatchEvent(new Event('input',{bubbles:true}));
       box.textContent=batch?qty(batch.output)+' productos terminados. Sus insumos ya se registraron al guardar la producción. Por incorporar: '+qty(batch.output-batch.transferred)+'.':'Guarda la hoja de producción antes de incorporar sus productos terminados.';return;
     }
-    const mappings=[...new Set(r.lines.map(l=>l.ingredientId))].map(ingredientId=>{const ingredient=linkCosting.model.ingredients.find(i=>i.id===ingredientId),suggestion=M.stockSuggestion({...state(),costing:linkCosting},ingredient);if(!suggestion.stockId)throw Error('Selecciona el insumo de la macro en la receta para '+ingredient.name+'.');return {ingredientId,stockId:suggestion.stockId};});
+    const newIds=new Map();
+    const mappings=[...new Set(r.lines.map(l=>l.ingredientId))].map(ingredientId=>{const ingredient=linkCosting.model.ingredients.find(i=>i.id===ingredientId),suggestion=M.stockSuggestion({...state(),costing:linkCosting},ingredient);if(suggestion.stockId)return {ingredientId,stockId:suggestion.stockId};if(!catalogBeforeStock()||suggestion.ambiguous)throw Error('Selecciona el insumo de la macro en la receta para '+ingredient.name+'.');const key=M.norm(ingredient.name)+':'+M.base(ingredient.unit),stockId=newIds.get(key)||'raw-'+uid();newIds.set(key,stockId);return {ingredientId,stockId};});
     form.materialScope={recipeId:r.id,revision:linkCosting.revision,salePortions:1,mappings,element:box};previewInventory(form);
   }
   async function linkFromInventory(form,productId){if(!form.materialScope||form.materialScope.production)return true;const p=payload(form.materialScope,productId);p.available=form.is_available.checked;const okay=await send('materials_link',p);if(!okay)await AllianceDialogs.alert('El producto se conservó sin habilitar. Revisa los vínculos de insumos y vuelve a guardar.');return okay;}
