@@ -9,6 +9,17 @@ const apply=(s:any,command:string,payload:any)=>{const next=structuredClone(s);r
 const link={productId:'product',recipeId:'recipe',revision:1,salePortions:1,mappings:[{ingredientId:'tartara',stockId:'raw-tartara'},{ingredientId:'milk',stockId:'raw-milk'}]};
 function ready(){let s=apply(initial(),'materials_link',link);for(const [id,unit]of [['raw-tartara','g'],['raw-milk','ml']])s=apply(s,'materials_adjust',{ingredientId:id,quantity:1000,unit,kind:'in',totalCost:10000,reason:'Abastecer'});return s;}
 describe('Macro de insumos y recetas por unidad vendida',()=>{
+  it('aumentar capacidad agrega todos los ingredientes proporcionalmente y actualiza otras recetas',()=>{
+    ctx.BRANCH_CONFIG={slug:'cocteleria'};
+    try{
+      let s=ready();s.docs.menu_items.push({id:'second',name:'Otra receta'});s=apply(s,'materials_link',{...link,productId:'second'});
+      expect(M.portions(s,'product')).toBe(12);s=apply(s,'materials_capacity',{productId:'product',quantity:17,expectedCapacity:12});
+      expect(s.operations.ingredients.find((i:any)=>i.id==='raw-tartara').quantity).toBe(1046.875);expect(s.operations.ingredients.find((i:any)=>i.id==='raw-milk').quantity).toBe(1400);expect(M.portions(s,'second')).toBe(17);
+      s=apply(s,'materials_adjust',{ingredientId:'raw-milk',quantity:320,unit:'ml',kind:'in',totalCost:1280});expect(M.portions(s,'product')).toBe(21);expect(M.portions(s,'second')).toBe(21);
+      const movements=s.operations.materialMovements.length;expect(()=>apply(s,'materials_capacity',{productId:'second',quantity:25,expectedCapacity:17})).toThrow('cambió');expect(s.operations.materialMovements).toHaveLength(movements);
+      s=apply(s,'materials_capacity',{productId:'second',quantity:21,expectedCapacity:21});expect(s.operations.materialMovements).toHaveLength(movements);expect(()=>apply(s,'materials_capacity',{productId:'second',quantity:20,expectedCapacity:21})).toThrow('retirar');
+    }finally{delete ctx.BRANCH_CONFIG;}
+  });
   it('abastece las porciones guardadas, respeta existencias y no rellena lo consumido al guardar de nuevo',()=>{
     ctx.BRANCH_CONFIG={slug:'cocteleria'};
     try{

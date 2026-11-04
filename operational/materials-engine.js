@@ -45,6 +45,16 @@ globalThis.AllianceMaterialsEngine=(()=>{
         s.recipeSupplies=(s.recipeSupplies||[]).filter(v=>v.recipeId!==r.id);s.recipeSupplies.push({...meta,id:r.id,recipeId:r.id,output:r.output,parts:[...covered.values()]});
       }
       if(p.available!==undefined)state.docs.menu_items.find(i=>i.id===p.productId).is_available=!!p.available;
+    }else if(k==='materials_capacity'){
+      if(!['cafeteria','cocteleria'].includes(globalThis.BRANCH_CONFIG?.slug))fail('Esta capacidad pertenece a Jesspreso Olivia y Coctelería.');
+      const recipe=s.recipes.find(r=>r.productId===p.productId&&r.managed);if(!recipe?.lines.length)fail('Vincula el producto con su receta antes de aumentar la capacidad.');
+      number(p.quantity,'posibles preparaciones',0,1e9);number(p.expectedCapacity,'capacidad anterior',0,1e9);if(!Number.isInteger(p.quantity)||!Number.isInteger(p.expectedCapacity))fail('Escribe un número entero de preparaciones.');
+      const current=portions(state,p.productId);if(current!==p.expectedCapacity)fail('La capacidad cambió en otro equipo. Actualiza antes de guardar.','VERSION_CONFLICT');if(p.quantity<current)fail('Para retirar insumos, registra la salida desde la macro.');
+      const delta=p.quantity-current;if(delta){
+        const old=s.recipeSupplies?.find(r=>r.recipeId===recipe.recipeId),covered=new Map((old?.parts||[]).map(i=>[i.ingredientId,i]));
+        for(const part of recipe.lines){const raw=s.ingredients.find(i=>i.id===part.ingredientId&&!i.archived);if(!raw)fail('Un insumo de la receta ya no está disponible.');const q=round(E().convert(part.quantity,part.unit,raw.unit,state.units)*delta);if(q>0)E().move(s,raw,q,'in','Capacidad de preparación · '+recipe.name,meta);covered.set(raw.id,{ingredientId:raw.id,unit:raw.unit,quantity:round((covered.get(raw.id)?.quantity||0)+q)});}
+        s.recipeSupplies=(s.recipeSupplies||[]).filter(r=>r.recipeId!==recipe.recipeId);s.recipeSupplies.push({...old,...meta,id:recipe.recipeId,recipeId:recipe.recipeId,output:old?.output||0,parts:[...covered.values()]});
+      }
     }else if(k==='materials_delete'){
       if(actor.role!=='boss')fail('Solo un jefe puede eliminar insumos.');const raw=s.ingredients.find(i=>i.id===p.ingredientId);if(!raw)fail('Insumo no disponible.');if(s.recipes.some(r=>state.docs.menu_items.some(i=>i.id===r.productId)&&r.lines.some(l=>l.ingredientId===raw.id)))fail('Este insumo está vinculado a un producto. Puedes editarlo o abastecerlo, pero no eliminarlo.','MATERIALS_IN_USE');raw.archived=true;raw.revision++;
     }else if(k==='materials_save'){

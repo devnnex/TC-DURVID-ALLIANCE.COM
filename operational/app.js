@@ -4333,7 +4333,7 @@ const App = (() => {
                 <span class="inventory-profit"><small>Utilidad</small><strong>${money(profit)}</strong><em>${margin.toLocaleString("es-CO", { maximumFractionDigits: 1 })}% margen</em></span>
               </div>
               <div class="inventory-row-actions">
-                <button class="ghost small inventory-adjust-trigger" type="button" data-inventory-adjust="${escapeHTML(item.id)}">${icon("package-plus", 16)} Unidades</button>
+                <button class="ghost small inventory-adjust-trigger" type="button" data-inventory-adjust="${escapeHTML(item.id)}">${icon("package-plus", 16)} ${window.MaterialsPanel?.available(item.id)!=null&&['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug)?'Aumentar capacidad':'Unidades'}</button>
                 <button class="icon-btn" type="button" data-edit-inventory="${escapeHTML(item.id)}" aria-label="Editar ${escapeHTML(item.name)}">${icon("pencil", 17)}</button>
                 <button class="icon-btn danger" type="button" data-delete-item="${escapeHTML(item.id)}" data-boss-only aria-label="Eliminar ${escapeHTML(item.name)}">${icon("trash-2", 17)}</button>
               </div>
@@ -4703,6 +4703,9 @@ const App = (() => {
     delete form.dataset.costingSource;delete form.dataset.noDraft;
     form.querySelector('[data-costing-inventory-note]')?.remove();
     form.stock.required = false;
+    form.stock.readOnly = false;
+    form.stock.min = '0';form.stock.step='any';
+    if(form.stock.closest('label').dataset.originalLabel)form.stock.closest('label').firstChild.textContent=form.stock.closest('label').dataset.originalLabel;
     form.stock.disabled = false;
     form.stock.closest('label').hidden = false;
     form.stock.closest('label').style.removeProperty('display');
@@ -4740,6 +4743,8 @@ const App = (() => {
     setCurrencyInputValue(form.cost_price, inventory.costPrice);
     setCurrencyInputValue(form.sale_price, Number(item.price || 0));
     form.stock.value = inventory.stock;
+    const capacity=['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug)?window.MaterialsPanel?.available(item.id):null;
+    if(capacity!=null){const label=form.stock.closest('label');label.dataset.originalLabel||=label.firstChild.textContent;label.firstChild.textContent='Posibles preparaciones';form.stock.value=String(capacity);form.stock.min=String(capacity);form.stock.step='1';form.materialCapacity={productId:item.id,expectedCapacity:capacity};}
     form.min_stock.value = inventory.minStock;
     form.unit.value = inventory.unit;
     form.is_available.checked = item.is_available !== false;
@@ -4870,12 +4875,13 @@ const App = (() => {
     const name = form.product_name.value.trim();
     const costPrice = currencyInputNumber(form.cost_price);
     const salePrice = currencyInputNumber(form.sale_price);
-    const stock = Number(form.stock.value || 0);
+    const stock = form.materialCapacity?inventoryFor(state.items.find(i=>i.id===form.product_id.value)).stock:Number(form.stock.value || 0);
     const minStock = Number(form.min_stock.value || 0);
     if (!name || ![costPrice, salePrice, stock, minStock].every(Number.isFinite) || [costPrice, salePrice, stock, minStock].some((value) => value < 0)) {
       toast("Revisa nombre, precios y existencias antes de guardar.", "error", "invalid-inventory-product");
       return;
     }
+    if(form.materialCapacity){const target=Number(form.stock.value),previous=form.materialCapacity.expectedCapacity;if(!Number.isInteger(target)||target<previous){toast('Escribe una capacidad igual o mayor a la actual.','error');return;}if(target>previous){try{await MaterialsPanel.setCapacity(form.materialCapacity.productId,target,previous);form.materialCapacity.expectedCapacity=target;form.stock.min=String(target);}catch(error){toast(error.message,'error');return;}}}
     const id = form.product_id.value;
     if (!id && costPrice === salePrice) {
       const dialog = $("#zeroProfitDialog");
@@ -4969,7 +4975,7 @@ const App = (() => {
   };
 
   const openInventoryAdjustment = (id) => {
-    if(window.MaterialsPanel?.available(id)!=null){MaterialsPanel.open();return;}
+    if(window.MaterialsPanel?.available(id)!=null){if(['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug))void MaterialsPanel.capacityDialog(id);else MaterialsPanel.open();return;}
     const item = state.items.find((entry) => entry.id === id);
     const form = $("#inventoryAdjustForm");
     if (!item || !form) return;
