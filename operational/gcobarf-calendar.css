@@ -43,3 +43,11 @@
 
 
 .cost-product-type{display:grid;gap:6px;min-width:180px}.cost-product-type select,.cost-product-type input{padding:12px;border:1px solid #cbd9e5;border-radius:10px;background:white}.cost-product-type [hidden]{display:none}.cost-suggested-editor{display:flex;align-items:center;gap:8px}.cost-suggested-editor input{width:140px}.cost-suggested-editor button{padding:5px 10px;font-size:20px}.cost-production-day{flex-wrap:wrap}
+
+/* Payment belongs to each client, in the normal cell flow. */
+#deliveryCalendar .delivery-customer-name>.delivery-payment-status{display:block;position:static;inset:auto;min-width:0;height:auto;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none;font-size:10px!important;font-weight:500;line-height:1.4;white-space:normal;color:#85724a;-webkit-line-clamp:unset}
+#deliveryCalendar .delivery-payment-status[data-payment-state=paid]{color:#14784e}
+#deliveryCalendar .delivery-payment-status::before{content:'●';font-size:7px;margin-right:4px;vertical-align:1px}
+#deliveryCalendar .delivery-customer-name.is-paid{background:#e9f5ed;color:#155b3e}
+#deliveryCalendar .delivery-customer-name.is-pending{background:#fff9e7;color:#665630}
+@media(max-width:700px){#deliveryCalendar .delivery-customer-name>.delivery-payment-status{font-size:9px!important;line-height:1.3}}

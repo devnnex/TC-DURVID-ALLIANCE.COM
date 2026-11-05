@@ -30,6 +30,16 @@ globalThis.AllianceCustomerLedger=(()=>{
     const s=source(data),sale=s.sales.find(v=>v.sessionId===row.sessionId),lines=(sale?.items||s.lines.filter(i=>i.session_id===row.sessionId)).filter(i=>i.menu_item_id===row.productId);
     const quantity=lines.reduce((n,i)=>n+i.quantity,0);return quantity?money(-row.delta*lines.reduce((n,i)=>n+i.quantity*i.unit_price,0)/quantity):null;
   }
+  function prettyDay(value){if(!value)return 'Sin fecha';const d=new Date(String(value).slice(0,10)+'T12:00:00-05:00');return Number.isNaN(d.getTime())?'Sin fecha':new Intl.DateTimeFormat('es-CO',{day:'numeric',month:'short',year:'numeric',timeZone:'America/Bogota'}).formatToParts(d).filter(p=>['day','month','year'].includes(p.type)).map(p=>p.value).join(' ');}
+  function prettyMoment(value){const d=new Date(value);return !value||Number.isNaN(d.getTime())?'Sin fecha':prettyDay(localDay(value))+' · '+d.toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit',timeZone:'America/Bogota'});}
+  function movement(data,row){
+    const s=source(data),sale=s.sales.find(v=>v.sessionId===row.sessionId||v.id===row.saleId),session=s.sessions.find(v=>v.id===(row.sessionId||sale?.sessionId));
+    const related=!!(sale||session?.delivery_date||row.deliveryDate),returned=Number(row.delta)>0&&/CONSUMO|VENTA|CORRECCION/.test(row.type||'');
+    if(!related&&!returned)return null;
+    const account=session||{id:row.sessionId||sale?.sessionId,customer_id:row.customerId,delivery_date:row.deliveryDate,delivery_time:row.deliveryTime};
+    const a=appointment(data,account),paid=a.paid;
+    return {...a,state:returned?'returned':paid?'sold':'reserved',label:returned?'Devuelto':paid?'Vendido':'Apartado',paymentLabel:returned?'Devolución':paid?'Pagado':a.payments.length?'Pago parcial':'Pendiente de pago',unitsLabel:returned?'Unidades devueltas':paid?'Unidades vendidas':'Unidades apartadas'};
+  }
   function color(id){let hash=0;for(const c of String(id))hash=(hash*31+c.charCodeAt(0))>>>0;return 'hsl('+hash%360+' 52% 35%)';}
-  return {context,appointment,history,collectionItems,filterMovements,movementValue,localDay,color};
+  return {context,appointment,history,collectionItems,filterMovements,movementValue,movement,prettyDay,prettyMoment,localDay,color};
 })();

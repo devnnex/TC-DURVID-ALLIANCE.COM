@@ -38,3 +38,9 @@ test('una cantidad pendiente en el borrador no bloquea el botón de una producci
   const saved=page.locator('[data-costing-inventory="saved"]');await expect(saved).toBeEnabled();await saved.click();await expect(page.locator('#inventoryDialog')).toBeVisible();
   await expect(page.locator('#inventoryForm [name=stock]')).toHaveValue('10');expect(server.state.costing.revision).toBe(5);
 });
+
+test('el modal de costeo deja espacio a nombres largos de producto y categoría',async({page})=>{
+  await page.setViewportSize({width:1440,height:1000});const server=await backend(page);seed(server);server.state.costing.model.recipes[0].name='GCOBARF - Pollo - 20261026 200 LIBRAS';server.state.costing.model.recipes[0].category='GCOBARF - Nutrición completa para perros y gatos';await enter(page);await page.locator('.admin-sidebar [href="#costing"]').click();await page.locator('[data-costing-inventory="saved"]').click();
+  const modal=page.locator('#inventoryDialog');await expect(modal).toBeVisible();const bounds=await modal.boundingBox();expect(bounds!.width).toBeGreaterThan(1000);const names=await modal.locator('[data-costing-inventory-note] dl>div').evaluateAll(rows=>rows.slice(0,2).map(row=>({x:row.getBoundingClientRect().x,y:row.getBoundingClientRect().y,width:row.getBoundingClientRect().width,height:row.querySelector('dd')!.getBoundingClientRect().height})));expect(names[0].width).toBeGreaterThan(450);expect(names[1].y).toBe(names[0].y);expect(names[0].height).toBeLessThan(55);await modal.screenshot({path:'test-results/gcobarf-roomy-inventory-modal.png'});
+  await page.setViewportSize({width:390,height:844});await expect.poll(()=>modal.evaluate(d=>d.scrollWidth<=d.clientWidth+1)).toBe(true);await modal.screenshot({path:'test-results/gcobarf-roomy-inventory-modal-mobile.png'});
+});

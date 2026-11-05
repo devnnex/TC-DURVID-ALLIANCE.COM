@@ -148,3 +148,31 @@
 
 /* Compact customer cards and aligned, readable ledger filters. */
 .op-client-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));align-items:start}.op-client-card{padding:22px}.op-client-card .op-numbers{flex-wrap:wrap;gap:14px}.op-client-card .op-numbers strong{font-size:21px}.movement-customer-dates{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;align-items:end;margin:16px 0;padding:18px;border:1px solid #dce6ef;border-radius:18px;background:#f8fafc}.movement-customer-dates label{display:grid;gap:6px;font-size:13px;font-weight:600}.movement-customer-dates label[hidden]{display:none}.movement-customer-dates input,.movement-customer-dates select{width:100%;min-width:0;padding:10px;border:1px solid #cbd9e5;border-radius:10px;background:white}.movement-customer-dates p{grid-column:1/-1;margin:0;color:#617187;font-size:12px}.ledger-allocation,.customer-delivery-history{padding:12px;border:1px solid #dce6ef;border-radius:12px;margin:10px 0}.customer-delivery-history>summary{font-weight:650;cursor:pointer}.ledger-paid{color:#087650;background:#e9f8ef}.ledger-pending{color:#8b5707;background:#fff5d9}.ledger-badge{display:inline-flex;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:700}.ledger-payment{padding:10px 0;border-top:1px solid #e3eaf0}.ledger-payment p{margin:4px 0}.production-final-cost{background:#eef7f3}.inventory-costing-note dl{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}@media(max-width:600px){.op-client-grid{grid-template-columns:minmax(0,1fr)}.movement-customer-dates{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px;gap:10px}}
+
+/* One searchable client control; aligned filters use the available width. */
+#movementCustomerDates{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;padding:14px 18px}
+#movementCustomerDates>label{flex:1 1 170px;max-width:240px;min-width:0}
+#movementCustomerDates>label:first-child{flex:1.2 1 210px;max-width:310px}
+#movementCustomerDates>label[hidden]{display:none}
+#movementCustomerDates>p{flex-basis:100%;font-size:12px}
+#movementCustomerDates .op-search-select{margin:0;min-width:0;width:100%}
+#movementCustomerDates input,#movementCustomerDates select{box-sizing:border-box;min-height:46px;font:inherit}
+#movementCustomerDates .op-search-select>input{padding-right:38px}
+#movements .inventory-toolbar{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(130px,.6fr);align-items:end}
+#movements .inventory-toolbar>label{min-width:0;grid-column:auto}
+#movements .inventory-toolbar input,#movements .inventory-toolbar select{box-sizing:border-box;min-width:0;width:100%}
+.movement-payment-state{display:inline-flex;align-self:flex-start;width:fit-content;padding:4px 8px;margin-top:5px;border-radius:8px;background:#f6f1e4;color:#78633a;font-size:11px;font-weight:600}
+.movement-payment-state.is-sold{background:#e8f5ed;color:#14784e}
+.movement-payment-state.is-returned{background:#edf2f7;color:#526578}
+.movement-payment-detail{padding:12px 0;border-top:1px solid #e2e9ed;overflow-wrap:anywhere}
+.movement-payment-detail p{margin:0 0 5px!important;line-height:1.6}
+.movement-payment-detail small{display:block;color:#607080;line-height:1.6}
+@media(max-width:759px){#movementCustomerDates>label,#movementCustomerDates>label:first-child{flex:1 1 150px;max-width:none}#movements .inventory-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}#movements .inventory-toolbar>.inventory-search{grid-column:1/-1}}
+
+/* Let product and category names occupy the full first row of the costed editor. */
+#inventoryDialog:has([data-costing-inventory-note]){width:min(1180px,calc(100vw - 32px))}
+#inventoryDialog [data-costing-inventory-note] dl{grid-template-columns:repeat(6,minmax(0,1fr));gap:18px 28px}
+#inventoryDialog [data-costing-inventory-note] dl>div{grid-column:span 2;min-width:0}
+#inventoryDialog [data-costing-inventory-note] dl>div:nth-child(-n+2){grid-column:span 3}
+#inventoryDialog [data-costing-inventory-note] dd{line-height:1.45;overflow-wrap:break-word;word-break:normal}
+@media(max-width:650px){#inventoryDialog:has([data-costing-inventory-note]){width:calc(100vw - 20px)}#inventoryDialog [data-costing-inventory-note] dl{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#inventoryDialog [data-costing-inventory-note] dl>div{grid-column:span 1}#inventoryDialog [data-costing-inventory-note] dl>div:nth-child(-n+2),#inventoryDialog [data-costing-inventory-note] dl>div:last-child{grid-column:1/-1}}
