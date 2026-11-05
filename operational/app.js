@@ -364,7 +364,6 @@ const App = (() => {
     }
     const item = document.createElement("div");
     item.className = `system-modal ${type}`;
-    if(window.BRANCH_CONFIG?.slug==='gcobarf'&&type==='error'&&/no alcanza|faltan?|insumos? insuficientes|no hay.*suficient/i.test(message)){item.classList.add('gcobarf-shortage-toast');item.setAttribute('role','alert');}
     const iconName = type === "error" ? "circle-alert" : "badge-check";
     item.innerHTML = `
       <div class="system-modal-icon">${icon(iconName, 24)}</div>
@@ -385,7 +384,6 @@ const App = (() => {
   };
 
   const isConfigured = () => Boolean(window.ALLIANCE_CONFIG?.API_URL && window.OracleDb);
-  document.addEventListener('gcobarf-shortage',event=>toast(escapeHTML(event.detail.message),'error','gco-shortage:'+event.detail.message));
 
   const uid = () =>
     crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
