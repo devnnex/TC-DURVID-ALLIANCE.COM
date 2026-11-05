@@ -6813,7 +6813,8 @@ const App = (() => {
     setCurrencyInputValue(form.mixed_amount_two, 0);
     setCurrencyInputValue(form.cash_received, total);
     state.activePaymentTotal = total;
-    $("#paymentTableLabel").textContent = sessionLabel(session);
+    const delivery = window.BRANCH_CONFIG?.slug === 'gcobarf' && session.delivery_date;
+    $("#paymentTableLabel").textContent = delivery ? session.payer_name : sessionLabel(session);
     $("#paymentTotal").textContent = money(total);
     const paymentLines = $("#paymentSaleLines");
     if (paymentLines) paymentLines.innerHTML = activeItems.length
@@ -6826,7 +6827,7 @@ const App = (() => {
     }
     const tipChoice = $("#paymentTipChoice");
     if (tipChoice) tipChoice.hidden = !tipsEnabled();
-    if ($("#paymentDialogTitle")) $("#paymentDialogTitle").textContent = quickSale ? "Cobrar venta individual" : "Cobrar mesa";
+    if ($("#paymentDialogTitle")) $("#paymentDialogTitle").textContent = delivery ? "Cobrar entrega" : quickSale ? "Cobrar venta individual" : "Cobrar mesa";
     $("#mixedPaymentFields").hidden = true;
     $("#cashReceivedFields").hidden = false;
     updatePaymentTipChoice();
@@ -9080,6 +9081,7 @@ const App = (() => {
       }
       if (target.dataset.chargeSession) {
         target.closest("#accountDetailDialog")?.close();
+        target.closest("#deliveryDialog")?.close();
         openPaymentDialog(target.dataset.chargeSession);
       }
       if (target.dataset.printSession) {
