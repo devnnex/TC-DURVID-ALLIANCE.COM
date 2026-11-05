@@ -5,16 +5,17 @@ globalThis.AllianceCosting = (() => {
   const processingStates={stored:0,thawed:1,cleaned:3,cooked:7,'frozen-cleaned':2,'frozen-cooked':6};
   const processingDefaults=()=>({version:1,stockState:'stored',recipeState:'auto',thaw:0,clean:0,cook:0});
   function processingTarget(p){const from=processingStates[p.stockState];if(p.recipeState==='same')return from;if(p.recipeState!=='auto')return processingStates[p.recipeState];let to=from;for(const [key,bits]of [['thaw',1],['clean',3],['cook',7]])if(p[key]>0)to|=bits;return to;}
-  function measuredFactor(line){const initial=number(line.initialQuantity,'Peso inicial',0.000001),final=number(line.quantity,'Peso final');if(final>initial)throw new Error('El peso final no puede superar el peso inicial.');return final/initial;}
-  function processingFactor(line,manual=false){
-    const p=line.processing;if(p===undefined)return line.initialQuantity!==undefined&&!manual?measuredFactor(line):1;
+  const isBagLoss=(ingredient,line)=>line?.initialQuantity!==undefined&&['unit','u'].includes(line.unit)&&/\bbolsas?\s+hermeticas?\b/.test(String(ingredient?.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase());
+  function measuredFactor(line,ingredient){const initial=number(line.initialQuantity,'Peso inicial',0.000001),final=number(line.quantity,'Peso final');if(isBagLoss(ingredient,line)){if(final<initial)throw Error('Las bolsas utilizadas deben ser iguales o mayores a las necesarias.');return initial/final;}if(final>initial)throw new Error('El peso final no puede superar el peso inicial.');return final/initial;}
+  function processingFactor(line,manual=false,ingredient){
+    const p=line.processing;if(p===undefined)return line.initialQuantity!==undefined&&!manual?measuredFactor(line,ingredient):1;
     if(!p||p.version!==1||Object.keys(p).some(k=>!['version','stockState','recipeState','thaw','clean','cook'].includes(k)))throw new Error('Configuración de merma inválida.');
     const from=processingStates[p.stockState],to=processingTarget(p);
     if(from===undefined||to===undefined||(from&to)!==from)throw new Error('El estado de la receta no puede deshacer la preparación del inventario.');
     let factor=1;for(const [key,bit] of [['thaw',1],['clean',2],['cook',4]]){if(typeof p[key]!=='number')throw new Error('Revisa el porcentaje de merma.');const loss=number(p[key],'Merma',0,line.initialQuantity!==undefined?100:99.999999);if(!(from&bit)&&(to&bit))factor*=1-loss/100;}
-    return line.initialQuantity!==undefined&&!manual?measuredFactor(line):factor;
+    return line.initialQuantity!==undefined&&!manual?measuredFactor(line,ingredient):factor;
   }
-  const lineQuantity=line=>{const factor=processingFactor(line);return line.initialQuantity!==undefined?number(line.initialQuantity,'Peso inicial',0.000001):number(line.quantity,'Cantidad')/factor;};
+  const lineQuantity=line=>line.initialQuantity!==undefined?number(line.initialQuantity,'Peso inicial',0.000001):number(line.quantity,'Cantidad')/processingFactor(line);
   const neutralizeLosses=model=>{model.ingredients.forEach(i=>i.yieldPercent=100);model.recipes.forEach(r=>r.wastePercent=0);return model;};
   function number(value,label,min=0,max=1e12){if(value===null||value===''||!Number.isFinite(Number(value))||Number(value)<min||Number(value)>max)throw new Error(`${label}: revisa el valor.`);return Number(value);}
   function convert(quantity,from,to){if(!units[from]||!units[to]||units[from].family!==units[to].family)throw new Error('Conversión incompatible: masa, volumen y unidades no se mezclan.');return number(quantity,'Cantidad')*units[from].factor/units[to].factor;}
@@ -31,7 +32,7 @@ globalThis.AllianceCosting = (() => {
   // Within a family keep physical quantities; across families keep purchase quantities.
   function updateIngredient(model,row,{recipeId,syncQuantity=false,preserveFinal=false}={}){
     const previous=model.ingredients.find(i=>i.id===row.id);
-    const yields=new Map(model.recipes.flatMap(recipe=>recipe.lines.filter(line=>line.ingredientId===row.id&&line.initialQuantity!==undefined).map(line=>[line,processingFactor(line)])));
+    const yields=new Map(model.recipes.flatMap(recipe=>recipe.lines.filter(line=>line.ingredientId===row.id&&line.initialQuantity!==undefined).map(line=>[line,processingFactor(line,false,previous)])));
     if(previous&&units[previous.unit]&&units[row.unit]&&units[previous.unit].family!==units[row.unit].family){
       for(const recipe of model.recipes)for(const line of recipe.lines)if(line.ingredientId===row.id){
         line.quantity=convert(line.quantity,line.unit,previous.unit);if(line.initialQuantity!==undefined)line.initialQuantity=convert(line.initialQuantity,line.unit,previous.unit);line.unit=row.unit;
@@ -40,7 +41,7 @@ globalThis.AllianceCosting = (() => {
     // A correction made from a production row must update that row's inputs too.
     if(previous&&recipeId&&(syncQuantity||previous.unit!==row.unit||Number(previous.quantity)!==Number(row.quantity))){
       const recipe=model.recipes.find(r=>r.id===recipeId);
-      for(const line of recipe?.lines||[])if(line.ingredientId===row.id){const final=preserveFinal&&line.initialQuantity!==undefined?(units[line.unit]?.family===units[row.unit]?.family?convert(line.quantity,line.unit,row.unit):line.quantity):null;line.quantity=row.quantity;line.unit=row.unit;if(line.initialQuantity!==undefined){line.initialQuantity=row.quantity;line.quantity=final??row.quantity*yields.get(line);if(final!==null)line.processing={...processingDefaults(),clean:Math.max(0,(line.initialQuantity-final)/line.initialQuantity*100)};}}
+      for(const line of recipe?.lines||[])if(line.ingredientId===row.id){const final=preserveFinal&&line.initialQuantity!==undefined?(units[line.unit]?.family===units[row.unit]?.family?convert(line.quantity,line.unit,row.unit):line.quantity):null;line.quantity=row.quantity;line.unit=row.unit;if(line.initialQuantity!==undefined){line.initialQuantity=row.quantity;line.quantity=final??(isBagLoss(row,line)?row.quantity/yields.get(line):row.quantity*yields.get(line));if(final!==null)line.processing={...processingDefaults(),clean:Math.max(0,isBagLoss(row,line)?(1-line.initialQuantity/final)*100:(line.initialQuantity-final)/line.initialQuantity*100)};}}
     }
     const index=model.ingredients.findIndex(i=>i.id===row.id);if(index<0)model.ingredients.push(row);else model.ingredients[index]=row;
     return model;
@@ -65,14 +66,16 @@ globalThis.AllianceCosting = (() => {
     return output;
   }
   const lineCost=(i,line)=>line.manualCost!=null?number(line.manualCost,'Importe directo')/processingFactor(line):convert(lineQuantity(line),line.unit,i.unit)*ingredientCost(i);
-  function productionLineCosts(ingredient,line){const initial=convert(lineQuantity(line),line.unit,ingredient.unit)*ingredientCost(ingredient),yieldFactor=processingFactor(line);if(!(yieldFactor>0))throw Error('El peso final debe ser mayor que cero para calcular el costo con merma.');return {initial,withLoss:initial/yieldFactor,yieldFactor};}
-  function productionName(name,date){if(!/^\d{4}-\d{2}-\d{2}$/.test(date||''))throw Error('Fecha de producción inválida.');const base=String(name||'').replace(/\s+-\s+\d{2}\/\d{2}\/\d{4}$/,'').trim();return base+' - '+date.split('-').reverse().join('/');}
+  function productionLineCosts(ingredient,line){const initial=convert(lineQuantity(line),line.unit,ingredient.unit)*ingredientCost(ingredient),yieldFactor=processingFactor(line,false,ingredient);if(!(yieldFactor>0))throw Error('El peso final debe ser mayor que cero para calcular el costo con merma.');return {initial,withLoss:initial/yieldFactor,yieldFactor};}
+  const productionInventoryQuantity=(ingredient,line)=>isBagLoss(ingredient,line)?number(line.quantity,'Bolsas utilizadas',number(line.initialQuantity,'Bolsas necesarias',0.000001)):lineQuantity(line);
+  const productionLossPercent=(ingredient,line)=>(1-processingFactor(line,false,ingredient))*100;
+  function productionName(name,date){if(!/^\d{4}-\d{2}-\d{2}$/.test(date||''))throw Error('Fecha de producción inválida.');let base=String(name||'').trim(),before;do{before=base;base=base.replace(/\s*-\s*(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}|(?:19|20|21)\d{6}|(?:lun|mar|mi[eé]|jue|vie|s[aá]b|dom)\.?\s+\d{1,2}\s+[a-záéíóú]{3}\.?\s+\d{4})$/i,'').trim();}while(base!==before);const parts=new Intl.DateTimeFormat('es-CO',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'America/Bogota'}).formatToParts(new Date(date+'T12:00:00Z')),part=key=>parts.find(p=>p.type===key)?.value.replace(/\./g,'').toLowerCase();return base+' - '+part('weekday')+' '+part('day')+' '+part('month')+' '+part('year');}
   function calculate(model,recipe,channelId=recipe.channelId){
     if(recipe.sheet){if(!globalThis.AllianceJespresso)throw new Error('No se pudo cargar la hoja de recetas.');return AllianceJespresso.calculate(model,recipe);}
     const missing=[], operatingMissing=[],assumptions=[],lines=[];const s=model.settings,productionBasis=recipe.pricingBasis==='production',allocationMissing=productionBasis?operatingMissing:missing;
     const output=productionTotal(recipe);
     if(!recipe.lines.length)missing.push('Agrega al menos un ingrediente a la receta.');
-    for(const line of recipe.lines){const ingredient=model.ingredients.find(i=>i.id===line.ingredientId);if(!ingredient){missing.push('Ingrediente eliminado o no disponible.');continue;}const cost=line.initialQuantity!==undefined?productionLineCosts(ingredient,line).withLoss:lineCost(ingredient,line);lines.push({name:ingredient.name,quantity:Number(line.quantity),inventoryQuantity:lineQuantity(line),unit:line.unit,cost});}
+    for(const line of recipe.lines){const ingredient=model.ingredients.find(i=>i.id===line.ingredientId);if(!ingredient){missing.push('Ingrediente eliminado o no disponible.');continue;}const cost=line.initialQuantity!==undefined?productionLineCosts(ingredient,line).withLoss:lineCost(ingredient,line);lines.push({name:ingredient.name,quantity:Number(line.quantity),inventoryQuantity:productionInventoryQuantity(ingredient,line),unit:line.unit,cost});}
     const batchIngredients=lines.reduce((n,l)=>n+l.cost,0),ingredients=batchIngredients/output;let allocated=0,direct=0,monthlyFixed=0,batchDirect=0;
     for(const e of model.expenses){if(e.includedElsewhere){assumptions.push(`${e.name}: excluido porque ya está incluido en otro concepto.`);continue;}if(e.recipeId&&e.recipeId!==recipe.id)continue;
       if(e.kind==='unit'){direct+=number(e.amount,'Gasto unitario');continue;}if(e.kind==='batch'){const amount=number(e.amount,'Costo del lote');batchDirect+=amount;direct+=amount/output;continue;}
@@ -120,5 +123,5 @@ globalThis.AllianceCosting = (() => {
       minimumTotal:minimum===null?null:minimum*factor,recommendedTotal:recommended===null?null:recommended*factor,
       belowMinimum:minimum!==null&&recipe.currentPrice!==null&&recipe.currentPrice!==''&&Number(recipe.currentPrice)<minimum};
   }
-  return {empty,units,convert,alignIngredientUnit,updateIngredient,ingredientCost,monthlyProduction,productionTotal,lineCost,productionLineCosts,productionName,lineQuantity,processingFactor,processingTarget,processingDefaults,processingStates,neutralizeLosses,calculate,priceGuide,validate};
+  return {empty,units,convert,alignIngredientUnit,updateIngredient,ingredientCost,monthlyProduction,productionTotal,lineCost,productionLineCosts,productionName,isBagLoss,productionInventoryQuantity,productionLossPercent,lineQuantity,processingFactor,processingTarget,processingDefaults,processingStates,neutralizeLosses,calculate,priceGuide,validate};
 })();

@@ -1,6 +1,12 @@
 import {readFileSync} from 'node:fs';import {runInNewContext} from 'node:vm';import {randomUUID} from 'node:crypto';import {describe,it,expect} from 'vitest';
 const ctx:any={structuredClone,crypto:{randomUUID},BRANCH_CONFIG:{slug:'gcobarf'}};for(const f of ['jespresso-engine.js','costing-engine.js','operations-engine.js','materials-engine.js','production-engine.js'])runInNewContext(readFileSync('operational/'+f,'utf8'),ctx);const C=ctx.AllianceCosting,M=ctx.AllianceMaterialsEngine,E=ctx.AllianceOperationsEngine;
 describe('Costos y edición GCOBARF',()=>{
+  it('Bolsa Hermética usa más unidades cuando se dañan bolsas, sin invertir otros insumos',()=>{
+    const bag={id:'bag',name:'Bolsa Hermetica 18*14',unit:'unit',quantity:1,purchasePrice:56,recoverableTax:false,purchaseTaxRate:0},line={ingredientId:'bag',unit:'unit',initialQuantity:196,quantity:200};
+    expect(C.productionLineCosts(bag,line)).toMatchObject({initial:10976,withLoss:11200});expect(C.productionInventoryQuantity(bag,line)).toBe(200);expect(C.productionLossPercent(bag,line)).toBeCloseTo(4/200*100);
+    expect(()=>C.productionLineCosts({...bag,name:'Pollo',unit:'g'},{...line,unit:'g'})).toThrow();expect(()=>C.productionLineCosts({...bag,name:'Caja de empaque'},line)).toThrow();
+  });
+  it('el nombre reemplaza todas las fechas previas por una fecha legible',()=>{expect(C.productionName('GCOBARF - Pollo - 20261026 - 15/10/2026','2026-11-20')).toBe('GCOBARF - Pollo - vie 20 nov 2026');expect(C.productionName('Pollo - vie 20 nov 2026','2026-11-21')).toBe('Pollo - sáb 21 nov 2026');});
   it('mantiene el costo inicial y divide el costo con merma entre el rendimiento medido',()=>{
     const ingredient={id:'chicken',name:'Pollo',unit:'g',quantity:1000,purchasePrice:17500,recoverableTax:false,purchaseTaxRate:0},line={ingredientId:'chicken',unit:'g',initialQuantity:1000,quantity:950};
     const m=C.empty();m.ingredients=[ingredient];m.channels=[{id:'direct',name:'Directo',salesPercent:0,paymentPercent:0,flatFee:0,feeBase:'net'}];const r={id:'batch',name:'Pollo',productionDate:'2026-11-05',output:10,lines:[line],currentPrice:3000,targetPercent:30,marginMode:'margin',channelId:'direct',pricingBasis:'production',monthlyUnits:null,minutes:null};
@@ -8,7 +14,7 @@ describe('Costos y edición GCOBARF',()=>{
     line.quantity=900;expect(C.productionLineCosts(ingredient,line).initial).toBe(17500);expect(C.calculate(m,r).batchIngredients).toBeCloseTo(17500/.9,8);
     line.quantity=0;expect(()=>C.calculate(m,r)).toThrow('peso final');
   });
-  it('fecha el nombre sin acumular sufijos al cambiar la fecha',()=>{expect(C.productionName('Pollo','2026-11-05')).toBe('Pollo - 05/11/2026');expect(C.productionName('Pollo - 05/11/2026','2026-11-07')).toBe('Pollo - 07/11/2026');});
+  it('fecha el nombre sin acumular sufijos al cambiar la fecha',()=>{expect(C.productionName('Pollo','2026-11-05')).toBe('Pollo - jue 5 nov 2026');expect(C.productionName('Pollo - 05/11/2026','2026-11-07')).toBe('Pollo - sáb 7 nov 2026');});
   it('bloquea editar insumos con otros roles aunque tengan permiso de inventario',()=>{const s={operations:E.empty(),docs:{menu_items:[],session_items:[],table_sessions:[]},units:[{id:'g',dimension:'MASS',factor:1}]};expect(()=>M.apply(s,{id:'x',command:'materials_save',payload:{id:'raw',name:'Pollo',unit:'g',revision:0,quantity:1000,totalCost:17500,minStock:0}},{id:'other',role:'admin'})).toThrow('jefe');});
   it('convierte unidades de los vínculos y registros de producción sin repetir el consumo',()=>{const s:any={operations:E.empty(),docs:{menu_items:[],session_items:[],table_sessions:[]},units:[{id:'g',dimension:'MASS',factor:1},{id:'kg',dimension:'MASS',factor:1000}]};s.operations.ingredients=[{id:'raw',name:'Pollo',unit:'g',quantity:9000,unitCost:17.5,minStock:100,revision:1}];s.operations.productions=[{recipeId:'batch',parts:[{ingredientId:'raw',unit:'g',quantity:1000}]}];M.apply(s,{id:'x',command:'materials_save',payload:{id:'raw',name:'Pollo fresco',unit:'kg',revision:1,quantity:9,totalCost:157500,minStock:.1}},{id:'owner',role:'boss'});expect(s.operations.ingredients[0]).toMatchObject({unit:'kg',quantity:9,unitCost:17500});expect(s.operations.productions[0].parts[0]).toMatchObject({unit:'kg',quantity:1});expect(s.operations.materialMovements).toHaveLength(0);});
 });
