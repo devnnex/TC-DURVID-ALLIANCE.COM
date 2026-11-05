@@ -41,9 +41,8 @@ describe('Costeo: cantidades, impuestos, comisiones y rentabilidad',()=>{
       Object.assign(ingredient,{unit,quantity:10,purchasePrice:100000});
       const line={ingredientId:ingredient.id,unit,initialQuantity:2,quantity:1.6};recipe.lines=[line];
       E.validate(m);expect(E.processingFactor(line)).toBeCloseTo(.8);expect(E.lineQuantity(line)).toBe(2);
-      expect(E.calculate(m,recipe).batchIngredients).toBeCloseTo(20000,8);
-      line.quantity=0;E.validate(m);expect(E.lineQuantity(line)).toBe(2);expect(E.processingFactor(line)).toBe(0);
-      expect(E.calculate(m,recipe).batchIngredients).toBe(20000);
+      expect(E.productionLineCosts(ingredient,line).initial).toBe(20000);expect(E.calculate(m,recipe).batchIngredients).toBeCloseTo(25000,8);
+      line.quantity=0;expect(()=>E.validate(m)).toThrow('peso final');expect(E.lineQuantity(line)).toBe(2);expect(E.processingFactor(line)).toBe(0);
       line.quantity=3;expect(()=>E.validate(m)).toThrow('peso final');
       line.quantity=1.6;E.updateIngredient(m,{...ingredient,quantity:5},{recipeId:recipe.id,syncQuantity:true});
       expect(line.initialQuantity).toBe(5);expect(line.quantity).toBe(4);

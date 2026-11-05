@@ -30,3 +30,10 @@
 .gcobarf-ingredient-actions{display:inline-flex;align-items:center;gap:7px;flex-wrap:nowrap;white-space:nowrap}
 .delivery-actions .delivery-remove{color:#b42318;border-color:#f1c6c2}
 #costing .gcobarf-ingredient-actions button{flex:none;margin:0!important}
+
+/* Pair each weight with its cost without squeezing the loss note or action buttons. */
+#costing .cost-production-sheet.cost-excel-sheet{grid-template-columns:minmax(0,1fr)}
+#costing .cost-excel-sheet>.cost-sheet-block:first-child .cost-excel-table{min-width:800px}
+#costing .cost-excel-sheet>.cost-sheet-block:first-child{overflow-x:auto}
+#costing .gcobarf-production-ingredient .gcobarf-weight-field{min-width:110px}
+#costing [data-sheet-initial-cost],#costing [data-sheet-line-cost]{white-space:nowrap;font-variant-numeric:tabular-nums}

@@ -112,7 +112,7 @@ describe('Macro de insumos y recetas por unidad vendida',()=>{
       const s=apply(initial(),'materials_save',{id:'flour',revision:0,name:'Harina',unit:'kg',quantity:2,minStock:0,totalCost:10000});
       const row=s.operations.ingredients.find((i:any)=>i.id==='flour');expect(row.unit).toBe('kg');
       expect(()=>apply(s,'materials_adjust',{ingredientId:'flour',kind:'in',quantity:500,unit:'g',totalCost:2500})).toThrow('unidad guardada');
-      expect(()=>apply(s,'materials_save',{id:'flour',revision:row.revision,name:row.name,unit:'g',quantity:2,minStock:0,totalCost:10000})).toThrow('unidad');
+      const converted=apply(s,'materials_save',{id:'flour',revision:row.revision,name:row.name,unit:'g',quantity:2000,minStock:0,totalCost:10000});expect(converted.operations.ingredients.find((i:any)=>i.id==='flour')).toMatchObject({quantity:2000,unit:'g',unitCost:5});
       const next=apply(s,'materials_adjust',{ingredientId:'flour',kind:'in',quantity:.5,unit:'kg',totalCost:2500});
       expect(next.operations.ingredients.find((i:any)=>i.id==='flour')).toMatchObject({quantity:2.5,unit:'kg',unitCost:5000});
     }finally{delete ctx.BRANCH_CONFIG;}

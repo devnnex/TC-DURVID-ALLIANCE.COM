@@ -62,6 +62,17 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
     keys_value:=covered.get_keys;FOR i IN 1..keys_value.COUNT LOOP stored_parts.append(covered.get_object(keys_value(i)));END LOOP;
     ledger:=JSON_OBJECT_T();ledger.put('recipeId',recipe_id);ledger.put('output',recipe.get_number('output'));ledger.put('parts',stored_parts);alliance_operations.put_row(u,b,l,'recipeSupplies',recipe_id,ledger);
   END;
+  PROCEDURE change_unit(b VARCHAR2,l VARCHAR2,raw_id VARCHAR2,from_unit VARCHAR2,to_unit VARCHAR2) IS
+    multiplier NUMBER;row_json JSON_OBJECT_T;part JSON_OBJECT_T;parts JSON_ARRAY_T;key_value VARCHAR2(12);changed BOOLEAN;
+  BEGIN
+    multiplier:=alliance_operations.convert_quantity(1,from_unit,to_unit);
+    FOR x IN(SELECT id,entity,data_json FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity IN('op_recipes','op_productions','op_preparations','op_recipesupplies')) LOOP
+      row_json:=JSON_OBJECT_T(x.data_json);key_value:=CASE WHEN x.entity='op_recipes' THEN 'lines' ELSE 'parts' END;parts:=row_json.get_array(key_value);changed:=FALSE;
+      IF parts IS NOT NULL THEN FOR i IN 0..parts.get_size-1 LOOP part:=TREAT(parts.get(i) AS JSON_OBJECT_T);IF part.get_string('ingredientId')=raw_id THEN part.put('quantity',alliance_operations.convert_quantity(part.get_number('quantity'),part.get_string('unit'),to_unit));part.put('unit',to_unit);parts.put(i,part,TRUE);changed:=TRUE;END IF;END LOOP;END IF;
+      IF changed THEN row_json.put(key_value,parts);alliance_pos_store.put_document(b,l,x.entity,x.id,row_json);END IF;
+    END LOOP;
+    UPDATE alliance_raw_stock SET quantity=ROUND(quantity*multiplier,8),unit_cost=unit_cost/multiplier,min_stock=min_stock*multiplier,unit_id=to_unit WHERE business_id=b AND location_id=l AND id=raw_id;
+  END;
   FUNCTION run_action(u VARCHAR2,b VARCHAR2,l VARCHAR2,command_value VARCHAR2,p JSON_OBJECT_T,job VARCHAR2,sync_mode BOOLEAN DEFAULT FALSE) RETURN JSON_OBJECT_T IS
     history_before JSON_OBJECT_T;history_after JSON_OBJECT_T;history_row JSON_OBJECT_T;
     v JSON_OBJECT_T;old JSON_OBJECT_T;r JSON_OBJECT_T;m JSON_OBJECT_T;wrapper JSON_OBJECT_T;ing JSON_OBJECT_T;raw JSON_OBJECT_T;part JSON_OBJECT_T;mapping JSON_OBJECT_T;row_json JSON_OBJECT_T;result_json JSON_OBJECT_T:=JSON_OBJECT_T();lines JSON_ARRAY_T;ings JSON_ARRAY_T;recipes JSON_ARRAY_T;maps JSON_ARRAY_T;parts JSON_ARRAY_T:=JSON_ARRAY_T();merged JSON_OBJECT_T:=JSON_OBJECT_T();keys_value JSON_KEY_LIST;s JSON_OBJECT_T;man JSON_ARRAY_T;
@@ -70,6 +81,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
     SELECT slug INTO slug_value FROM locations WHERE business_id=b AND id=l;
     alliance_security.require_location(u,b,l,CASE WHEN sync_mode THEN 'products.write' ELSE 'inventory.write' END);alliance_pos_store.lock_scope(b,l);
     IF slug_value='gcobarf' AND command_value IN('materials_save','materials_adjust','materials_delete') THEN
+      IF NOT alliance_security.location_owner(u,b,l) THEN alliance_security.fail(403,'FORBIDDEN','Solo el jefe puede modificar los insumos de GCOBARF.');END IF;
       id_value:=CASE WHEN command_value='materials_save' THEN p.get_string('id') ELSE p.get_string('ingredientId') END;
       SELECT COUNT(*) INTO n FROM alliance_raw_stock WHERE business_id=b AND location_id=l AND id=id_value;IF n>0 THEN history_before:=alliance_operations.raw_item(b,l,id_value);END IF;
     END IF;
@@ -113,7 +125,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
     ELSIF command_value='materials_save' THEN
       alliance_security.keys_only(p,'id,revision,name,unit,minStock,quantity,totalCost');id_value:=alliance_security.text_value(p,'id',80,'^[a-zA-Z0-9_-]+$');name_value:=alliance_security.text_value(p,'name',160);unit_value:=alliance_security.text_value(p,'unit',12);q:=alliance_operations.convert_quantity(1,unit_value,unit_value);rev:=alliance_operations.numeric_value(p,'revision');q:=alliance_operations.numeric_value(p,'minStock');
       SELECT COUNT(*) INTO n FROM alliance_raw_stock WHERE business_id=b AND location_id=l AND id=id_value;
-      IF n=0 THEN IF rev<>0 THEN alliance_security.fail(409,'VERSION_CONFLICT','El insumo cambio.');END IF;ELSE old:=alliance_operations.raw_item(b,l,id_value);IF old.get_number('revision')<>rev OR old.get_string('unit')<>unit_value THEN alliance_security.fail(409,'VERSION_CONFLICT','El insumo cambio. Conserva su unidad base y actualiza.');END IF;END IF;
+      IF n=0 THEN IF rev<>0 THEN alliance_security.fail(409,'VERSION_CONFLICT','El insumo cambio.');END IF;ELSE old:=alliance_operations.raw_item(b,l,id_value);IF old.get_number('revision')<>rev THEN alliance_security.fail(409,'VERSION_CONFLICT','El insumo cambio. Actualiza antes de guardar.');END IF;IF old.get_string('unit')<>unit_value THEN IF slug_value<>'gcobarf' THEN alliance_security.fail(409,'VERSION_CONFLICT','Conserva la unidad del insumo.');END IF;change_unit(b,l,id_value,old.get_string('unit'),unit_value);old:=alliance_operations.raw_item(b,l,id_value);END IF;END IF;
       IF old IS NOT NULL AND old.get_boolean('archived') THEN alliance_security.fail(409,'MATERIALS_MISSING','El insumo esta retirado de la macro.');END IF;
       target_quantity:=CASE WHEN old IS NULL THEN 0 ELSE old.get_number('quantity') END;
       IF p.has('quantity') THEN delta_quantity:=ROUND(alliance_operations.numeric_value(p,'quantity'),8)-target_quantity;ELSE delta_quantity:=0;END IF;
