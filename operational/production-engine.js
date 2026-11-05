@@ -19,14 +19,14 @@ globalThis.AllianceProduction=(()=>{
     for(const [rawId,delta]of deltas){const raw=state.operations.ingredients.find(i=>i.id===rawId);if(!raw||raw.quantity-delta<-1e-8)fail('No alcanza '+(raw?.name||'un insumo')+' para el adicional de esta producción.');}
     let transferred=old?.transferred||0;if(recipe.output<transferred){stockMove(state,old.productId,recipe.output-transferred,actor,recipeId);transferred=recipe.output;}
     for(const [rawId,delta]of deltas)if(Math.abs(delta)>1e-8)move(state,actor,state.operations.ingredients.find(i=>i.id===rawId),-delta,'production',recipeId);
-    const calculated=AllianceCosting.calculate(state.costing.model,recipe),row={...old,recipeId,id:recipeId,output:recipe.output,transferred,parts,cost:(calculated.ingredients+calculated.direct)*recipe.output,at:new Date().toISOString(),actorId:actor.id};
-    if(row.productId&&state.stock[row.productId])state.stock[row.productId].costPrice=row.cost/row.output;
+    const calculated=AllianceCosting.calculate(state.costing.model,recipe),row={...old,recipeId,id:recipeId,output:recipe.output,transferred,parts,cost:(calculated.ingredients+calculated.direct)*recipe.output,finalUnitCost:calculated.fullCost,monthlyUnitCost:calculated.allocated,at:new Date().toISOString(),actorId:actor.id};
+    if(row.productId&&state.stock[row.productId])Object.assign(state.stock[row.productId],{costPrice:row.cost/row.output,finalProductionCost:row.finalUnitCost});
     state.operations.productions=state.operations.productions.filter(p=>p.recipeId!==recipeId);state.operations.productions.push(row);state.operations.recipes=state.operations.recipes.filter(r=>r.recipeId!==recipeId);return row;
   }
   function transfer(state,recipeId,productId,actor){
     if(!gcobarf())fail('La producción terminada pertenece a GCOBARF.');const batch=state.operations.productions?.find(p=>p.recipeId===recipeId);if(!batch)fail('Guarda la hoja de producción para descontar sus insumos antes de agregarla al inventario.');
     if(batch.productId&&batch.productId!==productId)fail('Esta producción ya está vinculada a otro producto del inventario.');if(state.operations.productions.some(p=>p.recipeId!==recipeId&&p.productId===productId))fail('Elige un producto distinto para esta hoja de producción.');
-    const quantity=Math.max(0,batch.output-batch.transferred);if(quantity)stockMove(state,productId,quantity,actor,recipeId);batch.productId=productId;batch.transferred=batch.output;state.stock[productId].costPrice=batch.cost/batch.output;state.operations.recipes=state.operations.recipes.filter(r=>r.productId!==productId);return batch;
+    const quantity=Math.max(0,batch.output-batch.transferred);if(quantity)stockMove(state,productId,quantity,actor,recipeId);batch.productId=productId;batch.transferred=batch.output;Object.assign(state.stock[productId],{costPrice:batch.cost/batch.output,finalProductionCost:batch.finalUnitCost??batch.cost/batch.output});state.operations.recipes=state.operations.recipes.filter(r=>r.productId!==productId);return batch;
   }
   function reconcile(state,actor){
     if(gcobarf())return;state.operations.preparations||=[];const proposed=[],deltas=new Map(),active=state.operations.preparations.filter(p=>p.status==='active'),ids=new Set([...active.map(p=>p.id),...state.docs.session_items.filter(i=>i.status!=='cancelled'&&state.docs.table_sessions.some(s=>s.id===i.session_id&&s.status==='open')&&state.operations.recipes.some(r=>r.managed&&r.productId===i.menu_item_id)).map(i=>i.id)]);

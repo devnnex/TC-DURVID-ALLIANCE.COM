@@ -21,7 +21,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
   account:=document(b,l,'table_sessions',sid);IF account IS NULL THEN RETURN;END IF;
   SELECT full_name INTO actor FROM users WHERE business_id=b AND id=u;
   SELECT COUNT(*) INTO count_value FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='session_items' AND JSON_VALUE(data_json,'$.session_id')=sid AND NVL(JSON_VALUE(data_json,'$.status'),'served')<>'cancelled';
-  IF account.get_string('status')='open' AND count_value=0 THEN account.put('status','closed');account.put('closed_at',stamp);put_document(b,l,'table_sessions',sid,account);END IF;
+  IF account.get_string('status')='open' AND count_value=0 AND account.get_string('delivery_date') IS NULL THEN account.put('status','closed');account.put('closed_at',stamp);put_document(b,l,'table_sessions',sid,account);END IF;
   FOR x IN(SELECT id,data_json FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_tickets' AND JSON_VALUE(data_json,'$.sessionId')=sid) LOOP
     ticket:=JSON_OBJECT_T(x.data_json);items:=ticket.get_array('items');kept:=JSON_ARRAY_T();
     FOR i IN 0..items.get_size-1 LOOP entry:=TREAT(items.get(i) AS JSON_OBJECT_T);line:=document(b,l,'session_items',entry.get_string('id'));IF line IS NOT NULL AND line.get_string('session_id')=sid AND NVL(line.get_string('status'),'served')<>'cancelled' THEN entry.put('name',line.get_string('item_name'));entry.put('quantity',line.get_number('quantity'));entry.put('notes',line.get_string('notes'));kept.append(entry);END IF;END LOOP;
@@ -65,7 +65,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
   FUNCTION inventory(p_business VARCHAR2,p_location VARCHAR2) RETURN JSON_ARRAY_T IS a JSON_ARRAY_T:=JSON_ARRAY_T();o JSON_OBJECT_T;item JSON_OBJECT_T;
   BEGIN
   FOR r IN(SELECT s.*,p.name,p.price_minor,p.active,c.name category FROM alliance_pos_stock s JOIN products p ON p.id=s.product_id AND p.business_id=s.business_id JOIN product_categories c ON c.id=p.category_id AND c.business_id=p.business_id WHERE s.business_id=p_business AND s.location_id=p_location AND EXISTS(SELECT 1 FROM alliance_pos_documents d WHERE d.business_id=s.business_id AND d.location_id=s.location_id AND d.entity='menu_items' AND d.id=s.product_id) ORDER BY p.name) LOOP
-    o:=JSON_OBJECT_T();o.put('productId',r.product_id);o.put('version',r.version);o.put('code',r.code);o.put('name',r.name);o.put('category',r.category);o.put('unit',r.unit_name);o.put('costPrice',r.cost_minor/100);o.put('stock',r.stock);o.put('minStock',r.min_stock);o.put('isAvailable',r.active=1);o.put('salePrice',r.price_minor/100);o.put('updatedAt',TO_CHAR(r.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));a.append(o);
+    o:=JSON_OBJECT_T();o.put('productId',r.product_id);o.put('version',r.version);o.put('code',r.code);o.put('name',r.name);o.put('category',r.category);o.put('unit',r.unit_name);o.put('costPrice',r.cost_minor/100);FOR batch_row IN(SELECT data_json FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='op_productions' AND JSON_VALUE(data_json,'$.productId')=r.product_id) LOOP item:=JSON_OBJECT_T(batch_row.data_json);IF item.has('finalUnitCost') THEN o.put('finalProductionCost',item.get_number('finalUnitCost'));END IF;END LOOP;o.put('stock',r.stock);o.put('minStock',r.min_stock);o.put('isAvailable',r.active=1);o.put('salePrice',r.price_minor/100);o.put('updatedAt',TO_CHAR(r.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));a.append(o);
   END LOOP;RETURN a;
   END;
   FUNCTION matches(p_row JSON_OBJECT_T,p_filters JSON_ARRAY_T) RETURN BOOLEAN IS f JSON_OBJECT_T;key_value VARCHAR2(80);mode_value VARCHAR2(12);actual JSON_ELEMENT_T;expected JSON_ELEMENT_T;xs JSON_ARRAY_T;hit BOOLEAN;
@@ -90,10 +90,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
     FOR x IN(SELECT id,data_json FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='session_items' AND JSON_VALUE(data_json,'$.session_id')=sid AND NVL(JSON_VALUE(data_json,'$.status'),'served')<>'cancelled') LOOP
       before_json:=x.data_json;line:=JSON_OBJECT_T(before_json);line.put('status','cancelled');line.put('updated_by_user_id',u);line.put('updated_at',stamp);put_document(b,l,'session_items',x.id,line);audit(u,b,'POS_SESSION_ITEMS',x.id,before_json,line.to_clob);
     END LOOP;
-    -- Return only stock actually debited for this account, never raw materials used in production.
-    FOR x IN(SELECT product_id,-SUM(delta) quantity FROM alliance_pos_movements WHERE business_id=b AND location_id=l AND session_id=sid AND kind IN('CONSUMO_MESA','DEVOLUCION_CONSUMO') GROUP BY product_id HAVING SUM(delta)<0) LOOP
-      movement(u,b,l,'DELIVERY-CANCEL-'||sid||'-'||x.product_id,x.product_id,x.quantity,'DEVOLUCION_CONSUMO','Entrega cancelada',sid);
-    END LOOP;
+    -- Reservation reconciliation returns the units after cancellation.
   END;
   FUNCTION query(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
   entity_value VARCHAR2(32):=p_body.get_string('table');op VARCHAR2(12):=p_body.get_string('op');permission_value VARCHAR2(80);rows_json JSON_ARRAY_T;out_json JSON_ARRAY_T:=JSON_ARRAY_T();filters JSON_ARRAY_T:=p_body.get_array('filters');patch JSON_OBJECT_T;row_json JSON_OBJECT_T;old_json JSON_OBJECT_T;parent JSON_OBJECT_T;keys_json JSON_KEY_LIST;
@@ -185,6 +182,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
         ELSIF entity_value='session_items' THEN
           IF row_json.get_string('status')='cancelled' AND NOT alliance_security.location_owner(p_user,p_business,p_location) THEN alliance_security.fail(403,'FORBIDDEN','Solo un jefe puede retirar consumos.');END IF;
           parent:=document(p_business,p_location,'table_sessions',row_json.get_string('session_id'));IF parent IS NULL OR parent.get_string('status')<>'open' THEN alliance_security.fail(409,'CLOSED_ACCOUNT','La cuenta no esta abierta.');END IF;
+          SELECT slug INTO branch_slug FROM locations WHERE business_id=p_business AND id=p_location;IF branch_slug='gcobarf' AND NVL(row_json.get_string('status'),'served')<>'cancelled' AND NVL(row_json.get_number('unit_price'),0)<=0 THEN alliance_security.fail(400,'PRICE_REQUIRED','Escribe un precio de venta mayor que cero antes de agregar el producto.');END IF;
           IF row_json.get_number('quantity') IS NULL OR row_json.get_number('quantity')<=0 OR row_json.get_number('quantity')>10000 OR row_json.get_number('unit_price') IS NULL OR row_json.get_number('unit_price')<0 THEN alliance_security.fail(400,'INVALID_INPUT','Cantidad o precio invalido.');END IF;
           IF row_json.get_string('menu_item_id') IS NOT NULL THEN parent:=document(p_business,p_location,'menu_items',row_json.get_string('menu_item_id'));IF parent IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Producto no disponible.');END IF;END IF;
           IF NOT row_json.has('status') THEN row_json.put('status','confirmed');END IF;row_json.put('updated_by_user_id',p_user);IF op='insert' THEN row_json.put('created_by_user_id',p_user);END IF;
@@ -211,6 +209,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
   IF p_delta IS NULL OR (before_value+p_delta<0 AND negative_value=0) THEN alliance_security.fail(409,'INSUFFICIENT_STOCK','No hay existencias suficientes.');END IF;
   UPDATE alliance_pos_stock SET stock=before_value+p_delta,version=version+1,updated_at=SYSTIMESTAMP WHERE business_id=p_business AND location_id=p_location AND product_id=p_product;
   INSERT INTO alliance_pos_movements(business_id,location_id,id,product_id,actor_user_id,delta,stock_before,stock_after,cost_minor,kind,reference,session_id,allow_negative)VALUES(p_business,p_location,p_id,p_product,p_user,p_delta,before_value,before_value+p_delta,cost_value,p_kind,SUBSTR(p_reference,1,160),p_session,negative_value);
+  IF p_session IS NOT NULL THEN DECLARE account JSON_OBJECT_T:=document(p_business,p_location,'table_sessions',p_session);detail JSON_OBJECT_T:=JSON_OBJECT_T();BEGIN IF account IS NOT NULL THEN detail.put('customerId',account.get_string('customer_id'));detail.put('customerName',account.get_string('payer_name'));detail.put('deliveryDate',account.get_string('delivery_date'));detail.put('deliveryTime',account.get_string('delivery_time'));put_document(p_business,p_location,'op_movementdetail',alliance_security.hash_text(p_id),detail);END IF;END;END IF;
   END;
   FUNCTION stock_action(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_action VARCHAR2,p_payload JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
   r JSON_OBJECT_T:=JSON_OBJECT_T();items JSON_ARRAY_T;item JSON_OBJECT_T;row_json JSON_OBJECT_T;id_value VARCHAR2(36);event_value VARCHAR2(160);code_value VARCHAR2(64);unit_value VARCHAR2(80);cost_value NUMBER;min_value NUMBER;stock_value NUMBER;before_value NUMBER;n NUMBER;cost_current NUMBER;entity VARCHAR2(36);search_value VARCHAR2(160);ctx JSON_OBJECT_T;pa JSON_ARRAY_T;can_read_cost BOOLEAN:=FALSE;

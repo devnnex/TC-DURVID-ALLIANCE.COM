@@ -1793,6 +1793,7 @@ const App = (() => {
     return {
       code: String(meta.code || productAcronym(item?.name)).toUpperCase(),
       costPrice: Math.max(0, Number(meta.costPrice || 0)),
+      finalProductionCost: meta.finalProductionCost,
       stock: Math.max(0, Number(meta.stock || 0)),
       minStock: Math.max(0, Number(meta.minStock ?? 5)),
       unit: meta.unit || "unidad",
@@ -1920,6 +1921,7 @@ const App = (() => {
       const nextMeta = {
         code: String(remote.code || productAcronym(item.name)).toUpperCase(),
         costPrice: Math.max(0, Number(remote.costPrice || 0)),
+        finalProductionCost: remote.finalProductionCost,
         stock: Math.max(0, Number(remote.stock || 0)),
         minStock: Math.max(0, Number(remote.minStock || 0)),
         unit: remote.unit || "unidad",
@@ -4264,13 +4266,14 @@ const App = (() => {
     const sale = currencyInputNumber(form.sale_price);
     const stock = Math.max(0, Number(form.stock.value || 0));
     const inline=form.querySelector('[data-costing-inventory-note] input');if(inline&&document.activeElement!==inline)setCurrencyInputValue(inline,sale);
-    const profit = sale - cost;
+    const finalCost=Number.isFinite(form.finalProductionCost)?form.finalProductionCost:cost;
+    const profit = sale - finalCost;
     const margin = sale > 0 ? (profit / sale) * 100 : 0;
     box.innerHTML = `
       <span><small>Utilidad por unidad</small><strong>${money(profit)}</strong></span>
       <span><small>Margen estimado</small><strong>${margin.toLocaleString("es-CO", { maximumFractionDigits: 1 })}%</strong></span>
       <span><small>Valor del inventario</small><strong>${money(cost * stock)}</strong></span>
-      <span><small>Venta potencial</small><strong>${money(sale * stock)}</strong></span>`;
+      <span><small>Venta potencial</small><strong>${money((window.BRANCH_CONFIG?.slug==='gcobarf'?profit:sale) * stock)}</strong></span>`;
   };
 
   const renderInventoryCategoryFilter = () => {
@@ -4572,6 +4575,19 @@ const App = (() => {
     window.addEventListener("resize",close);
   };
 
+  const movementFilters={customerId:'all',month:'',year:'',from:'',to:''};
+  let movementFilterLoading=false;
+  async function completeMovementFilter(){
+    if(movementFilterLoading)return;movementFilterLoading=true;
+    try{let cursor='';while(state.movementHasMore&&!state.movementLoading){const next=JSON.stringify(state.movementCursor);if(next===cursor)break;cursor=next;if(!await loadInventoryMovements({more:true,background:true}))break;}}finally{movementFilterLoading=false;renderInventoryMovements();}
+  }
+  function mountMovementFilters(){
+    const summary=$('#movementSummary');if(!summary)return;
+    let form=$('#movementCustomerDates');if(!form){form=document.createElement('form');form.id='movementCustomerDates';form.className='movement-customer-dates';form.innerHTML='<label>Cliente<select name="customerId"><option value="all">Todos los clientes</option></select></label><label>Periodo<select name="period"><option value="all">Todo el historial</option><option value="month">Un mes</option><option value="year">Un año</option><option value="range">Entre fechas</option></select></label><label data-period="month" hidden>Mes<input type="month" name="month"></label><label data-period="year" hidden>Año<input type="number" name="year" min="2000" max="9999" step="1" placeholder="2026"></label><label data-period="range" hidden>Desde<input type="date" name="from"></label><label data-period="range" hidden>Hasta<input type="date" name="to"></label><p class="wide">La fecha corresponde a la entrega programada; en otros movimientos, al día del registro.</p>';summary.before(form);form.onsubmit=e=>e.preventDefault();form.onchange=()=>{const period=form.elements.period.value;for(const label of form.querySelectorAll('[data-period]'))label.hidden=label.dataset.period!==period;for(const key of ['month','year','from','to'])movementFilters[key]=(key===period||period==='range'&&['from','to'].includes(key))?form.elements[key].value:'';movementFilters.customerId=form.elements.customerId.value;form.elements.to.setCustomValidity(movementFilters.from&&movementFilters.to&&movementFilters.from>movementFilters.to?'La fecha final debe ser igual o posterior a la inicial.':'');renderInventoryMovements();void completeMovementFilter();};}
+    const data=window.OperationsPanel?.data()||{},clients=new Map();for(const row of state.inventoryMovements){const c=AllianceCustomerLedger.context(data,row);if(c.customerId)clients.set(c.customerId,c.customerName||'Cliente');}
+    const select=form.elements.customerId,markup='<option value="all">Todos los clientes</option>'+[...clients].sort((a,b)=>a[1].localeCompare(b[1],'es')).map(([id,name])=>'<option value="'+escapeHTML(id)+'">'+escapeHTML(name)+'</option>').join('');if(select.innerHTML!==markup){select.innerHTML=markup;select.value=movementFilters.customerId;}
+  }
+
   const renderInventoryMovements = (appendFrom = 0) => {
     const list = $("#inventoryMovementList");
     const summary = $("#movementSummary");
@@ -4586,23 +4602,27 @@ const App = (() => {
     }
     renderMovementProductOptions();bindMovementProductPicker();
     const query = normalizeText(state.movementSearch);
-    const movements = [...state.inventoryMovements]
+    mountMovementFilters();
+    const ledgerData=window.OperationsPanel?.data()||{};
+    const linked=state.inventoryMovements.map(row=>({...row,...AllianceCustomerLedger.context(ledgerData,row)}));
+    const movements = AllianceCustomerLedger.filterMovements(linked,movementFilters)
       .filter(row=>!state.movementProductFilter||state.movementProductFilter==="all"||String(row.productId)===state.movementProductFilter)
       .filter((movement) => state.movementTypeFilter === "all" || movementKind(movement) === state.movementTypeFilter)
-      .filter((movement) => !query || normalizeText([movement.product, movement.code, movement.type, movement.reference, movement.user].join(" ")).includes(query))
+      .filter((movement) => !query || normalizeText([movement.product, movement.code, movement.type, movement.reference, movement.user, movement.customerName, movement.deliveryDate].join(" ")).includes(query))
       .sort((left, right) => String(right.date || "").localeCompare(String(left.date || "")) || String(right.movementId || "").localeCompare(String(left.movementId || "")));
     const entries = movements.filter((movement) => movementKind(movement) === "entry").reduce((sum, movement) => sum + Number(movement.delta || 0), 0);
     const exits = movements.filter((movement) => movementKind(movement) === "exit").reduce((sum, movement) => sum + Math.abs(Number(movement.delta || 0)), 0);
-    const productSelected=state.movementProductFilter&&state.movementProductFilter!=="all",sold=Math.max(0,movements.filter(m=>/VENTA|SALE/.test(String(m.type||""))).reduce((sum,m)=>sum-Number(m.delta||0),0));
-    summary.innerHTML = `<article class="movement-kpi entry">${icon("arrow-down-to-line", 19)}<span><small>Unidades ingresadas</small><strong>+${entries.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong></span></article><article class="movement-kpi exit">${icon("arrow-up-from-line", 19)}<span><small>${productSelected?"De este producto has vendido":"Unidades retiradas"}</small><strong>${productSelected?"":"-"}${(productSelected?sold:exits).toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong></span></article><article class="movement-kpi">${icon("list-checks", 19)}<span><small>Movimientos visibles</small><strong>${movements.length}${state.movementHasMore?" · hay más registros":state.movementPartialHistory?" · historial local parcial":""}</strong></span></article>`;
-    const appendOnly = appendFrom > 0 && list.querySelectorAll(".movement-row").length === appendFrom;
+    const productSelected=state.movementProductFilter&&state.movementProductFilter!=="all",sold=Math.max(0,movements.filter(m=>/VENTA|SALE/.test(String(m.type||""))||window.BRANCH_CONFIG?.slug==="gcobarf"&&["CONSUMO_MESA","DEVOLUCION_CONSUMO","DEVOLUCION_CORRECCION"].includes(m.type)).reduce((sum,m)=>sum-Number(m.delta||0),0));
+    summary.innerHTML = `<article class="movement-kpi entry">${icon("arrow-down-to-line", 19)}<span><small>Unidades ingresadas</small><strong>+${entries.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong></span></article><article class="movement-kpi exit">${icon("arrow-up-from-line", 19)}<span><small>${productSelected?(window.BRANCH_CONFIG?.slug==="gcobarf"?"Unidades apartadas / vendidas":"De este producto has vendido"):"Unidades retiradas"}</small><strong>${productSelected?"":"-"}${(productSelected?sold:exits).toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong></span></article><article class="movement-kpi">${icon("list-checks", 19)}<span><small>Movimientos visibles</small><strong>${movements.length}${state.movementHasMore?" · hay más registros":state.movementPartialHistory?" · historial local parcial":""}</strong></span></article>`;
+    if(movementFilters.customerId!=='all'){const values=movements.map(row=>AllianceCustomerLedger.movementValue(ledgerData,row)),value=values.reduce((n,v)=>n+(v||0),0);summary.insertAdjacentHTML('beforeend','<article class="movement-kpi"><span><small>Valor apartado / comprado</small><strong>'+money(value)+'</strong><small>'+(values.some(v=>v===null)?'Algunos registros antiguos no tienen precio relacionado.':'Incluye entregas programadas y descuenta devoluciones.')+'</small></span></article>');}
+    const appendOnly = false; // Filters and KPIs always use the same complete set of loaded rows.
     const visibleMovements = appendOnly ? movements.slice(appendFrom) : movements;
     const movementMarkup = visibleMovements.length ? visibleMovements.map((movement) => {
       const delta = Number(movement.delta ?? movement.quantityChange ?? 0);
       const kind = delta >= 0 ? "entry" : "exit";
       const ingredients=Array.isArray(movement.ingredients)?movement.ingredients:[];
       const breakdown=ingredients.length?`<details class="movement-breakdown"><summary>Ver desglose de insumos · ${ingredients.length}</summary><div class="movement-breakdown-list">${ingredients.map(ingredient=>`<div><strong>${escapeHTML(ingredient.name||'Insumo')}</strong><span>${delta<0?'−':'+'}${Number(ingredient.quantity||0).toLocaleString('es-CO',{maximumFractionDigits:3})} ${escapeHTML(['u','unit'].includes(ingredient.unit)?'unidades':ingredient.unit||'')}</span></div>`).join('')}</div></details>`:'';
-      return `<article class="movement-row ${kind}"><span class="movement-direction">${icon(kind === "entry" ? "arrow-down-left" : "arrow-up-right", 20)}</span><div class="movement-product"><strong>${escapeHTML(movement.product || "Producto")}</strong><small>${escapeHTML(movement.code || "")}${movement.reference ? ` · ${escapeHTML(movement.reference)}` : ""}</small></div><div><small>Movimiento</small><strong>${escapeHTML(({SALIDA_VENTA_RECETA:"SALIDA POR VENTA",DEVOLUCION_VENTA_RECETA:"DEVOLUCIÓN DE VENTA"})[movement.type] || String(movement.type || (kind === "entry" ? "ENTRADA" : "SALIDA")).replaceAll("_", " "))}</strong></div><div><small>Existencia</small><strong>${movement.stockBasis==='recipe'?'Según insumos':`${Number(movement.before || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })} → ${Number(movement.after || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })}`}</strong></div><strong class="movement-delta">${delta > 0 ? "+" : ""}${delta.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong><div class="movement-audit"><strong>${escapeHTML(movement.user || "Sistema")}</strong><small>${escapeHTML(prettyDateTime(movement.date))}</small></div>${breakdown}</article>`;
+      return `<article class="movement-row ${kind}" data-movement-id="${escapeHTML(movement.movementId)}"><span class="movement-direction">${icon(kind === "entry" ? "arrow-down-left" : "arrow-up-right", 20)}</span><div class="movement-product"><strong>${escapeHTML(movement.product || "Producto")}</strong><small>${escapeHTML(movement.code || "")}${movement.reference ? ` · ${escapeHTML(movement.reference)}` : ""}</small></div><div><small>Movimiento</small><strong>${escapeHTML(({SALIDA_VENTA_RECETA:"SALIDA POR VENTA",DEVOLUCION_VENTA_RECETA:"DEVOLUCIÓN DE VENTA"})[movement.type] || String(movement.type || (kind === "entry" ? "ENTRADA" : "SALIDA")).replaceAll("_", " "))}</strong></div><div><small>Existencia</small><strong>${movement.stockBasis==='recipe'?'Según insumos':`${Number(movement.before || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })} → ${Number(movement.after || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })}`}</strong></div><strong class="movement-delta">${delta > 0 ? "+" : ""}${delta.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong><div class="movement-audit"><strong>${escapeHTML(movement.user || "Sistema")}</strong><small>${escapeHTML(prettyDateTime(movement.date))}</small></div>${movement.customerId||movement.deliveryDate?`<details class="movement-breakdown" data-disclosure-key="movement:${escapeHTML(movement.movementId)}"><summary>Ver cliente y entrega</summary><div class="movement-breakdown-list"><div><strong>${escapeHTML(movement.customerName||"Cliente")}</strong><span>${movement.deliveryDate?"Entrega: "+escapeHTML(movement.deliveryDate)+" "+escapeHTML(movement.deliveryTime||""):"Venta registrada"}</span></div><p>${delta<0?"Unidades apartadas o vendidas":"Unidades devueltas"}: ${Math.abs(delta).toLocaleString("es-CO")} · ${escapeHTML(movement.product||"")}</p></div></details>`:""}${breakdown}</article>`;
     }).join("") : appendOnly ? "" : emptyState("Sin movimientos", query ? "No hay coincidencias para este filtro." : "Las entradas y salidas apareceran aqui con su responsable.", "arrow-left-right");
     if (appendOnly) list.insertAdjacentHTML("beforeend", movementMarkup);
     else list.innerHTML = movementMarkup;
@@ -4684,12 +4704,14 @@ const App = (() => {
         state.movementLoading = false;
         if (state.activeAdminSection === "movements") renderInventoryMovements(appendFrom);
         if (refreshAfterStale) window.setTimeout(() => void loadInventoryMovements({ background }), 0);
+        if(state.movementHasMore&&(movementFilters.customerId!=="all"||movementFilters.month||movementFilters.year||movementFilters.from||movementFilters.to))void completeMovementFilter();
       }
     }
   };
 
   let costingInventoryLayout = null;
   const resetInventoryForm = ({ open = false } = {}) => {
+    if($("#inventoryForm"))delete $("#inventoryForm").finalProductionCost;
     const form = $("#inventoryForm");
     if (!form) return;
     window.MaterialsPanel?.resetInventory(form);
@@ -4740,6 +4762,7 @@ const App = (() => {
     }
     form.category_id.value = item.category_id || "";
     form.new_category.value = "";
+    form.finalProductionCost=inventory.finalProductionCost;
     setCurrencyInputValue(form.cost_price, inventory.costPrice);
     setCurrencyInputValue(form.sale_price, Number(item.price || 0));
     form.stock.value = inventory.stock;
@@ -4810,6 +4833,7 @@ const App = (() => {
     const assignment = categoryForCostedProduct(draft, existing);
     form.category_id.value = assignment.category?.id || '';
     form.new_category.value = assignment.category ? '' : assignment.name;
+    form.finalProductionCost=draft.finalProductionCost;
     setCurrencyInputValue(form.cost_price, draft.cost);
     setCurrencyInputValue(form.sale_price, draft.price);
     const fromIngredients = recipeInventory() && !!draft.recipeId && !!window.MaterialsPanel;
@@ -4837,9 +4861,9 @@ const App = (() => {
     if (fromIngredients) detail.textContent = 'Revisa el precio de venta y el stock mínimo. Los ingredientes necesarios se completarán en la macro al guardar.';
     if (fromProduction) detail.textContent = 'Trajimos la cantidad producida, el costo por unidad y el precio de venta. El stock mínimo es opcional y solo define cuándo avisarte que quedan pocas existencias.';
     const explanation = document.createElement('small');
-    explanation.textContent = 'Categoría: ' + assignment.name + (assignment.category ? ' · existente.' : ' · se creará al guardar.') + ' Costo: producción de una unidad. Los gastos mensuales se revisan por separado. Precio: total que paga el cliente' + (draft.taxAdded ? ', con el impuesto adicional incluido una sola vez' : '') + '. El margen de esta ficha es estimado; consulta impuestos y comisiones por canal en Costeo.';
+    explanation.textContent = 'Categoría: ' + assignment.name + (assignment.category ? ' · existente.' : ' · se creará al guardar.') + ' El costo final incluye la parte de gastos mensuales que corresponde a una unidad. Precio: total que paga el cliente' + (draft.taxAdded ? ', con el impuesto adicional incluido una sola vez' : '') + '. El margen de esta ficha es estimado; consulta impuestos y comisiones por canal en Costeo.';
     const summary = document.createElement('dl');
-    for (const [label, value] of [['Producto', name], ['Categoría', assignment.name], ['Costo por unidad', money(draft.cost)], ['Precio de venta', money(draft.price)]]) {
+    for (const [label, value] of [['Producto', name], ['Categoría', assignment.name], ['Costo por unidad', money(draft.cost)], ...(Number.isFinite(draft.finalProductionCost)?[['Costo final de producción',money(draft.finalProductionCost)]]:[]), ['Precio de venta', money(draft.price)]]) {
       const row = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
       dt.textContent = label;
       if(label==='Precio de venta'){dd.innerHTML='<span class="costing-price-inline"><input aria-label="Precio de venta desde costeo" type="text" inputmode="numeric" data-currency-input value="'+escapeHTML(AllianceMoney.format(draft.price))+'"><button type="button" class="icon-btn" aria-label="Editar precio de venta">'+icon('pencil',16)+'</button></span>';const quick=dd.querySelector('input');setCurrencyInputValue(quick,draft.price);quick.addEventListener('input',()=>{AllianceMoney.edit(quick);setCurrencyInputValue(form.sale_price,currencyInputNumber(quick));renderInventoryLiveCalculation();});dd.querySelector('button').onclick=()=>{quick.focus();quick.select();};}
@@ -5172,6 +5196,7 @@ const App = (() => {
         saleId: invoice.id || invoice.sessionId,
         invoice: invoice.number || "Factura",
         sessionId: invoice.sessionId || "",
+        customerId: invoice.customerId, customerName: invoice.customerName, deliveryDate: invoice.deliveryDate, deliveryTime: invoice.deliveryTime,
         table: invoice.table || "Mesa",
         date: invoice.createdAt || new Date().toISOString(),
         payer: invoice.payerName || "",
@@ -5365,7 +5390,8 @@ const App = (() => {
       ? visibleRecords.map((record) => {
           const paymentBadges = (record.payments || []).map((payment) => `<span>${escapeHTML(incomePaymentLabel(payment.method))} <strong>${money(payment.amount)}</strong></span>`).join("");
           const itemRows = (record.items || []).map((item) => `<li><span>${Number(item.quantity || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })} × ${escapeHTML(item.name)}</span><strong>${money(item.total)}</strong></li>`).join("");
-          return `<article class="income-record">
+          const related=AllianceCustomerLedger.context(window.OperationsPanel?.data()||{},record);
+          return `<article class="income-record" data-income-record="${escapeHTML(record.saleId)}">
             <div class="income-record-main">
               <div class="income-record-invoice${isBoss() ? " has-boss-actions" : ""}"><span>${escapeHTML(record.invoice || "Factura")}</span><small>${escapeHTML(formatIncomeDate(record.date))}</small><div class="income-record-actions"><button class="icon-btn" type="button" data-print-income="${escapeHTML(record.saleId)}" aria-label="Imprimir factura" title="Imprimir factura">${icon("printer", 15)}</button>${isBoss()&&record.recordType!=="collection" ? `<button class="icon-btn" type="button" data-edit-income="${escapeHTML(record.saleId)}" aria-label="Editar venta">${icon("pencil", 15)}</button><button class="icon-btn danger" type="button" data-delete-income="${escapeHTML(record.saleId)}" aria-label="Eliminar venta completa">${icon("trash-2", 15)}</button>` : ""}</div></div>
               <div><small>${record.recordType==='collection'?'Cliente · pago de cartera':'Mesa / responsable'}</small><strong>${escapeHTML(record.table || "Mesa")}</strong><span>${escapeHTML(record.payer || "Sin responsable")}</span></div>
@@ -5373,10 +5399,14 @@ const App = (() => {
               <div class="income-record-total"><small>Total</small><strong>${money(record.total)}</strong><span class="income-record-profit">${record.recordType==='collection'?'Abono · venta ya registrada':'Ganancia '+money(record.profit)}</span></div>
             </div>
             <div class="income-payment-badges">${paymentBadges || "<span>Medio no registrado</span>"}</div>
-            <details>
+            ${Number(record.total)===0&&window.BRANCH_CONFIG?.slug==='gcobarf'?'<p class="op-alert">Venta anterior sin precio. Revisa el valor cobrado y corrige esta factura.</p>':''}
+            <details data-disclosure-key="income:${escapeHTML(record.saleId)}">
               <summary>${icon("list-collapse", 15)} Ver productos y desglose</summary>
               <div class="income-record-detail">
+                ${related.customerName?`<p>Cliente: <strong>${escapeHTML(related.customerName)}</strong>${related.deliveryDate?` · Entrega: ${escapeHTML(related.deliveryDate)} ${escapeHTML(related.deliveryTime)}`:""}</p>`:""}
                 <ul>${itemRows || "<li><span>Sin detalle de productos</span></li>"}</ul>
+                ${(record.allocations||[]).map(a=>`<div class="ledger-allocation"><strong>${escapeHTML(a.invoice||"Compra")}</strong> · ${a.deliveryDate?"Entrega: "+escapeHTML(a.deliveryDate):"Saldo anterior"} · Abono ${money(a.amount)}<ul>${(a.items||[]).map(i=>`<li>${Number(i.quantity)} × ${escapeHTML(i.item_name)}</li>`).join("")}</ul></div>`).join("")}
+                <p>${(record.payments||[]).map(p=>escapeHTML(incomePaymentLabel(p.method))+": "+money(p.amount)).join(" · ")}${record.reference?" · "+escapeHTML(record.reference):""}</p>
                 <dl class="income-total-only"><div><dt>Total pagado</dt><dd>${money(record.total)}</dd></div></dl>
               </div>
             </details>
@@ -6796,6 +6826,7 @@ const App = (() => {
     const quickSale = isLocalWalkInSession(session);
     const activeItems = (session.session_items || []).filter((item) => item.status !== "cancelled");
     const total = sessionTotal(session);
+    if(window.BRANCH_CONFIG?.slug==='gcobarf'&&activeItems.some(i=>!(Number(i.unit_price)>0))){toast("Hay productos sin precio de venta. Corrige su precio en los consumos antes de cobrar.","error");return;}
     if (!activeItems.length && !quickSale) {
       toast("Agrega al menos un consumo antes de cobrar la mesa.", "error", `empty-payment:${sessionId}`);
       return;
@@ -6889,7 +6920,7 @@ const App = (() => {
     });
     return Array.from(quantities.entries()).map(([productId, quantity]) => {
       const item = state.items.find((entry) => entry.id === productId);
-      const alreadyAdjusted = Math.max(0, Number(legacyAdjusted.get(productId) || 0));
+      const alreadyAdjusted = Math.max(0, Number(window.OperationsPanel?.data().model.deliveryHolds?.find(h=>h.id===session.id)?.products?.[productId] ?? legacyAdjusted.get(productId) ?? 0));
       return { item, quantity: Math.max(0, quantity - alreadyAdjusted) };
     }).filter((entry) => entry.item && entry.quantity > 0);
   };
@@ -6996,7 +7027,7 @@ const App = (() => {
     return printThermalReceipt(session, invoice);
   };
 
-  let customerCollection=null;
+  let customerCollection=null,customerCollectionSession=null;
   const updateCustomerCollectionAmount = (form,validate=false) => {
     if(!customerCollection||form.dataset.collection!=='true')return false;
     const input=form.collection_amount,box=form.querySelector('#customerCollectionAmount'),cents=Math.round(currencyInputNumber(input)*100),available=customerCollection.availableAllocations,totalCents=available.reduce((sum,a)=>sum+Math.round(a.amount*100),0);
@@ -7005,7 +7036,7 @@ const App = (() => {
     if(!valid){input.setAttribute('aria-invalid','true');if(validate){input.focus();input.classList.remove('credit-field-attention');void input.offsetWidth;input.classList.add('credit-field-attention');}return false;}
     input.removeAttribute('aria-invalid');if(cents===Math.round(state.activePaymentTotal*100))return true;
     let remaining=cents;customerCollection.allocations=available.flatMap(a=>{const amount=Math.min(remaining,Math.round(a.amount*100));remaining-=amount;return amount>0?[{debtId:a.debtId,amount:amount/100,expectedPaid:a.expectedPaid}]:[];});
-    const labels=new Map(available.map(a=>[a.debtId,a.label])),session=state.sessions.find(s=>s.id===customerCollection.id);session.session_items=customerCollection.allocations.map(a=>({id:a.debtId,item_name:labels.get(a.debtId),quantity:1,unit_price:a.amount,status:'served'}));
+    const labels=new Map(available.map(a=>[a.debtId,a.label])),session=state.sessions.find(s=>s.id===customerCollection.id)||customerCollectionSession;session.session_items=customerCollection.allocations.map(a=>({id:a.debtId,item_name:labels.get(a.debtId),quantity:1,unit_price:a.amount,status:'served'}));
     state.activePaymentTotal=cents/100;state.activePaymentBase=cents/100;$('#paymentTotal').textContent=money(cents/100);$('#paymentSaleLines').innerHTML=session.session_items.map(i=>'<div><span>'+escapeHTML(i.item_name)+'</span><strong>'+money(i.unit_price)+'</strong></div>').join('');
     setCurrencyInputValue(form.cash_received,cents/100);setCurrencyInputValue(form.mixed_amount_one,cents/100);setCurrencyInputValue(form.mixed_amount_two,0);updateMixedPayment();updateCashChange();return true;
   };
@@ -7014,16 +7045,16 @@ const App = (() => {
     const data=window.OperationsPanel?.data(),customer=data?.model.customers.find(c=>c.id===customerId),debts=data?.model.debts.filter(d=>d.customerId===customerId&&!d.voided&&d.total>d.paid&&(!onlyDebtId||d.id===onlyDebtId)).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));if(!customer||!debts?.length){toast('Este cliente no tiene saldo pendiente.','ok');return;}
     const id='collection-'+uid(),lines=debts.map(d=>({id:d.id,item_name:'Saldo '+d.reference+(d.dueDate?' · vence '+new Date(d.dueDate+'T12:00:00-05:00').toLocaleDateString('es-CO'):'') ,quantity:1,unit_price:Math.round((d.total-d.paid)*100)/100,status:'served'}));
     customerCollection={id,customerId,name:customer.name,allocations:debts.map(d=>({debtId:d.id,amount:Math.round((d.total-d.paid)*100)/100,expectedPaid:d.paid})),availableAllocations:debts.map((d,i)=>({debtId:d.id,amount:lines[i].unit_price,expectedPaid:d.paid,label:lines[i].item_name}))};
-    const session={id,table_id:null,status:'open',sale_channel:'walk_in',local_only:true,payer_name:customer.name,session_items:lines,restaurant_tables:{table_name:customer.name},collection:true,discount_amount:0,tax_amount:0,service_fee_amount:0};state.sessions.push(session);openPaymentDialog(id);$('#paymentTableLabel').textContent=customer.name;$('#paymentDialogTitle').textContent='Cobrar cartera';$('#paymentAddItem').hidden=true;$('#paymentTipChoice').hidden=true;$('#paymentForm .op-payment-customer')?.setAttribute('hidden','');state.activePaymentTotal=lines.reduce((n,i)=>n+i.unit_price,0);state.activePaymentBase=state.activePaymentTotal;$('#paymentTotal').textContent=money(state.activePaymentTotal);$('#paymentTotalHint').textContent='Pago de consumos ya registrados. No vuelve a descontar inventario.';$('#paymentForm').dataset.collection='true';$('#paymentForm').querySelectorAll('button[type=submit]').forEach(b=>b.disabled=false);setCurrencyInputValue($('#paymentForm').cash_received,state.activePaymentTotal);setCurrencyInputValue($('#paymentForm').mixed_amount_one,state.activePaymentTotal);setCurrencyInputValue($('#paymentForm').mixed_amount_two,0);updateCashChange();
+    const session={id,table_id:null,status:'open',sale_channel:'walk_in',local_only:true,payer_name:customer.name,session_items:lines,restaurant_tables:{table_name:customer.name},collection:true,discount_amount:0,tax_amount:0,service_fee_amount:0};customerCollectionSession=session;state.sessions.push(session);openPaymentDialog(id);$('#paymentTableLabel').textContent=customer.name;$('#paymentDialogTitle').textContent='Cobrar cartera';$('#paymentAddItem').hidden=true;$('#paymentTipChoice').hidden=true;$('#paymentForm .op-payment-customer')?.setAttribute('hidden','');state.activePaymentTotal=lines.reduce((n,i)=>n+i.unit_price,0);state.activePaymentBase=state.activePaymentTotal;$('#paymentTotal').textContent=money(state.activePaymentTotal);$('#paymentTotalHint').textContent='Pago de consumos ya registrados. No vuelve a descontar inventario.';$('#paymentForm').dataset.collection='true';$('#paymentForm').querySelectorAll('button[type=submit]').forEach(b=>b.disabled=false);setCurrencyInputValue($('#paymentForm').cash_received,state.activePaymentTotal);setCurrencyInputValue($('#paymentForm').mixed_amount_one,state.activePaymentTotal);setCurrencyInputValue($('#paymentForm').mixed_amount_two,0);updateCashChange();
     const form=$('#paymentForm');let box=form.querySelector('#customerCollectionAmount');if(!box){box=document.createElement('div');box.id='customerCollectionAmount';box.className='customer-collection-amount';box.innerHTML='<label>¿Cuánto va a pagar o abonar?<input name="collection_amount" aria-describedby="collectionBalance" type="text" inputmode="decimal" autocomplete="off" data-currency-input></label><small id="collectionBalance" data-collection-balance></small>';form.querySelector('.payment-summary').after(box);bindCurrencyInputs(box);}
     box.hidden=false;form.collection_amount.disabled=false;setCurrencyInputValue(form.collection_amount,state.activePaymentTotal);updateCustomerCollectionAmount(form);
   };
   const payCustomerCollection=async(form,submitter)=>{
     if(state.paymentProcessing||!customerCollection)return;if(!updateCustomerCollectionAmount(form,true))return;const payment=paymentFromForm(form);if(!payment||payment.payments.some(p=>!['cash','transfer','breb','card'].includes(p.method))){toast('Revisa los medios y valores del pago.','error');return;}if(payment.method==='cash'&&currencyInputNumber(form.cash_received)<state.activePaymentTotal){toast('El dinero recibido no alcanza.','error');return;}
-    const session=state.sessions.find(s=>s.id===form.session_id.value),payload={...customerCollection,id:customerCollection.id,reference:form.payment_reference.value.trim(),number:'AB-'+localDateKey().replaceAll('-','')+'-'+customerCollection.id.slice(-8).toUpperCase(),createdAt:new Date().toISOString(),payments:payment.payments,cashReceived:payment.method==='cash'?currencyInputNumber(form.cash_received):null,changeDue:payment.method==='cash'?currencyInputNumber(form.cash_received)-state.activePaymentTotal:0};delete payload.name;delete payload.availableAllocations;
+    const session=state.sessions.find(s=>s.id===form.session_id.value)||customerCollectionSession,payload={...customerCollection,id:customerCollection.id,reference:form.payment_reference.value.trim(),number:'AB-'+localDateKey().replaceAll('-','')+'-'+customerCollection.id.slice(-8).toUpperCase(),createdAt:new Date().toISOString(),payments:payment.payments,cashReceived:payment.method==='cash'?currencyInputNumber(form.cash_received):null,changeDue:payment.method==='cash'?currencyInputNumber(form.cash_received)-state.activePaymentTotal:0};delete payload.name;delete payload.availableAllocations;
     const signature=JSON.stringify({customerId:payload.customerId,allocations:payload.allocations,payments:payload.payments,reference:payload.reference});try{const pending=JSON.parse(BranchStorage.getItem('pending-customer-payment')||'null');if(pending?.signature===signature)Object.assign(payload,pending.payload);}catch{}
     const popup=submitter?.value==='print'?window.open('','_blank','width=420,height=720'):null;state.paymentProcessing=true;form.querySelectorAll('button').forEach(b=>b.disabled=true);
-    try{BranchStorage.setItem('pending-customer-payment',JSON.stringify({signature,payload}));const receipt=await OracleDb.remote('customer_payment',payload,payload.id);BranchStorage.removeItem('pending-customer-payment');const invoice={...receipt,table:receipt.customerName,payerName:receipt.customerName,waiterName:receipt.actorName,paymentMethod:payment.method,totals:{subtotal:receipt.total,total:receipt.total,discount:0,tax:0,serviceFee:0,tip:0},items:session.session_items};state.sessions=state.sessions.filter(s=>s.id!==session.id);customerCollection=null;delete form.dataset.collection;$('#paymentDialog').close();state.incomeReport=null;void window.OperationsPanel?.load(true);if(popup)printThermalReceipt(session,invoice,popup);else openReceiptResult(session,invoice);toast('Pago de cartera registrado.','ok');}
+    try{BranchStorage.setItem('pending-customer-payment',JSON.stringify({signature,payload}));const receipt=await OracleDb.remote('customer_payment',payload,payload.id);BranchStorage.removeItem('pending-customer-payment');const invoice={...receipt,table:receipt.customerName,payerName:receipt.customerName,waiterName:receipt.actorName,paymentMethod:payment.method,totals:{subtotal:receipt.total,total:receipt.total,discount:0,tax:0,serviceFee:0,tip:0},items:session.session_items};state.sessions=state.sessions.filter(s=>s.id!==session.id);customerCollection=null;customerCollectionSession=null;delete form.dataset.collection;$('#paymentDialog').close();state.incomeReport=null;void window.OperationsPanel?.load(true);if(popup)printThermalReceipt(session,invoice,popup);else openReceiptResult(session,invoice);toast('Pago de cartera registrado.','ok');}
     catch(error){popup?.close();toast(error.message,'error');}finally{state.paymentProcessing=false;form.querySelectorAll('button').forEach(b=>b.disabled=false);}
   };
   const processPayment = async (form, submitter) => {
@@ -7090,6 +7121,7 @@ const App = (() => {
       saleChannel: session.sale_channel || "table",
       soldByUserId: state.currentUser?.id || session.assigned_waiter_id || null,
       createdAt,
+      deliveryDate: session.delivery_date || "", deliveryTime: session.delivery_time || "",
       payerName: session.payer_name || "",
       waiterName: state.currentUser?.full_name || session.assigned_waiter?.full_name || "",
       paymentMethod: payment.method,
@@ -7110,7 +7142,7 @@ const App = (() => {
         item_name: item.item_name,
         quantity: Number(item.quantity || 0),
         unit_price: Number(item.unit_price || 0),
-        unit_cost: Number(state.inventoryMeta[item.menu_item_id]?.costPrice || 0),
+        unit_cost: Number(state.inventoryMeta[item.menu_item_id]?.finalProductionCost ?? state.inventoryMeta[item.menu_item_id]?.costPrice ?? 0),
         status: item.status
       }))
     };
@@ -7196,6 +7228,7 @@ const App = (() => {
     let finished = false;
     const save = () => {
       if (finished) return;
+      if(window.BRANCH_CONFIG?.slug==='gcobarf'&&!(currencyInputNumber(input)>0)){toast("Escribe un precio de venta mayor que cero.","error");input.focus();return;}
       finished = true;
       draft.unitPrice = currencyInputNumber(input);
       if (state.consumptionDraftEditIndex === index) {
@@ -7231,6 +7264,7 @@ const App = (() => {
     const itemName = form.item_name.value.trim() || selectedItem?.name || "";
     const quantity = Number(String(form.quantity.value || "").trim());
     const unitPrice = form.unit_price.value.trim() ? currencyInputNumber(form.unit_price) : Number(selectedItem?.price || 0);
+    if(window.BRANCH_CONFIG?.slug==='gcobarf'&&!(unitPrice>0)){if(!quiet)toast("Escribe un precio de venta mayor que cero antes de agregar el producto.","error");return null;}
     if (!itemName || !Number.isInteger(quantity) || quantity < 1 || quantity > 100 || !Number.isFinite(unitPrice) || unitPrice < 0) {
       if (!quiet) toast("Selecciona un producto y revisa su cantidad antes de añadirlo.", "error", "invalid-consumption-draft");
       return null;
@@ -7418,7 +7452,7 @@ const App = (() => {
     renderAdminLive();
     toast(`${drafts.length} ${drafts.length === 1 ? "producto agregado" : "productos agregados"} a la cuenta.`, "ok", `consumption-batch-optimistic:${optimisticSessionId}`);
 
-    if (isLocalWalkInSession(session)) {
+    if (isLocalWalkInSession(session) && !session.delivery_date) {
       state.optimisticSessionStates.set(optimisticSessionId, { mode: "upsert", localOnly: true, session: optimisticSession });
       persistWalkInDrafts();
       return { sessionId: optimisticSessionId, items: optimisticItems };
@@ -7539,6 +7573,7 @@ const App = (() => {
         assigned_waiter_id: sessionSaved.assigned_waiter_id || ""
       } : null
     });
+    if(session.delivery_date){const inventory=await OracleDb.remote("get_inventory");if(inventory?.items)applyRemoteInventoryItems(inventory.items);void window.OperationsPanel?.load(true);void loadInventoryMovements({background:true});}
     return { sessionId: persistedSessionId, items: savedItems };
   };
 
@@ -7566,7 +7601,7 @@ const App = (() => {
       if(drafts.length){const result=await addConsumptionBatch(form,drafts);if(!result)throw Error('No se pudo confirmar la selección. Tus datos se conservan.');form.session_id.value=result.sessionId;state.consumptionDrafts=[];persistConsumptionDrafts();clearConsumptionEntry(form);renderConsumptionSelection();}
       const session=state.sessions.find(s=>s.id===form.session_id.value),items=newestSessionItems(session),totals=session?sessionTotals(session):null;if(!session||!items.length||!totals?.total)throw Error('Agrega al menos un consumo antes de enviar a cartera.');
       const fingerprint=JSON.stringify({customerId,due,sessionId:session.id,items:items.map(i=>[i.id,i.quantity,i.unit_price]),total:totals.total});let invoice;try{const old=JSON.parse(BranchStorage.getItem('pending-credit-consumption')||'null');if(old?.fingerprint===fingerprint)invoice=old.invoice;}catch{}
-      if(!invoice){const id=uid();invoice={id,sessionId:session.id,tableId:session.table_id,number:'CR-'+localDateKey().replaceAll('-','')+'-'+id.slice(0,8).toUpperCase(),saleChannel:isLocalWalkInSession(session)?'walk_in':'table',table:'Crédito · '+customer.name,customerId,creditDueDate:due,createdAt:new Date().toISOString(),reference:'Consumo enviado a cartera',waiterName:state.currentUser.full_name,payerName:customer.name,totals:{...totals,tip:0},payments:[{method:'credit',amount:totals.total}],items:items.map(i=>({...i,created_by_user:undefined,updated_by_user:undefined}))};}
+      if(!invoice){const id=uid();invoice={id,sessionId:session.id,tableId:session.table_id,number:'CR-'+localDateKey().replaceAll('-','')+'-'+id.slice(0,8).toUpperCase(),deliveryDate:session.delivery_date||'',deliveryTime:session.delivery_time||'',saleChannel:isLocalWalkInSession(session)?'walk_in':'table',table:'Crédito · '+customer.name,customerId,creditDueDate:due,createdAt:new Date().toISOString(),reference:'Consumo enviado a cartera',waiterName:state.currentUser.full_name,payerName:customer.name,totals:{...totals,tip:0},payments:[{method:'credit',amount:totals.total}],items:items.map(i=>({...i,created_by_user:undefined,updated_by_user:undefined}))};}
       BranchStorage.setItem('pending-credit-consumption',JSON.stringify({fingerprint,invoice}));const response=await OracleDb.remote('record_sale',{invoice},invoice.id);if(response.items)applyRemoteInventoryItems(response.items);applyInvoiceToInventory(invoice);
       BranchStorage.removeItem('pending-credit-consumption');state.sessions=state.sessions.filter(s=>s.id!==session.id);state.optimisticSessionStates.set(session.id,{mode:'remove',session});state.consumptionDrafts=[];persistConsumptionDrafts();persistWalkInDrafts();window.AllianceForms?.clear(form);$('#consumptionDialog')?.close();renderAdminLive();renderInventory();void window.OperationsPanel?.load(true);document.dispatchEvent(new CustomEvent('alliance-order-changed'));toast('Consumo agregado a la cartera de '+customer.name+'. Cuenta liberada.','ok');return invoice.id;
     }catch(error){creditConsumptionError(form,error.message);toast(error.message,'error');return null;}finally{state.paymentProcessing=false;controls.forEach(c=>c.disabled=false);}
@@ -7790,7 +7825,7 @@ const App = (() => {
     if (!await askForConfirmation({
       eyebrow: "Cuenta abierta",
       title: `¿Quitar ${item.item_name}?`,
-      message: "El producto se retirará de esta cuenta. El inventario no cambia porque todavía no se ha cobrado.",
+      message: session.delivery_date ? "El producto se retirará de esta entrega y sus unidades volverán al inventario." : "El producto se retirará de esta cuenta.",
       accept: "Sí, quitar producto",
       cancel: "Conservar producto"
     })) return;
@@ -7815,9 +7850,10 @@ const App = (() => {
       toast("No se pudo eliminar el consumo. La cuenta fue restaurada.", "error", `delete-consumption:${itemId}`);
       return;
     }
-    const updated=state.sessions.find(s=>s.id===sessionId);if(updated&&!newestSessionItems(updated).length){state.sessions=state.sessions.filter(s=>s.id!==sessionId);state.optimisticSessionStates.set(sessionId,{mode:'remove',session:updated});}
+    const updated=state.sessions.find(s=>s.id===sessionId);if(updated&&!updated.delivery_date&&!newestSessionItems(updated).length){state.sessions=state.sessions.filter(s=>s.id!==sessionId);state.optimisticSessionStates.set(sessionId,{mode:'remove',session:updated});}
+    if(session.delivery_date){const inventory=await OracleDb.remote('get_inventory');if(inventory?.items)applyRemoteInventoryItems(inventory.items);void loadInventoryMovements({background:true});}
     renderAdminLive();void window.OperationsPanel?.load(true);document.dispatchEvent(new CustomEvent('alliance-order-changed'));
-    toast('Consumo retirado'+(updated&&!newestSessionItems(updated).length?'; cuenta liberada.':'.'),'ok');
+    toast('Consumo retirado'+(updated&&!updated.delivery_date&&!newestSessionItems(updated).length?'; cuenta liberada.':session.delivery_date?'. Sus unidades vuelven al inventario.':'.'),'ok');
   };
 
   const showStockWarning = ({ item, current, change, remaining, minimum, insufficient = false }) => {
@@ -7859,6 +7895,7 @@ const App = (() => {
       toast("El consumo necesita nombre o producto.", "error");
       return;
     }
+    if(window.BRANCH_CONFIG?.slug==='gcobarf'&&!(price>0)){toast("Escribe un precio de venta mayor que cero.","error");return null;}
     if (!quantityText || !Number.isInteger(quantity) || quantity < 1 || quantity > 100 || !Number.isFinite(price) || price < 0) {
       toast("Revisa cantidad y precio antes de guardar.", "error", "invalid-consumption-values");
       form.quantity.focus({ preventScroll: true });
@@ -7971,6 +8008,7 @@ const App = (() => {
         assigned_waiter_id: sessionSaved.assigned_waiter_id || ""
       } : null
     });
+    if(session.delivery_date){const inventory=await OracleDb.remote("get_inventory");if(inventory?.items)applyRemoteInventoryItems(inventory.items);void window.OperationsPanel?.load(true);void loadInventoryMovements({background:true});}
     if (!silent) toast(itemId ? "Consumo actualizado." : "Producto agregado a la cuenta.", "ok", `consumption-saved:${saved.id}`);
     if (openPaymentAfter) openPaymentDialog(sessionId);
     return { sessionId, item: saved };

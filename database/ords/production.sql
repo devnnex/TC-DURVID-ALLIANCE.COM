@@ -5,7 +5,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_production AS
     FOR i IN 1..keys_value.COUNT LOOP q:=d.get_number(keys_value(i));IF ABS(q)>0.00000001 THEN alliance_operations.raw_move(u,b,l,alliance_security.new_id,keys_value(i),-q,kind_value,reference_value);END IF;END LOOP;
   END;
   PROCEDURE post_batch(u VARCHAR2,b VARCHAR2,l VARCHAR2,model JSON_OBJECT_T,recipe_id VARCHAR2) IS
-    slug_value VARCHAR2(80);r JSON_OBJECT_T;row_json JSON_OBJECT_T;ing JSON_OBJECT_T;raw JSON_OBJECT_T;old JSON_OBJECT_T;part JSON_OBJECT_T;result_json JSON_OBJECT_T;lines JSON_ARRAY_T;ingredients JSON_ARRAY_T:=model.get_array('ingredients');recipes JSON_ARRAY_T:=model.get_array('recipes');parts JSON_ARRAY_T:=JSON_ARRAY_T();old_parts JSON_ARRAY_T;expenses JSON_ARRAY_T:=model.get_array('expenses');needed JSON_OBJECT_T:=JSON_OBJECT_T();delta JSON_OBJECT_T:=JSON_OBJECT_T();keys_value JSON_KEY_LIST;raw_id VARCHAR2(80);q NUMBER;cost_value NUMBER:=0;overhead NUMBER:=0;transferred NUMBER:=0;stock_value NUMBER;n NUMBER;product_value VARCHAR2(80);output_value NUMBER;
+    slug_value VARCHAR2(80);r JSON_OBJECT_T;row_json JSON_OBJECT_T;ing JSON_OBJECT_T;raw JSON_OBJECT_T;old JSON_OBJECT_T;part JSON_OBJECT_T;result_json JSON_OBJECT_T;lines JSON_ARRAY_T;ingredients JSON_ARRAY_T:=model.get_array('ingredients');recipes JSON_ARRAY_T:=model.get_array('recipes');parts JSON_ARRAY_T:=JSON_ARRAY_T();old_parts JSON_ARRAY_T;expenses JSON_ARRAY_T:=model.get_array('expenses');needed JSON_OBJECT_T:=JSON_OBJECT_T();delta JSON_OBJECT_T:=JSON_OBJECT_T();keys_value JSON_KEY_LIST;raw_id VARCHAR2(80);q NUMBER;cost_value NUMBER:=0;overhead NUMBER:=0;transferred NUMBER:=0;stock_value NUMBER;n NUMBER;product_value VARCHAR2(80);output_value NUMBER;monthly_cost NUMBER:=0;monthly_units NUMBER:=0;monthly_unit NUMBER:=0;production_month VARCHAR2(7);
   BEGIN
     SELECT slug INTO slug_value FROM locations WHERE business_id=b AND id=l;IF slug_value<>'gcobarf' THEN alliance_security.fail(400,'PRODUCTION_SCOPE','La producción terminada pertenece a GCOBARF.');END IF;
     FOR i IN 0..recipes.get_size-1 LOOP row_json:=TREAT(recipes.get(i) AS JSON_OBJECT_T);IF row_json.get_string('id')=recipe_id THEN r:=row_json;EXIT;END IF;END LOOP;IF r IS NULL THEN alliance_security.fail(400,'PRODUCTION_MISSING','Hoja de producción no disponible.');END IF;
@@ -28,7 +28,13 @@ CREATE OR REPLACE PACKAGE BODY alliance_production AS
     END IF;
     apply_deltas(u,b,l,delta,'production',recipe_id);
     FOR i IN 0..expenses.get_size-1 LOOP row_json:=TREAT(expenses.get(i) AS JSON_OBJECT_T);IF NOT row_json.get_boolean('includedElsewhere') AND (row_json.get_string('recipeId') IS NULL OR row_json.get_string('recipeId')=recipe_id) THEN IF row_json.get_string('kind')='unit' THEN overhead:=overhead+row_json.get_number('amount')*r.get_number('output');ELSIF row_json.get_string('kind')='batch' THEN overhead:=overhead+row_json.get_number('amount');END IF;END IF;END LOOP;
-    result_json:=JSON_OBJECT_T();result_json.put('recipeId',recipe_id);result_json.put('output',r.get_number('output'));result_json.put('transferred',transferred);result_json.put('productId',product_value);result_json.put('parts',parts);result_json.put('cost',cost_value+overhead);alliance_operations.put_row(u,b,l,'productions',recipe_id,result_json);DELETE FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_recipes' AND JSON_VALUE(data_json,'$.recipeId')=recipe_id;
+    production_month:=SUBSTR(r.get_string('productionDate'),1,7);
+    IF production_month IS NOT NULL THEN FOR i IN 0..recipes.get_size-1 LOOP row_json:=TREAT(recipes.get(i) AS JSON_OBJECT_T);IF SUBSTR(row_json.get_string('productionDate'),1,7)=production_month THEN monthly_units:=monthly_units+row_json.get_number('output');END IF;END LOOP;END IF;
+    FOR i IN 0..expenses.get_size-1 LOOP row_json:=TREAT(expenses.get(i) AS JSON_OBJECT_T);IF row_json.get_string('kind')='fixed' AND NOT row_json.get_boolean('includedElsewhere') AND (row_json.get_string('recipeId') IS NULL OR row_json.get_string('recipeId')=recipe_id) THEN monthly_cost:=monthly_cost+row_json.get_number('amount')/row_json.get_number('periodMonths');END IF;END LOOP;
+    IF production_month IS NULL THEN monthly_units:=NVL(model.get_object('settings').get_number('monthlyUnits'),0);END IF;
+    IF monthly_cost>0 AND monthly_units<=0 THEN alliance_security.fail(400,'MONTHLY_PRODUCTION','Completa las unidades producidas del mes antes de guardar.');END IF;
+    IF monthly_units>0 THEN monthly_unit:=monthly_cost/monthly_units;END IF;
+    result_json:=JSON_OBJECT_T();result_json.put('finalUnitCost',(cost_value+overhead)/output_value+monthly_unit);result_json.put('monthlyUnitCost',monthly_unit);result_json.put('recipeId',recipe_id);result_json.put('output',r.get_number('output'));result_json.put('transferred',transferred);result_json.put('productId',product_value);result_json.put('parts',parts);result_json.put('cost',cost_value+overhead);alliance_operations.put_row(u,b,l,'productions',recipe_id,result_json);DELETE FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_recipes' AND JSON_VALUE(data_json,'$.recipeId')=recipe_id;
     IF product_value IS NOT NULL THEN UPDATE alliance_pos_stock SET cost_minor=ROUND((cost_value+overhead)/output_value*100),version=version+1 WHERE business_id=b AND location_id=l AND product_id=product_value;END IF;
   END;
   FUNCTION transfer_batch(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T IS batch JSON_OBJECT_T;recipe_id VARCHAR2(80);product_value VARCHAR2(80);slug_value VARCHAR2(80);q NUMBER;n NUMBER;unit_cost_value NUMBER;BEGIN
@@ -42,10 +48,32 @@ CREATE OR REPLACE PACKAGE BODY alliance_production AS
     DELETE FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_recipes' AND id=product_value;
     batch.put('productId',product_value);batch.put('transferred',batch.get_number('output'));alliance_operations.put_row(u,b,l,'productions',recipe_id,batch);RETURN batch;
   END;
+  -- Reservations belong to the account, so clearing the movement view cannot erase them.
+  PROCEDURE reserve_deliveries(u VARCHAR2,b VARCHAR2,l VARCHAR2) IS
+    account JSON_OBJECT_T;hold_json JSON_OBJECT_T;held JSON_OBJECT_T;wanted JSON_OBJECT_T;line JSON_OBJECT_T;keys_value JSON_KEY_LIST;product_value VARCHAR2(80);q NUMBER;n NUMBER;ref VARCHAR2(160);
+  BEGIN
+    FOR x IN(SELECT id,data_json FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='table_sessions' AND JSON_VALUE(data_json,'$.delivery_date') IS NOT NULL AND JSON_VALUE(data_json,'$.status') IN('open','cancelled')) LOOP
+      account:=JSON_OBJECT_T(x.data_json);hold_json:=alliance_pos_store.document(b,l,'op_deliveryholds',x.id);held:=NULL;IF hold_json IS NOT NULL THEN held:=hold_json.get_object('products');END IF;IF held IS NULL THEN held:=JSON_OBJECT_T();FOR m IN(SELECT product_id,-SUM(delta) quantity FROM alliance_pos_movements WHERE business_id=b AND location_id=l AND session_id=x.id AND kind IN('CONSUMO_MESA','DEVOLUCION_CONSUMO') GROUP BY product_id) LOOP held.put(m.product_id,GREATEST(0,m.quantity));END LOOP;END IF;
+      wanted:=JSON_OBJECT_T();IF account.get_string('status')='open' THEN
+        FOR i IN(SELECT data_json FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='session_items' AND JSON_VALUE(data_json,'$.session_id')=x.id AND NVL(JSON_VALUE(data_json,'$.status'),'served')<>'cancelled') LOOP
+          line:=JSON_OBJECT_T(i.data_json);product_value:=line.get_string('menu_item_id');IF product_value IS NOT NULL THEN
+            SELECT COUNT(*) INTO n FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_recipes' AND id=product_value;
+            IF n>0 THEN alliance_security.fail(409,'PRODUCTION_REQUIRED','Agrega la producción terminada al inventario antes de programar su entrega.');END IF;
+            wanted.put(product_value,NVL(wanted.get_number(product_value),0)+line.get_number('quantity'));
+          END IF;
+        END LOOP;
+      END IF;
+      keys_value:=wanted.get_keys;FOR i IN 1..keys_value.COUNT LOOP IF NOT held.has(keys_value(i)) THEN held.put(keys_value(i),0);END IF;END LOOP;
+      keys_value:=held.get_keys;FOR i IN 1..keys_value.COUNT LOOP product_value:=keys_value(i);q:=NVL(held.get_number(product_value),0)-NVL(wanted.get_number(product_value),0);
+        IF ABS(q)>0.00000001 THEN ref:=SUBSTR(CASE WHEN q<0 THEN 'Apartado para ' ELSE 'Devolución de entrega · ' END||account.get_string('payer_name'),1,160);alliance_pos_store.movement(u,b,l,alliance_security.new_id,product_value,q,CASE WHEN q<0 THEN 'CONSUMO_MESA' ELSE 'DEVOLUCION_CONSUMO' END,ref,x.id);END IF;
+      END LOOP;
+      IF hold_json IS NULL OR DBMS_LOB.COMPARE(held.to_clob,wanted.to_clob)<>0 THEN hold_json:=JSON_OBJECT_T();hold_json.put('id',x.id);hold_json.put('products',wanted);alliance_pos_store.put_document(b,l,'op_deliveryholds',x.id,hold_json);END IF;
+    END LOOP;
+  END;
   PROCEDURE reconcile(u VARCHAR2,b VARCHAR2,l VARCHAR2) IS
     slug_value VARCHAR2(80);line JSON_OBJECT_T;session_value JSON_OBJECT_T;recipe JSON_OBJECT_T;old JSON_OBJECT_T;row_json JSON_OBJECT_T;part JSON_OBJECT_T;raw JSON_OBJECT_T;parts JSON_ARRAY_T;old_parts JSON_ARRAY_T;recipe_parts JSON_ARRAY_T;delta JSON_OBJECT_T:=JSON_OBJECT_T();wanted BOOLEAN;
   BEGIN
-    SELECT slug INTO slug_value FROM locations WHERE business_id=b AND id=l;IF slug_value='gcobarf' THEN RETURN;END IF;
+    SELECT slug INTO slug_value FROM locations WHERE business_id=b AND id=l;IF slug_value='gcobarf' THEN reserve_deliveries(u,b,l);RETURN;END IF;
     FOR x IN(
       SELECT d.id FROM alliance_pos_documents d JOIN alliance_pos_documents s ON s.business_id=d.business_id AND s.location_id=d.location_id AND s.entity='table_sessions' AND s.id=JSON_VALUE(d.data_json,'$.session_id')
       WHERE d.business_id=b AND d.location_id=l AND d.entity='session_items' AND NVL(JSON_VALUE(d.data_json,'$.status'),'served')<>'cancelled' AND JSON_VALUE(s.data_json,'$.status')='open'

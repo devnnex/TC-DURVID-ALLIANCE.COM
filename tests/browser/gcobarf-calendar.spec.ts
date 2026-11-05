@@ -26,7 +26,7 @@ test('calendario programa varios clientes, comparte cuentas y usa el envío a ca
   await page.locator('#consumptionProductSearch').fill('Producto');await page.locator('[data-consumption-product]').first().click();await page.locator('#consumptionForm [name=quantity]').fill('2');
   await page.locator('#consumptionQueueButton').click();await page.locator('[name=credit_consumption_due]').fill('2026-12-01');await page.locator('#addConsumptionToCredit').click();
   await expect(page.locator('#consumptionDialog')).toBeHidden();await expect.poll(()=>server.state.operations.debts.length).toBe(1);expect(server.state.operations.debts[0].customerId).toBe('client-0');expect(server.state.operations.debts[0].total).toBe(20000);
-  await expect(page.locator('#metricOpen')).toHaveText('1');await page.locator('[data-delivery-day="2026-11-20"]').click();await expect(first).toContainText('Cuenta cerrada');
+  await expect(page.locator('#metricOpen')).toHaveText('1');await page.locator('[data-delivery-day="2026-11-20"]').click();await expect(first).toContainText('Pendiente de pago');
   const second=page.locator('[data-delivery-card]').filter({hasText:'Juan López'});await second.locator('[data-delivery-edit]').click();await page.locator('#deliveryDialog [name=time]').fill('16:15');await page.locator('#deliveryDialog [type=submit]').click();await expect(page.locator('#deliveryDialog')).toBeVisible();await expect(second).toContainText('16:15');
   const context=await browser.newContext({baseURL:'http://127.0.0.1:4177',serviceWorkers:'allow'});await server.attach(context);const other=await context.newPage();await enter(other);
   await other.locator('[data-delivery-day="2026-11-20"]').click();await expect(other.locator('[data-delivery-card]')).toHaveCount(2);await expect(other.locator('[data-delivery-card]').filter({hasText:'Juan López'})).toContainText('16:15');await expect(other.locator('[data-delivery-card]').filter({hasText:'Ana Pérez'})).toContainText('20.000');await context.close();
@@ -46,7 +46,7 @@ test('guardar conserva la agenda y permite agregar consumos y cobrar con el diá
   await enter(page);await schedule(page,'Ana Pérez','09:30',false);
   const dialog=page.locator('#deliveryDialog');await expect(dialog.getByRole('button',{name:'Cobrar',exact:true})).toBeDisabled();
   await dialog.getByRole('button',{name:'Guardar entrega',exact:true}).click();await expect(dialog.locator('[data-delivery-status]')).toContainText('Entrega guardada');await expect(dialog.locator('[data-delivery-card]')).toHaveCount(1);
-  await dialog.getByRole('button',{name:'Agregar / ver consumos'}).click();
+  await dialog.getByRole('button',{name:'Agregar / ver productos'}).click();
   await page.locator('#consumptionProductSearch').fill('Producto');await page.locator('[data-consumption-product]').first().click();await page.locator('#consumptionForm [name=quantity]').fill('2');
   await page.locator('#consumptionSubmitButton').click();await expect(page.locator('#consumptionDialog')).toBeHidden();
   await page.locator('[data-delivery-day="2026-11-20"]').click();await dialog.getByRole('button',{name:'Cobrar',exact:true}).click();
@@ -54,7 +54,7 @@ test('guardar conserva la agenda y permite agregar consumos y cobrar con el diá
   await expect(page.locator('#paymentForm [name=customer_id]')).toHaveValue('ana');
   await page.locator('#paymentForm button[value=save]').click();await expect(page.locator('#paymentDialog')).toBeHidden();
   await expect.poll(()=>server.state.sales.length).toBe(1);expect(server.state.sales[0].totals.total).toBe(20000);
-  await page.locator('[data-delivery-day="2026-11-20"]').click();await expect(dialog).toContainText('Cuenta cerrada');await expect(dialog.getByRole('button',{name:'Cobrar',exact:true})).toBeDisabled();
+  await page.locator('[data-delivery-day="2026-11-20"]').click();await expect(dialog).toContainText('Pagado');await expect(dialog.getByRole('button',{name:'Cobrar',exact:true})).toBeDisabled();
 });
 
 test('cobrar permite elegir una entrega del día sin mezclar clientes',async({page})=>{

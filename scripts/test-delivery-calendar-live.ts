@@ -28,6 +28,9 @@ try{
   check((await query('table_sessions',{...values,id:randomUUID(),customer_id:randomUUID()})).status===400,'Rechaza cliente ajeno');
   check((await query('table_sessions',{...values,id:randomUUID()},'insert',undefined,l)).status===400,'Otros negocios conservan mesas');
   const line=randomUUID();check((await query('session_items',{id:line,session_id:first,menu_item_id:product,item_name:'Entrega de prueba',quantity:2,unit_price:10000,status:'confirmed'})).status===200,'Agrega consumo con flujo actual');
+  snap=await snapshot();check(snap.inventory.find((i:any)=>i.productId===product).stock===18,'Aparta las dos unidades al agregar, antes de cobrar');check(snap.model.deliveryHolds.find((h:any)=>h.id===first).products[product]===2,'Reserva persistente ligada a la cuenta');
+  const movements=await action('get_inventory_movements');const held=movements.data.value.movements.find((m:any)=>m.sessionId===first&&m.delta===-2);check(held?.customerId===customer&&held?.deliveryDate==='2026-11-20'&&held?.saleUnitPrice===10000,'Movimiento incluye cliente, fecha de entrega y precio');
+  check((await query('session_items',{id:randomUUID(),session_id:first,menu_item_id:product,item_name:'Sin precio',quantity:1,unit_price:0})).status===400,'Bloquea productos sin precio');
   check((await query('table_sessions',{customer_id:other},'update',first)).status===409,'Protege cliente con consumos');
   check((await query('table_sessions',{delivery_date:'2026-11-21',delivery_time:'10:00'},'update',first)).status===200,'Reprograma cuenta sin perder consumo');
   const login2=await rpc('/auth/login',{business_slug:slug,username:'owner',password});token=login2.data.access_token;
@@ -37,6 +40,11 @@ try{
   snap=await snapshot();check(snap.docs.table_sessions.find((s:any)=>s.id===first)?.status==='closed','Cobro cierra la cuenta programada');
   check(snap.model.debts.some((r:any)=>r.customerId===customer&&r.total-r.paid===20000),'Cartera usa el mismo cliente y valor');
   check((await query('table_sessions',{delivery_date:'2026-11-22'},'update',first)).status===409,'Cuenta cerrada conserva fecha histórica');
+  check(snap.inventory.find((i:any)=>i.productId===product).stock===18,'Cobrar la entrega no repite el descuento');
+  const paymentId=randomUUID(),payment={id:paymentId,customerId:customer,number:'AB-DELIVERY',allocations:[{debtId:sale,amount:20000,expectedPaid:0}],payments:[{method:'transfer',amount:20000}],reference:'Comprobante entrega'};
+  check((await action('customer_payment',payment,g,paymentId)).status===200,'Cobra la entrega desde la cartera');
+  const collections=await action('get_income_report',{saleType:'collection'});check(collections.status===200,'Consulta recibos: '+JSON.stringify(collections.data));const receipt=collections.data.value.records[0];check(receipt.allocations[0].deliveryDate==='2026-11-21'&&receipt.allocations[0].items[0].quantity===2&&receipt.reference==='Comprobante entrega','Recibo muestra productos, entrega y observación');
+  snap=await snapshot();check(snap.inventory.find((i:any)=>i.productId===product).stock===18&&snap.model.debts.find((d:any)=>d.id===sale).paid===20000,'Abonar no cambia inventario y deja el saldo pagado');check(snap.model.deliverySales.some((s:any)=>s.id===sale),'Conserva facturas de entregas para el historial de todos los meses');
   const ingredient=(id:string,name:string,stockId:string)=>({id,name,stockId,unit:'g',quantity:1000,purchasePrice:10000,yieldPercent:100,purchaseTaxRate:0,recoverableTax:false});
   const model={settings:{monthlyUnits:null,monthlyMinutes:null,taxRate:0,taxMode:'included'},ingredients:[ingredient('chicken','Pollo','raw-chicken'),ingredient('spinach','Espinaca','raw-spinach')],expenses:[],channels:[{id:'direct',name:'Directo',salesPercent:0,paymentPercent:0,flatFee:0,feeBase:'net'}],recipes:[{id:'batch',name:'Producción',output:1,size:'',category:'',wastePercent:0,currentPrice:10000,targetPercent:30,marginMode:'margin',channelId:'direct',pricingBasis:'production',minutes:null,monthlyUnits:null,productionDate:'2026-11-03',lines:[{ingredientId:'chicken',unit:'g',quantity:95,initialQuantity:100}]}]};
   check((await action('costing_save',{model,revision:0})).status===200,'Guarda pesos inicial y final distintos');

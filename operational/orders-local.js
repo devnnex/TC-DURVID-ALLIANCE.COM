@@ -3,7 +3,7 @@ const allianceOrderVersion=(state,entity,id)=>{state.docVersions||={};state.docV
 globalThis.AllianceReconcileSession=(state,sessionId,user)=>{
  const session=state.docs.table_sessions.find(s=>s.id===sessionId);if(!session)return;
  const active=state.docs.session_items.filter(l=>l.session_id===sessionId&&l.status!=='cancelled');
- if(session.status==='open'&&!active.length){session.status='closed';session.closed_at=new Date().toISOString();allianceOrderVersion(state,'table_sessions',sessionId);}
+ if(session.status==='open'&&!active.length&&!session.delivery_date){session.status='closed';session.closed_at=new Date().toISOString();allianceOrderVersion(state,'table_sessions',sessionId);}
  for(const ticket of state.operations.tickets.filter(t=>t.sessionId===sessionId)){
    const previous=ticket.items;ticket.items=previous.flatMap(l=>{const current=active.find(i=>i.id===l.id);return current?[{...l,name:current.item_name,quantity:current.quantity,notes:current.notes||''}]:[];});
    if(session.status!=='open'||!ticket.items.length){ticket.status=['closed','paid'].includes(session.status)&&ticket.items.length?'delivered':'cancelled';}
