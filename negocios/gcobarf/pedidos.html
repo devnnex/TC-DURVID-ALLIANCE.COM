@@ -32,10 +32,16 @@
   </main>
   <footer class="wrap footer"><a class="brand" href="#inicio">GCOBARF <small>Nutripet’s</small></a><p>Su bienestar, con tiempo y cariño.</p></footer>
   <nav class="bottom-nav" aria-label="Navegación principal"><a href="#inicio">⌂<span>Inicio</span></a><a href="#catalogo">▦<span>Productos</span></a><button type="button" data-cart-open>◷<span>Mi pedido <b data-cart-count>0</b></span></button><a href="#mis-entregas">▤<span>Mis entregas</span></a></nav>
+  <button type="button" id="basket-summary" class="basket-summary" data-cart-open hidden><span class="basket-count" data-cart-count>0</span><span>Ver mi pedido<small id="basket-units"></small></span><strong id="basket-total"></strong><span aria-hidden="true">→</span></button>
+  <dialog id="product-dialog" aria-labelledby="product-title">
+    <button type="button" id="product-close" class="close" aria-label="Cerrar producto">×</button>
+    <div class="detail-scroll"><div id="detail-photo" class="detail-photo"></div><div class="detail-copy"><small id="detail-category"></small><h2 id="product-title"></h2><p id="detail-description"></p><strong id="detail-price"></strong><div class="detail-quantity-row"><div><strong>Cantidad</strong><small id="detail-stock"></small></div><div class="quantity-control detail-quantity"><button type="button" data-detail-step="-1" aria-label="Disminuir cantidad">−</button><input id="detail-quantity" type="number" inputmode="numeric" min="1" step="1" value="1" aria-label="Cantidad del producto"><button type="button" data-detail-step="1" aria-label="Aumentar cantidad">+</button></div></div><p id="detail-status" role="status"></p></div></div>
+    <footer class="detail-action"><button type="button" id="add-product" class="primary">Agregar al pedido</button></footer>
+  </dialog>
   <dialog id="cart-dialog" aria-labelledby="cart-title">
-    <header class="sheet-head"><div><small>HECHO A SU MEDIDA</small><h2 id="cart-title">Tu pedido</h2></div><button type="button" class="close" id="cart-close" aria-label="Cerrar pedido">×</button></header>
-    <div class="sheet-body"><div id="cart-items"></div>
-      <form id="checkout">
+    <header class="sheet-head"><div><small id="cart-step">1 DE 2 · TUS PRODUCTOS</small><h2 id="cart-title">Tu pedido</h2></div><button type="button" class="close" id="cart-close" aria-label="Cerrar pedido">×</button></header>
+    <div class="sheet-body"><button type="button" id="checkout-back" class="checkout-back" hidden>← Editar productos</button><div id="cart-items"></div><button type="button" id="continue-shopping" class="continue-shopping">＋ Seguir eligiendo</button>
+      <form id="checkout" hidden>
         <h3>¿A quién le entregamos?</h3>
         <label>Nombre completo<input name="name" autocomplete="name" maxlength="160" required></label>
         <label>Teléfono / WhatsApp<input name="phone" type="tel" autocomplete="tel" inputmode="tel" minlength="7" maxlength="40" pattern="[+0-9 \(\)\-]{7,40}" placeholder="Ej. 300 123 4567" required></label>
@@ -49,7 +55,7 @@
       </form>
       <p id="checkout-status" role="alert"></p>
     </div>
-    <footer class="sheet-action"><div><span>Total de productos</span><strong id="cart-total">$0</strong></div><button type="submit" form="checkout" id="confirm-order" class="primary" disabled>Confirmar programación →</button></footer>
+    <footer class="sheet-action"><div><span>Total de productos</span><strong id="cart-total">$0</strong></div><button type="button" form="checkout" id="confirm-order" class="primary" disabled>Continuar con la entrega →</button></footer>
   </dialog>
   <dialog id="success-dialog" aria-labelledby="success-title"><button class="close" id="success-close" aria-label="Cerrar confirmación">×</button><span class="success-mark" aria-hidden="true">✓</span><small>YA ESTÁ EN NUESTRA AGENDA</small><h2 id="success-title">¡Su próxima comida,<br>programada!</h2><div id="success-detail"></div><p>Tus productos quedaron apartados. GCOBARF gestionará el pago contigo.</p><button class="primary" id="view-deliveries">Ver mi programación →</button></dialog>
   <div id="toast" role="status" hidden></div>

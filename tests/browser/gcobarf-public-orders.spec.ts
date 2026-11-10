@@ -33,8 +33,11 @@ async function storefront(page:Page,{lostAck=false,rejectStock=false}={}){
 async function checkout(page:Page,quantity=2){
   await page.goto('/negocios/gcobarf/pedidos.html');
   await expect(page.locator('[data-product]')).toHaveCount(2);
-  for(let i=0;i<quantity;i++)await page.getByRole('button',{name:'Agregar GCOBARF · Pollo',exact:true}).click();
+  await page.getByRole('button',{name:'Agregar GCOBARF · Pollo',exact:true}).click();
+  await expect(page.locator('#product-dialog')).toBeVisible();
+  await page.locator('#detail-quantity').fill(String(quantity));await page.locator('#add-product').click();
   await page.getByRole('button',{name:'Abrir mi pedido'}).click();
+  await page.locator('#confirm-order').click();
   await page.locator('[name=name]').fill('Ana Pérez');await page.locator('[name=phone]').fill('3001234567');
   await page.locator('[name=city]').fill('Bogotá');await page.locator('[name=address]').fill('Calle 10 # 20-30, Apto 2');
   await page.locator('[name=notes]').fill('Llamar al llegar');await page.locator('[name=consent]').check();
@@ -58,8 +61,8 @@ test('pedido público reserva productos y aparece en el calendario existente con
 
 test('actualiza inventario, bloquea agotados y respeta límites en móvil',async({page})=>{
   const server=await storefront(page);await page.setViewportSize({width:390,height:844});await page.goto('/negocios/gcobarf/pedidos.html');
-  await expect(page.locator('[data-product="exhausted"]')).toHaveClass(/unavailable/);await expect(page.locator('[data-product="exhausted"] button')).toBeDisabled();
-  await page.locator('[data-add="'+product+'"]').click();await page.getByRole('button',{name:'Abrir mi pedido'}).click();
+  await expect(page.locator('[data-product="exhausted"]')).toHaveClass(/unavailable/);await expect(page.locator('[data-product="exhausted"] [data-add]')).toBeDisabled();
+  await page.locator('[data-add="'+product+'"]').click();await page.locator('#add-product').click();await page.getByRole('button',{name:'Abrir mi pedido'}).click();
   await page.locator('[data-quantity]').fill('6');await page.locator('[data-quantity]').dispatchEvent('change');await expect(page.locator('#confirm-order')).toBeDisabled();await expect(page.locator('.cart-warning')).toContainText('Solo quedan 5');
   await page.locator('[data-quantity]').fill('2');await page.locator('[data-quantity]').dispatchEvent('change');await page.locator('#cart-close').click();
   server.rows[0].stock=0;server.rows[0].available=false;
@@ -81,4 +84,46 @@ test('si otro cliente agota el producto informa el rechazo y conserva los datos 
   await expect(page.locator('#checkout-status')).toContainText('No quedan suficientes');await expect(page.locator('#success-dialog')).not.toBeVisible();await expect(page.locator('[name=name]')).toHaveValue('Ana Pérez');await expect(page.locator('[name=name]')).toBeEnabled();
   expect(server.state.docs.table_sessions).toHaveLength(0);expect(server.state.stock[product].stock).toBe(5);
   expect(await page.evaluate(()=>localStorage.getItem('gcobarf-public-pending-v1'))).toBeNull();
+});
+
+test('abre la ficha al instante, elige cantidad y confirma con carrito visible',async({page})=>{
+  await storefront(page);await page.setViewportSize({width:390,height:844});await page.goto('/negocios/gcobarf/pedidos.html');
+  await page.getByRole('button',{name:'Agregar GCOBARF · Pollo',exact:true}).click();
+  const dialog=page.locator('#product-dialog');await expect(dialog).toBeVisible();await expect(page.locator('#detail-quantity')).toHaveValue('1');
+  const picture=await page.locator('.detail-photo img').boundingBox(),title=await page.locator('#product-title').boundingBox();expect(picture!.y+picture!.height).toBeLessThanOrEqual(title!.y);
+  await dialog.getByRole('button',{name:'Aumentar cantidad',exact:true}).click();await expect(page.locator('#detail-quantity')).toHaveValue('2');await expect(page.locator('#add-product')).toContainText('20.000');
+  await dialog.getByRole('button',{name:'Disminuir cantidad',exact:true}).click();await expect(page.locator('#detail-quantity')).toHaveValue('1');
+  await page.locator('#add-product').click();await expect(dialog).toBeHidden();await expect(page.locator('#toast')).toContainText('Agregado a tu pedido');
+  await expect(page.locator('#basket-summary')).toBeVisible();await expect(page.locator('#basket-summary')).toContainText('10.000');await expect(page.locator('[data-product="'+product+'"] output')).toHaveText('1');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('pulsaciones rápidas conservan el botón, sincronizan cantidades y respetan stock',async({page})=>{
+  await storefront(page);await page.goto('/negocios/gcobarf/pedidos.html');
+  await page.locator('[data-add="'+product+'"]').click();await page.locator('#add-product').click();
+  const card=page.locator('[data-product="'+product+'"]'),plus=card.getByRole('button',{name:'Aumentar GCOBARF · Pollo',exact:true});
+  const original=await plus.elementHandle();
+  for(let i=0;i<4;i++)await plus.click();
+  await expect(card.locator('output')).toHaveText('5');await expect(plus).toBeDisabled();expect(await original!.evaluate(button=>button.isConnected)).toBe(true);
+  await page.locator('#basket-summary').click();await expect(page.locator('[data-quantity]')).toHaveValue('5');await expect(page.locator('#cart-total')).toContainText('50.000');
+  await page.locator('#cart-items').getByRole('button',{name:'Disminuir GCOBARF · Pollo',exact:true}).click();await expect(page.locator('[data-quantity]')).toHaveValue('4');
+  await page.locator('#cart-close').click();await expect(card.locator('output')).toHaveText('4');
+  for(let i=0;i<4;i++)await card.getByRole('button',{name:'Disminuir GCOBARF · Pollo',exact:true}).click();
+  await expect(card.locator('[data-add]')).toBeVisible();await expect(page.locator('#basket-summary')).toBeHidden();await expect(page.locator('[data-cart-count]').first()).toHaveText('0');
+});
+
+test('revisa productos antes de los datos y conserva el carrito al recargar',async({page})=>{
+  await storefront(page);await page.goto('/negocios/gcobarf/pedidos.html');await page.locator('[data-add="'+product+'"]').click();await page.locator('#detail-quantity').fill('3');await page.locator('#add-product').click();
+  await page.reload();await expect(page.locator('[data-product="'+product+'"] output')).toHaveText('3');
+  await page.locator('#basket-summary').click();await expect(page.locator('#checkout')).toBeHidden();await expect(page.locator('#cart-items')).toBeVisible();await expect(page.locator('#confirm-order')).toHaveText('Continuar con la entrega →');
+  await page.locator('#confirm-order').click();await expect(page.locator('#checkout')).toBeVisible();await expect(page.locator('#cart-items')).toBeHidden();await page.locator('[name=name]').fill('Ana');
+  await page.locator('#checkout-back').click();await expect(page.locator('[data-quantity]')).toHaveValue('3');await page.locator('#confirm-order').click();await expect(page.locator('[name=name]')).toHaveValue('Ana');
+  await page.locator('#checkout-back').click();await page.locator('[data-quantity]').fill('');await expect(page.locator('#confirm-order')).toBeDisabled();await page.locator('[data-quantity]').fill('2');await expect(page.locator('#confirm-order')).toBeEnabled();
+});
+
+test('la ficha reacciona si cambia el stock mientras se elige la cantidad',async({page})=>{
+  const server=await storefront(page);await page.goto('/negocios/gcobarf/pedidos.html');
+  await page.locator('[data-add="'+product+'"]').click();await page.locator('#detail-quantity').fill('4');server.rows[0].stock=2;
+  await expect(page.locator('#detail-status')).toContainText('Solo quedan 2',{timeout:10000});await expect(page.locator('#add-product')).toBeDisabled();
+  await page.locator('#detail-quantity').fill('2');await expect(page.locator('#add-product')).toBeEnabled();await page.locator('#add-product').click();await expect(page.locator('#basket-summary')).toContainText('20.000');
 });
