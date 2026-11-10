@@ -14,6 +14,26 @@ async function schedule(page:Page,customer:string,time:string,close=true){
   if(close)await dialog.locator('[data-delivery-close]').click();
 }
 
+test('KPI generales cargan al entrar y recargar, sin depender del día seleccionado',async({page})=>{
+  const server=await backend(page);server.context.locations[0].slug='gcobarf';
+  const day=(offset:number)=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()+offset*86400000));
+  server.state.operations.customers=['Ana','Bruno','Clara','Dario'].map((name,i)=>({id:'client-'+i,name,active:true,revision:1}));
+  server.state.docs.table_sessions=server.state.operations.customers.map((c:any,i:number)=>({id:'delivery-'+i,delivery_date:day(i%2+1),delivery_time:'09:00',customer_id:c.id,payer_name:c.name,status:['open','open','closed','cancelled'][i],sale_channel:'walk_in',table_id:null}));
+  server.state.docs.session_items=server.state.docs.table_sessions.map((s:any,i:number)=>({id:'line-'+i,session_id:s.id,menu_item_id:product,item_name:'Producto de prueba',quantity:i+2,unit_price:10000,status:'confirmed'}));
+  await page.setViewportSize({width:1440,height:1000});await enter(page);
+  const metrics=async(amount='50.000')=>{await expect(page.locator('#metricTables')).toHaveText('3');await expect(page.locator('#metricOpen')).toHaveText('2');await expect(page.locator('#metricSales')).toContainText(amount);};
+  await metrics();await page.reload();await expect(page.locator('#deliveryCalendar')).toBeVisible();await metrics();
+  const heading=page.locator('.delivery-heading'),link=page.getByRole('link',{name:'Abrir pedidos en línea'});
+  await expect(heading.locator('h2')).toHaveText('Entregas programadas');await expect(heading.locator('a')).toHaveAttribute('href','pedidos.html');await expect(page.getByText('Haz clic en un día para consultar y agregar entregas.',{exact:true})).toHaveCount(0);
+  await expect(link).toHaveCSS('color','rgb(255, 255, 255)');await expect(link).toHaveCSS('background-color','rgb(47, 117, 228)');
+  await expect.poll(()=>heading.evaluate(wrapper=>{if(!wrapper.isConnected)return false;const title=wrapper.querySelector('h2')!.getBoundingClientRect(),button=wrapper.querySelector('a')!.getBoundingClientRect();return title.width>0&&button.width>0&&button.x>=title.right;})).toBe(true);
+  for(const offset of [1,2]){await page.locator('[data-delivery-day="'+day(offset)+'"]').click();await metrics();await page.locator('#deliveryDialog [data-delivery-close]').click();}
+  await page.locator('[data-delivery-month="1"]').click();await metrics();await page.locator('[data-delivery-month="-1"]').click();
+  server.state.docs.session_items[0].quantity=5;await page.evaluate(async()=>{await (window as any).AllianceOffline.prime(true);});await metrics('80.000');
+  await page.screenshot({path:'.tools/interaction-preview/calendar-kpis-desktop.png'});
+  await page.setViewportSize({width:390,height:844});await heading.scrollIntoViewIfNeeded();await page.screenshot({path:'.tools/interaction-preview/calendar-kpis-mobile.png'});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
 test('solo permite crear y reprogramar desde hoy, conservando la consulta histórica',async({page})=>{
   const server=await backend(page);server.context.locations[0].slug='gcobarf';server.state.operations.customers=[{id:'ana',name:'Ana Pérez',active:true,revision:1}];
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());

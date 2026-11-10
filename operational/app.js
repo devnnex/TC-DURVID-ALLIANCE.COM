@@ -7761,7 +7761,7 @@ const App = (() => {
     }, 0);
   };
 
-  document.addEventListener('gcobarf-calendar-date',()=>renderAdminShell());
+  document.addEventListener('gcobarf-calendar-updated',()=>{if(state.page==='admin'&&state.currentUser)renderAdminShell();});
   document.addEventListener('gcobarf-open-delivery',async event=>{
     let session=state.sessions.find(s=>s.id===event.detail.id);
     if(!session){const result=await state.sb.from('table_sessions').select('*').eq('id',event.detail.id).maybeSingle();if(result.error||!result.data)return;session=result.data;state.sessions.push(session);}
