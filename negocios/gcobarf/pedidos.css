@@ -95,3 +95,4 @@ body:has(.basket-summary:not([hidden])) .footer{padding-bottom:200px}
 }
 @media(max-width:360px){.product-grid{grid-template-columns:1fr}.cart-line{grid-template-columns:42px minmax(0,1fr);gap:9px}.cart-thumbnail{width:42px;height:54px}.detail-quantity{width:130px}.basket-summary>strong{font-size:12px}}
 @media(prefers-reduced-motion:reduce){#product-dialog[open],#cart-dialog[open],.basket-summary{animation:none}button:active:not(:disabled),a.primary:active{transform:none}.basket-summary:active:not(:disabled){transform:translateX(-50%)}}
+.new-order{width:100%;margin-top:12px;min-height:44px}

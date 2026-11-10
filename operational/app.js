@@ -7707,6 +7707,14 @@ const App = (() => {
     dialog.addEventListener("close", () => { lastSpaceAt = 0; });
   };
 
+  const renderDeliverySourceBadge = (session) => {
+    let badge = $('#consumptionOrderSource');
+    if (!badge && window.BRANCH_CONFIG?.slug === 'gcobarf') {
+      const eyebrow = $('#consumptionEyebrow');
+      if (eyebrow) { badge = document.createElement('span'); badge.id = 'consumptionOrderSource'; badge.className = 'delivery-source-badge'; badge.textContent = 'Agendado desde la web'; eyebrow.after(badge); }
+    }
+    if (badge) badge.hidden = !(window.BRANCH_CONFIG?.slug === 'gcobarf' && session?.source === 'online');
+  };
   const openConsumptionDialog = (sessionId = "", { pendingTableId = "", quickCheckout = false } = {}) => {
     const dialog = $("#consumptionDialog");
     const form = $("#consumptionForm");
@@ -7726,6 +7734,7 @@ const App = (() => {
     state.consumptionDraftEditIndex = -1;
     const session = state.sessions.find((entry) => entry.id === sessionId);
     form.payer_name.value = session?.payer_name || "";
+    renderDeliverySourceBadge(session);
     form.quantity.value = "";
     setCurrencyInputValue(form.unit_price, 0);
     const productSearch = $("#consumptionProductSearch");
@@ -7794,6 +7803,7 @@ const App = (() => {
     const form = $("#consumptionForm");
     const dialog = $("#consumptionDialog");
     if (!session || !item || !form || !dialog) return;
+    renderDeliverySourceBadge(session);
     form.reset();
     form.session_id.value = session.id;
     const creditBox=form.querySelector(".op-credit-consumption");if(creditBox)creditBox.hidden=true;

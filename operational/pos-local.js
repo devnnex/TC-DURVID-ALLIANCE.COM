@@ -24,6 +24,8 @@ globalThis.AllianceLocalPOS=operator=>{
       if(globalThis.BRANCH_CONFIG?.slug&&BRANCH_CONFIG.slug!=='gcobarf')throw Error('La agenda de entregas pertenece a GCOBARF.');
       const next={...row,...patch},customer=state.operations.customers.find(c=>c.id===next.customer_id&&c.active);
       if(!E.validDate(next.delivery_date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(next.delivery_time||''))throw Error('Revisa la fecha y la hora de entrega.');
+      const deliveryToday=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      if(next.delivery_date<deliveryToday)throw Error('No puedes programar entregas en días pasados. Selecciona hoy o una fecha posterior.');
       if(!customer)throw Error('Selecciona un cliente activo de esta sucursal.');
       if(row.status&&row.status!=='open')throw Error('La cuenta ya fue cerrada.');
       if(row.customer_id&&row.customer_id!==next.customer_id&&state.docs.session_items.some(i=>i.session_id===row.id&&i.status!=='cancelled'))throw Error('La cuenta ya tiene consumos. Conserva el cliente o crea otra entrega.');

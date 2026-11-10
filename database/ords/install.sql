@@ -674,6 +674,7 @@ END;!';
             IF old_json.get_string('status') IS NOT NULL AND old_json.get_string('status')<>'open' THEN alliance_security.fail(409,'DELIVERY_CLOSED','La cuenta ya fue cerrada.');END IF;
             date_value:=alliance_security.text_value(row_json,'delivery_date',10,'^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
             IF VALIDATE_CONVERSION(date_value AS DATE,'FXYYYY-MM-DD')=0 THEN alliance_security.fail(400,'DELIVERY_DATE','Revisa la fecha de entrega.');END IF;
+            IF TO_DATE(date_value,'FXYYYY-MM-DD')<TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Bogota' AS DATE)) THEN alliance_security.fail(400,'DELIVERY_DATE','No puedes programar entregas en dias pasados. Selecciona hoy o una fecha posterior.');END IF;
             time_value:=alliance_security.text_value(row_json,'delivery_time',5,'^([01][0-9]|2[0-3]):[0-5][0-9]$');customer_value:=alliance_security.text_value(row_json,'customer_id',80);
             parent:=document(p_business,p_location,'op_customers',customer_value);
             IF parent IS NULL OR NOT parent.get_boolean('active') THEN alliance_security.fail(400,'DELIVERY_CUSTOMER','Selecciona un cliente activo de esta sucursal.');END IF;
@@ -696,8 +697,8 @@ END;!';
         ELSIF entity_value='session_items' THEN
           IF row_json.get_string('status')='cancelled' AND NOT alliance_security.location_owner(p_user,p_business,p_location) THEN alliance_security.fail(403,'FORBIDDEN','Solo un jefe puede retirar consumos.');END IF;
           parent:=document(p_business,p_location,'table_sessions',row_json.get_string('session_id'));IF parent IS NULL OR parent.get_string('status')<>'open' THEN alliance_security.fail(409,'CLOSED_ACCOUNT','La cuenta no esta abierta.');END IF;
-          SELECT slug INTO branch_slug FROM locations WHERE business_id=p_business AND id=p_location;IF branch_slug='gcobarf' AND NVL(row_json.get_string('status'),'served')<>'cancelled' AND NVL(row_json.get_number('unit_price'),0)<=0 THEN alliance_security.fail(400,'PRICE_REQUIRED','Escribe un precio de venta mayor que cero antes de agregar el producto.');END IF;
-          IF row_json.get_number('quantity') IS NULL OR row_json.get_number('quantity')<=0 OR row_json.get_number('!') || TO_CLOB(q'!quantity')>10000 OR row_json.get_number('unit_price') IS NULL OR row_json.get_number('unit_price')<0 THEN alliance_security.fail(400,'INVALID_INPUT','Cantidad o precio invalido.');END IF;
+          SELECT slug INTO branch_slug FROM locations WHERE business_id=p_business AND id=p_location;IF branch_slug='gcobarf' AND NVL(row_json.get_string('status'),'served')<>'cancelled' AND NVL(row_json.get_number('unit_pric!') || TO_CLOB(q'!e'),0)<=0 THEN alliance_security.fail(400,'PRICE_REQUIRED','Escribe un precio de venta mayor que cero antes de agregar el producto.');END IF;
+          IF row_json.get_number('quantity') IS NULL OR row_json.get_number('quantity')<=0 OR row_json.get_number('quantity')>10000 OR row_json.get_number('unit_price') IS NULL OR row_json.get_number('unit_price')<0 THEN alliance_security.fail(400,'INVALID_INPUT','Cantidad o precio invalido.');END IF;
           IF row_json.get_string('menu_item_id') IS NOT NULL THEN parent:=document(p_business,p_location,'menu_items',row_json.get_string('menu_item_id'));IF parent IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Producto no disponible.');END IF;END IF;
           IF NOT row_json.has('status') THEN row_json.put('status','confirmed');END IF;row_json.put('updated_by_user_id',p_user);IF op='insert' THEN row_json.put('created_by_user_id',p_user);END IF;
         ELSIF entity_value='service_requests' THEN
@@ -2396,6 +2397,12 @@ CREATE OR REPLACE PACKAGE alliance_gcobarf_orders AUTHID DEFINER AS
   FUNCTION dispatch(body JSON_OBJECT_T) RETURN JSON_OBJECT_T;
 END;!';
   EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE BODY alliance_gcobarf_orders AS
+  FUNCTION optional_text(p JSON_OBJECT_T,k VARCHAR2,maximum NUMBER) RETURN VARCHAR2 IS v VARCHAR2(32767);
+  BEGIN
+    IF NOT p.has(k) THEN RETURN NULL;END IF;IF p.get(k).is_null THEN RETURN NULL;END IF;
+    IF NOT p.get(k).is_string THEN alliance_security.fail(400,'INVALID_INPUT','Revisa el campo '||k||'.');END IF;
+    v:=TRIM(p.get_string(k));IF LENGTH(v)>maximum THEN alliance_security.fail(400,'INVALID_INPUT','El campo '||k||' es demasiado largo.');END IF;RETURN v;
+  END;
   PROCEDURE scope(b OUT VARCHAR2,l OUT VARCHAR2) IS
   BEGIN
     SELECT business.id,branch.id INTO b,l FROM businesses business JOIN locations branch ON branch.business_id=business.id
@@ -2441,7 +2448,7 @@ END;!';
 
   FUNCTION dispatch(body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     b VARCHAR2(36);l VARCHAR2(36);u VARCHAR2(36);action_value VARCHAR2(20);token_value VARCHAR2(64);order_key VARCHAR2(64);fingerprint VARCHAR2(64);old JSON_OBJECT_T;payload JSON_OBJECT_T;
-    name_value VARCHAR2(160);phone_value VARCHAR2(40);address_value VARCHAR2(300);city_value VARCHAR2(100);notes_value VARCHAR2(500);mode_value VARCHAR2(10);date_value VARCHAR2(10);time_value VARCHAR2(5);moment TIMESTAMP;
+    name_value VARCHAR2(160);phone_value VARCHAR2(40);address_value VARCHAR2(300);city_value VARCHAR2(100);neighborhood_value VARCHAR2(160);notes_value VARCHAR2(500);mode_value VARCHAR2(10);date_value VARCHAR2(10);time_value VARCHAR2(5);moment TIMESTAMP;today_value DATE;
     items JSON_ARRAY_T;item JSON_OBJECT_T;seen JSON_OBJECT_T:=JSON_OBJECT_T();menu JSON_OBJECT_T;account JSON_OBJECT_T;line JSON_OBJECT_T;customer JSON_OBJECT_T;order_row JSON_OBJECT_T;result_json JSON_OBJECT_T;
     customer_id VARCHAR2(80);sid VARCHAR2(36);product_value VARCHAR2(36);quantity_value NUMBER;price_value NUMBER;stock_value NUMBER;active_value NUMBER;n NUMBER;customer_name VARCHAR2(160);
   BEGIN
@@ -2453,7 +2460,7 @@ END;!';
       IF old IS NULL THEN alliance_security.fail(404,'ORDER_NOT_FOUND','No encontramos esta programacion.');END IF;RETURN receipt(b,l,old);
     END IF;
     alliance_security.keys_only(body,'action,token,order');payload:=body.get_object('order');IF payload IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Completa tu pedido.');END IF;
-    alliance_security.keys_only(payload,'name,phone,address,city,mode,date,time,notes,consent,items');fingerprint:=alliance_security.hash_text(payload.to_string);
+    alliance_security.keys_only(payload,'name,phone,address,city,neighborhood,mode,date,time,notes,consent,items');fingerprint:=alliance_security.hash_text(payload.to_string);
     alliance_pos_store.lock_scope(b,l);
     old:=alliance_pos_store.document(b,l,'op_onlineorders',order_key);IF old IS NOT NULL THEN
       IF old.get_string('fingerprint')<>fingerprint THEN alliance_security.fail(409,'ORDER_CHANGED','Este pedido ya fue enviado. Consulta su confirmacion.');END IF;RETURN receipt(b,l,old);
@@ -2462,12 +2469,17 @@ END;!';
     IF LENGTH(phone_value)<7 OR LENGTH(phone_value)>15 THEN alliance_security.fail(400,'INVALID_INPUT','Revisa tu telefono.');END IF;
     IF alliance_security.flag(payload,'consent')<>1 THEN alliance_security.fail(400,'CONSENT_REQUIRED','Autoriza el uso de tus datos para gestionar la entrega.');END IF;
     mode_value:=alliance_security.text_value(payload,'mode',10,'^(delivery|pickup)$');
-    IF mode_value='delivery' THEN address_value:=alliance_security.text_value(payload,'address',300);city_value:=alliance_security.text_value(payload,'city',100);END IF;
+    IF mode_value='delivery' THEN
+      address_value:=optional_text(payload,'address',300);city_value:=optional_text(payload,'city',100);neighborhood_value:=optional_text(payload,'neighborhood',160);
+      IF address_value IS NOT NULL AND NOT REGEXP_LIKE(address_value,'(^|[^A-Za-z0-9_])barrio([^A-Za-z0-9_]|$)','i') AND neighborhood_value IS NULL THEN alliance_security.fail(400,'NEIGHBORHOOD_REQUIRED','Escribe el barrio para completar esta direccion.');END IF;
+      IF address_value IS NULL THEN neighborhood_value:=NULL;END IF;
+    END IF;
     notes_value:=payload.get_string('notes');IF LENGTH(notes_value)>500 THEN alliance_security.fail(400,'INVALID_INPUT','Usa hasta 500 caracteres en las observaciones.');END IF;
     date_value:=alliance_security.text_value(payload,'date',10,'^[0-9]{4}-[0-9]{2}-[0-9]{2}$');time_value:=alliance_security.text_value(payload,'time',5,'^([01][0-9]|2[0-3]):[0-5][0-9]$');
     BEGIN moment:=TO_TIMESTAMP(date_value||' '||time_value,'FXYYYY-MM-DD HH24:MI');
     EXCEPTION WHEN OTHERS THEN alliance_security.fail(400,'INVALID_DATE','Revisa la fecha y hora de entrega.');END;
-    IF moment<CAST(SYSTIMESTAMP AT TIME ZONE 'America/Bogota' AS TIMESTAMP) OR moment>CAST(SYSTIMESTAMP AT TIME ZONE 'America/Bogota' AS TIMESTAMP)+INTERVAL '365' DAY THEN alliance_security.fail(400,'INVALID_DATE','Elige una fecha y hora futuras dentro de los proximos 12 meses.');END IF;
+    today_value:=TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Bogota' AS DATE));
+    IF TRUNC(CAST(moment AS DATE))<today_value OR TRUNC(CAST(moment AS DATE))>today_value+365 THEN alliance_security.fail(400,'INVALID_DATE','Selecciona hoy o una fecha posterior dentro de los proximos 12 meses.');END IF;
     items:=payload.get_array('items');IF items IS NULL OR items.get_size<1 OR items.get_size>50 THEN alliance_security.fail(400,'INVALID_INPUT','Agrega de 1 a 50 productos.');END IF;
     -- Validate every line against server prices and locked stock before writing anything.
     FOR i IN 0..items.get_size-1 LOOP
@@ -2490,7 +2502,7 @@ END;!';
     IF customer_id IS NULL THEN
       customer_id:=alliance_security.new_id;customer:=JSON_OBJECT_T();customer.put('id',customer_id);customer.put('name',name_value);customer.put('phone',phone_value);customer.put('document','');customer.put('active',TRUE);customer.put('contactConsent',TRUE);customer.put('allowCredit',TRUE);customer.put('creditLimit',0);customer.put('paymentFrequency','once');customer.put('paymentDate','');customer.put('revision',1);customer.put('source','online');alliance_operations.put_row(u,b,l,'customers',customer_id,customer);
     END IF;
-    sid:=alliance_security.new_id;account:=JSON_OBJECT_T();account.put('id',sid);account.put_null('table_id');account.put('status','open');account.put('sale_channel','walk_in');account.put('assigned_waiter_id',u);account.put('customer_id',customer_id);account.put('payer_name',name_value);account.put('delivery_date',date_value);account.put('delivery_time',time_value);account.put('opened_at',alliance_pos_store.stamp);account.put('source','online');account.put('order_phone',phone_value);account.put('delivery_mode',mode_value);account.put('delivery_address',address_value);account.put('delivery_city',city_value);account.put('order_notes',notes_value);alliance_pos_store.put_document(b,l,'table_sessions',sid,account);
+    sid:=alliance_security.new_id;account:=JSON_OBJECT_T();account.put('id',sid);account.put_null('table_id');account.put('status','open');account.put('sale_channel','walk_in');account.put('assigned_waiter_id',u);account.put('customer_id',customer_id);account.put('payer_name',name_value);account.put('delivery_date',date_value);account.put('delivery_time',time_value);account.put('opened_at',alliance_pos_store.stamp);account.put('source','online');account.put('order_phone',phone_value);account.put('delivery_mode',mode_value);account.put('delivery_address',address_value);account.put('delivery_city',city_value);account.put('delivery_neighborhood',neighborhood_value);account.put('order_notes',notes_value);alliance_pos_store.put_document(b,l,'table_sessions',sid,account);
     FOR i IN 0..items.get_size-1 LOOP
       item:=TREAT(items.get(i) AS JSON_OBJECT_T);menu:=alliance_pos_store.document(b,l,'menu_items',item.get_string('productId'));line:=JSON_OBJECT_T();line.put('id',alliance_security.new_id);line.put('session_id',sid);line.put('menu_item_id',item.get_string('productId'));line.put('item_name',menu.get_string('name'));line.put('quantity',item.get_number('quantity'));line.put('unit_price',item.get_number('unitPrice'));line.put('status','confirmed');line.put('source','online');line.put('notes',notes_value);line.put('created_by_user_id',u);line.put('created_at',alliance_pos_store.stamp);alliance_pos_store.put_document(b,l,'session_items',line.get_string('id'),line);
     END LOOP;

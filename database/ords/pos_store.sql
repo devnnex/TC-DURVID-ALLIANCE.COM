@@ -160,6 +160,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
             IF old_json.get_string('status') IS NOT NULL AND old_json.get_string('status')<>'open' THEN alliance_security.fail(409,'DELIVERY_CLOSED','La cuenta ya fue cerrada.');END IF;
             date_value:=alliance_security.text_value(row_json,'delivery_date',10,'^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
             IF VALIDATE_CONVERSION(date_value AS DATE,'FXYYYY-MM-DD')=0 THEN alliance_security.fail(400,'DELIVERY_DATE','Revisa la fecha de entrega.');END IF;
+            IF TO_DATE(date_value,'FXYYYY-MM-DD')<TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Bogota' AS DATE)) THEN alliance_security.fail(400,'DELIVERY_DATE','No puedes programar entregas en dias pasados. Selecciona hoy o una fecha posterior.');END IF;
             time_value:=alliance_security.text_value(row_json,'delivery_time',5,'^([01][0-9]|2[0-3]):[0-5][0-9]$');customer_value:=alliance_security.text_value(row_json,'customer_id',80);
             parent:=document(p_business,p_location,'op_customers',customer_value);
             IF parent IS NULL OR NOT parent.get_boolean('active') THEN alliance_security.fail(400,'DELIVERY_CUSTOMER','Selecciona un cliente activo de esta sucursal.');END IF;

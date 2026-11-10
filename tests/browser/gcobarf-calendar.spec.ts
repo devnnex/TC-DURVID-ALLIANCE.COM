@@ -13,6 +13,17 @@ async function schedule(page:Page,customer:string,time:string,close=true){
   await dialog.getByRole('button',{name:'Guardar entrega',exact:true}).click();await expect(dialog).toBeVisible();await expect(dialog.locator('[data-delivery-card]').filter({hasText:customer})).toBeVisible();
   if(close)await dialog.locator('[data-delivery-close]').click();
 }
+
+test('solo permite crear y reprogramar desde hoy, conservando la consulta histórica',async({page})=>{
+  const server=await backend(page);server.context.locations[0].slug='gcobarf';server.state.operations.customers=[{id:'ana',name:'Ana Pérez',active:true,revision:1}];
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  await enter(page);await page.locator('[data-delivery-day]').first().click();const dialog=page.locator('#deliveryDialog');
+  await expect(dialog.locator('[name=date]')).toHaveAttribute('min',today);
+  await dialog.getByRole('combobox').fill('Ana');await dialog.getByRole('option',{name:'Ana Pérez',exact:true}).click();await dialog.locator('[name=date]').fill('2000-01-01');await dialog.getByRole('button',{name:'Guardar entrega',exact:true}).click();
+  expect(server.state.docs.table_sessions).toHaveLength(0);expect(await dialog.locator('[name=date]').evaluate((input:HTMLInputElement)=>input.checkValidity())).toBe(false);
+  await dialog.locator('[name=date]').fill(today);await dialog.getByRole('button',{name:'Guardar entrega',exact:true}).click();await expect(dialog.locator('[data-delivery-card]')).toHaveCount(1);
+  await dialog.locator('[data-delivery-edit]').click();await dialog.locator('[name=date]').fill('2000-01-01');await dialog.getByRole('button',{name:'Guardar entrega',exact:true}).click();expect(server.state.docs.table_sessions[0].delivery_date).toBe(today);
+});
 test('calendario programa varios clientes, comparte cuentas y usa el envío a cartera actual',async({page,browser})=>{
   test.setTimeout(90000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   const server=await backend(page);server.context.locations[0].slug='gcobarf';

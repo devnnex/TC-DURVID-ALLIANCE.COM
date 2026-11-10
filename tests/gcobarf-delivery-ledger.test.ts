@@ -10,6 +10,15 @@ const insert=(s:any,quantity=2,unit_price=5000)=>POS.execute(s,'query',{table:'s
 const update=(s:any,values:any)=>POS.execute(s,'query',{table:'session_items',op:'update',values,filters:[{field:'id',op:'eq',value:'line'}]});
 const invoice=(s:any,credit=false)=>({id:'sale',sessionId:'delivery',number:'V-1',createdAt:'2026-11-05T18:00:00Z',creditDueDate:'2026-12-01',customerId:'ana',items:structuredClone(s.docs.session_items),totals:{subtotal:10000,total:10000},payments:[{method:credit?'credit':'cash',amount:10000}]});
 describe('Entregas, existencias y pagos de GCOBARF',()=>{
+ it('bloquea fechas pasadas al crear y reprogramar, acepta hoy y conserva la cancelación de históricos',()=>{
+   const s=fixture(),today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+   const scheduled={id:'new-delivery',table_id:null,status:'open',sale_channel:'walk_in',delivery_date:'2000-01-01',delivery_time:'09:00',customer_id:'ana',payer_name:'Ana'};
+   expect(()=>POS.execute(s,'query',{table:'table_sessions',op:'insert',values:scheduled})).toThrow('días pasados');
+   const body={table:'table_sessions',op:'update',values:{delivery_date:'2000-01-01'},filters:[{field:'id',op:'eq',value:'delivery'}]};
+   expect(()=>POS.execute(s,'query',body)).toThrow('días pasados');expect(s.docs.table_sessions[0].delivery_date).toBe('2026-12-10');
+   POS.execute(s,'query',{...body,values:{delivery_date:today}});expect(s.docs.table_sessions[0].delivery_date).toBe(today);
+   s.docs.table_sessions[0].delivery_date='2000-01-01';POS.execute(s,'query',{...body,values:{status:'cancelled'}});expect(s.docs.table_sessions[0].status).toBe('cancelled');
+ });
  it('aparta al agregar, ajusta solo diferencias y mantiene la entrega al retirar su último producto',()=>{const s=fixture();insert(s);expect(s.stock.p.stock).toBe(8);insert(s);expect(s.stock.p.stock).toBe(8);update(s,{quantity:4});expect(s.stock.p.stock).toBe(6);update(s,{quantity:1});expect(s.stock.p.stock).toBe(9);update(s,{status:'cancelled'});expect(s.stock.p.stock).toBe(10);expect(s.docs.table_sessions[0].status).toBe('open');expect(s.movements.reduce((n:any,m:any)=>n+m.delta,0)).toBe(0);});
  it('conserva cliente, fecha de entrega y fecha del registro como datos distintos',()=>{const s=fixture();insert(s);expect(s.movements[0]).toMatchObject({customerId:'ana',customerName:'Ana',deliveryDate:'2026-12-10',deliveryTime:'09:00',delta:-2});expect(s.movements[0].date).not.toBe('2026-12-10');s.docs.table_sessions[0].delivery_date='2026-12-20';expect(L.context(s,s.movements[0]).deliveryDate).toBe('2026-12-10');});
  it('rechaza apartar más de lo disponible y bloquea precios cero al agregar y cobrar',()=>{const s=fixture();expect(()=>insert(structuredClone(s),11)).toThrow('disponibles');expect(s.stock.p.stock).toBe(10);expect(()=>insert(s,2,0)).toThrow('precio');insert(s);const inv=invoice(s);inv.items[0].unit_price=0;inv.totals={subtotal:0,total:0};inv.payments[0].amount=0;expect(()=>POS.execute(s,'record_sale',{invoice:inv})).toThrow('precio');expect(s.sales).toHaveLength(0);});

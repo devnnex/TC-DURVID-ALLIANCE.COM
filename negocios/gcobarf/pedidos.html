@@ -46,8 +46,15 @@
         <label>Nombre completo<input name="name" autocomplete="name" maxlength="160" required></label>
         <label>Teléfono / WhatsApp<input name="phone" type="tel" autocomplete="tel" inputmode="tel" minlength="7" maxlength="40" pattern="[+0-9 \(\)\-]{7,40}" placeholder="Ej. 300 123 4567" required></label>
         <fieldset class="choices"><legend>Tipo de entrega</legend><label><input type="radio" name="mode" value="delivery" checked> A domicilio</label><label><input type="radio" name="mode" value="pickup"> Recoger en el negocio</label></fieldset>
-        <div id="address-fields"><label>Ciudad / municipio<input name="city" autocomplete="address-level2" maxlength="100" required></label><label>Dirección y barrio<input name="address" autocomplete="street-address" maxlength="300" placeholder="Incluye apartamento o indicaciones" required></label></div>
-        <h3>¿Cuándo lo necesitas?</h3><p class="hint">Hora de Colombia. Las unidades se apartan al confirmar.</p>
+        <div id="address-fields">
+          <!-- Departamento y ciudad quedan desactivados temporalmente.
+          <label>Ciudad / municipio<input name="city" autocomplete="address-level2" maxlength="100"></label>
+          -->
+          <label>Dirección (opcional)<input name="address" autocomplete="street-address" maxlength="300" placeholder="Dirección, apartamento o indicaciones" aria-describedby="neighborhood-help"></label>
+          <label id="neighborhood-field" hidden>Barrio<input name="neighborhood" autocomplete="address-level3" maxlength="160" placeholder="Escribe el barrio" aria-describedby="neighborhood-help"></label>
+          <p id="neighborhood-help" class="hint">Si escribes una dirección sin incluir la palabra «barrio», completa el barrio en el campo adicional.</p>
+        </div>
+        <h3>¿Cuándo lo necesitas?</h3><p class="hint">Elige una sola fecha, desde hoy en adelante. Para otra entrega, haz un nuevo pedido. Hora de Colombia.</p>
         <div class="two-fields"><label>Fecha de entrega<input name="date" type="date" required></label><label>Hora de entrega<input name="time" type="time" required></label></div>
         <label>Observaciones (opcional)<textarea name="notes" rows="3" maxlength="500" placeholder="Indicaciones para tu entrega"></textarea></label>
         <label class="consent"><input name="consent" type="checkbox" required><span>Autorizo a GCOBARF a usar estos datos para gestionar y contactarme sobre mi pedido.</span></label>
@@ -57,7 +64,7 @@
     </div>
     <footer class="sheet-action"><div><span>Total de productos</span><strong id="cart-total">$0</strong></div><button type="button" form="checkout" id="confirm-order" class="primary" disabled>Continuar con la entrega →</button></footer>
   </dialog>
-  <dialog id="success-dialog" aria-labelledby="success-title"><button class="close" id="success-close" aria-label="Cerrar confirmación">×</button><span class="success-mark" aria-hidden="true">✓</span><small>YA ESTÁ EN NUESTRA AGENDA</small><h2 id="success-title">¡Su próxima comida,<br>programada!</h2><div id="success-detail"></div><p>Tus productos quedaron apartados. GCOBARF gestionará el pago contigo.</p><button class="primary" id="view-deliveries">Ver mi programación →</button></dialog>
+  <dialog id="success-dialog" aria-labelledby="success-title"><button class="close" id="success-close" aria-label="Cerrar confirmación">×</button><span class="success-mark" aria-hidden="true">✓</span><small>YA ESTÁ EN NUESTRA AGENDA</small><h2 id="success-title">¡Su próxima comida,<br>programada!</h2><div id="success-detail"></div><p>Tus productos quedaron apartados. GCOBARF gestionará el pago contigo.</p><button class="primary" id="view-deliveries">Ver mi programación →</button><button class="secondary new-order" id="new-order" type="button">Programar otro pedido</button></dialog>
   <div id="toast" role="status" hidden></div>
 </body>
 </html>

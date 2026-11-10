@@ -1,5 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import {backend,product} from './helpers/operational-backend';
+const deliveryDay=(offset=0)=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()+offset*86400000));
 
 async function storefront(page:Page,{lostAck=false,rejectStock=false}={}){
   const server=await backend(page);server.context.locations[0].slug='gcobarf';
@@ -16,12 +17,12 @@ async function storefront(page:Page,{lostAck=false,rejectStock=false}={}){
       if(rejectStock){status=409;data={error:{code:'INSUFFICIENT_STOCK',message:'No quedan suficientes unidades. Revisa tu pedido.'}};}
       else if(orders.has(body.token))data=orders.get(body.token);
       else{
-        const order=body.order,id='public-delivery',customerId='online-client';
-        server.state.operations.customers.push({id:customerId,name:order.name,phone:order.phone,active:true,allowCredit:true,creditLimit:0,revision:1});
-        server.state.docs.table_sessions.push({id,status:'open',table_id:null,sale_channel:'walk_in',customer_id:customerId,payer_name:order.name,delivery_date:order.date,delivery_time:order.time,source:'online',order_phone:order.phone,delivery_mode:order.mode,delivery_address:order.address,delivery_city:order.city,order_notes:order.notes});
-        server.state.docs.session_items.push(...order.items.map((item:any,index:number)=>({id:'online-line-'+index,session_id:id,menu_item_id:item.productId,item_name:'GCOBARF · Pollo',quantity:item.quantity,unit_price:item.unitPrice,status:'confirmed'})));
+        const order=body.order,id='public-delivery'+(orders.size?'-'+orders.size:''),customerId='online-client';
+        if(!server.state.operations.customers.some((c:any)=>c.id===customerId))server.state.operations.customers.push({id:customerId,name:order.name,phone:order.phone,active:true,allowCredit:true,creditLimit:0,revision:1});
+        server.state.docs.table_sessions.push({id,status:'open',table_id:null,sale_channel:'walk_in',customer_id:customerId,payer_name:order.name,delivery_date:order.date,delivery_time:order.time,source:'online',order_phone:order.phone,delivery_mode:order.mode,delivery_address:order.address,delivery_city:order.city,delivery_neighborhood:order.neighborhood,order_notes:order.notes});
+        server.state.docs.session_items.push(...order.items.map((item:any,index:number)=>({id:id+'-line-'+index,session_id:id,menu_item_id:item.productId,item_name:'GCOBARF · Pollo',quantity:item.quantity,unit_price:item.unitPrice,status:'confirmed'})));
         server.state.stock[product].stock-=order.items[0].quantity;rows[0].stock=server.state.stock[product].stock;
-        server.state.operations.deliveryHolds=[{id,products:{[product]:order.items[0].quantity}}];
+        server.state.operations.deliveryHolds.push({id,products:{[product]:order.items[0].quantity}});
         data={id,number:'GCO-TEST',date:order.date,time:order.time,items:order.items.map((item:any)=>({name:'GCOBARF · Pollo',quantity:item.quantity,unitPrice:item.unitPrice})),total:order.items.reduce((sum:number,item:any)=>sum+item.quantity*item.unitPrice,0),pending:order.items.reduce((sum:number,item:any)=>sum+item.quantity*item.unitPrice,0),status:'Pendiente de pago'};orders.set(body.token,data);
         if(lostAck&&!lost){lost=true;return route.abort('failed');}
       }
@@ -39,7 +40,7 @@ async function checkout(page:Page,quantity=2){
   await page.getByRole('button',{name:'Abrir mi pedido'}).click();
   await page.locator('#confirm-order').click();
   await page.locator('[name=name]').fill('Ana Pérez');await page.locator('[name=phone]').fill('3001234567');
-  await page.locator('[name=city]').fill('Bogotá');await page.locator('[name=address]').fill('Calle 10 # 20-30, Apto 2');
+  await page.locator('[name=address]').fill('Calle 10 # 20-30, Apto 2');await page.locator('[name=neighborhood]').fill('Centro');await page.locator('[name=date]').fill(deliveryDay());
   await page.locator('[name=notes]').fill('Llamar al llegar');await page.locator('[name=consent]').check();
 }
 
@@ -56,6 +57,7 @@ test('pedido público reserva productos y aparece en el calendario existente con
   await admin.locator('[data-delivery-day="'+day+'"]').click();
   const card=admin.locator('[data-delivery-card="public-delivery"]');await expect(card).toContainText('Ana Pérez');await expect(card).toContainText('Pedido en línea');await expect(card).toContainText('Calle 10 # 20-30');await expect(card).toContainText('3001234567');await expect(card).toContainText('Llamar al llegar');
   await expect(card).toContainText('Pendiente de pago');await expect(admin.getByRole('link',{name:'Abrir pedidos en línea'})).toHaveAttribute('href','pedidos.html');
+  await expect(card.locator('[data-delivery-source="online"]')).toHaveText('Agendado desde la web');await expect(card).toContainText('Centro');await card.locator('[data-delivery-open]').click();await expect(admin.locator('#consumptionOrderSource')).toBeVisible();await expect(admin.locator('#consumptionOrderSource')).toHaveText('Agendado desde la web');
   expect(errors).toEqual([]);
 });
 
@@ -126,4 +128,23 @@ test('la ficha reacciona si cambia el stock mientras se elige la cantidad',async
   await page.locator('[data-add="'+product+'"]').click();await page.locator('#detail-quantity').fill('4');server.rows[0].stock=2;
   await expect(page.locator('#detail-status')).toContainText('Solo quedan 2',{timeout:10000});await expect(page.locator('#add-product')).toBeDisabled();
   await page.locator('#detail-quantity').fill('2');await expect(page.locator('#add-product')).toBeEnabled();await page.locator('#add-product').click();await expect(page.locator('#basket-summary')).toContainText('20.000');
+});
+
+test('dirección opcional y barrio obligatorio únicamente cuando hace falta',async({page})=>{
+  const server=await storefront(page);await checkout(page,1);await expect(page.locator('[name=city]')).toHaveCount(0);await expect(page.locator('[name=department]')).toHaveCount(0);
+  await page.locator('[name=neighborhood]').fill('');await page.locator('#confirm-order').click();expect(server.creates).toHaveLength(0);await expect(page.locator('[name=neighborhood]')).toBeFocused();
+  await page.locator('[name=address]').fill('Calle 10, BaRrIo Centro');await expect(page.locator('#neighborhood-field')).toBeHidden();await page.locator('#confirm-order').click();await expect(page.locator('#success-dialog')).toBeVisible();expect(server.creates[0].order.neighborhood).toBe('');
+});
+
+test('permite hoy sin dirección y para otra entrega crea una orden nueva del mismo cliente',async({page})=>{
+  const server=await storefront(page);await checkout(page,1);await page.locator('[name=address]').fill('');await page.locator('[name=time]').fill('00:00');await expect(page.locator('#neighborhood-field')).toBeHidden();await page.locator('#confirm-order').click();await expect(page.locator('#success-dialog')).toBeVisible();
+  expect(server.creates[0].order.date).toBe(deliveryDay());expect(server.creates[0].order.address).toBe('');expect(server.creates[0].order).not.toHaveProperty('city');
+  await page.locator('#new-order').click();await page.locator('[data-add="'+product+'"]').click();await page.locator('#add-product').click();await page.locator('#basket-summary').click();await page.locator('#confirm-order').click();
+  await expect(page.locator('[name=date]')).toHaveValue('');await page.locator('[name=name]').fill('Ana Pérez');await page.locator('[name=phone]').fill('3001234567');await page.locator('[name=date]').fill(deliveryDay(2));await page.locator('[name=consent]').check();await page.locator('#confirm-order').click();await expect(page.locator('#success-dialog')).toBeVisible();
+  expect(server.creates).toHaveLength(2);expect(server.creates[0].token).not.toBe(server.creates[1].token);expect(server.state.docs.table_sessions).toHaveLength(2);expect(server.state.docs.table_sessions.map((s:any)=>s.customer_id)).toEqual(['online-client','online-client']);expect(server.state.operations.customers).toHaveLength(1);expect(server.state.stock[product].stock).toBe(3);
+});
+
+test('bloquea días pasados antes de enviar el pedido',async({page})=>{
+  const server=await storefront(page);await checkout(page,1);await expect(page.locator('[name=date]')).toHaveAttribute('min',deliveryDay());
+  await page.locator('[name=date]').fill(deliveryDay(-1));await page.locator('#confirm-order').click();expect(server.creates).toHaveLength(0);await expect(page.locator('[name=date]')).toBeFocused();expect(await page.locator('[name=date]').evaluate((input:HTMLInputElement)=>input.checkValidity())).toBe(false);
 });

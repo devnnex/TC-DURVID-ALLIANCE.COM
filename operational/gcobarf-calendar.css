@@ -52,3 +52,5 @@
 #deliveryCalendar .delivery-customer-name.is-pending{background:#fff9e7;color:#665630}
 @media(max-width:700px){#deliveryCalendar .delivery-customer-name>.delivery-payment-status{font-size:9px!important;line-height:1.3}}
 .delivery-online-info{margin:12px 0;padding:12px;border:1px solid #dbe6df;border-radius:10px;background:#f0f6f1;font-size:12px;overflow-wrap:anywhere}.delivery-online-info p{margin:6px 0 0}
+.delivery-source-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border:1px solid #b9d2fa;border-radius:999px;background:#eaf2ff;color:#1b55a5;font-size:10px;font-weight:700;line-height:1.3;letter-spacing:0;white-space:normal}.delivery-source-badge::before{content:'↗';font-size:12px}#consumptionOrderSource{margin:6px 0 6px 8px}.delivery-appointment-top{flex-wrap:wrap;gap:7px}
+.delivery-source-badge[hidden]{display:none!important}

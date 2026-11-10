@@ -1,6 +1,6 @@
 -- Executed only by test-gcobarf-orders-live.ts; every change rolls back.
 DECLARE
- b VARCHAR2(36);l VARCHAR2(36);u VARCHAR2(36);p JSON_OBJECT_T;req JSON_OBJECT_T;order_data JSON_OBJECT_T;items JSON_ARRAY_T;item JSON_OBJECT_T;r JSON_OBJECT_T;again JSON_OBJECT_T;account JSON_OBJECT_T;row_json JSON_OBJECT_T;sid VARCHAR2(36);customer_id VARCHAR2(80);q NUMBER;n NUMBER;invoice_clob CLOB;cgi_names OWA.vc_arr;cgi_values OWA.vc_arr;
+ b VARCHAR2(36);l VARCHAR2(36);u VARCHAR2(36);p JSON_OBJECT_T;req JSON_OBJECT_T;order_data JSON_OBJECT_T;probe_order JSON_OBJECT_T;probe_request JSON_OBJECT_T;items JSON_ARRAY_T;item JSON_OBJECT_T;r JSON_OBJECT_T;again JSON_OBJECT_T;account JSON_OBJECT_T;row_json JSON_OBJECT_T;sid VARCHAR2(36);customer_id VARCHAR2(80);q NUMBER;n NUMBER;invoice_clob CLOB;cgi_names OWA.vc_arr;cgi_values OWA.vc_arr;
  PROCEDURE check_value(ok BOOLEAN,label_value VARCHAR2) IS BEGIN IF ok IS NULL OR NOT ok THEN RAISE_APPLICATION_ERROR(-20088,label_value);END IF;END;
  PROCEDURE rejected(request_json JSON_OBJECT_T,expected_code VARCHAR2) IS v JSON_OBJECT_T;BEGIN
    SAVEPOINT invalid_order;
@@ -15,10 +15,17 @@ BEGIN
  p:=JSON_OBJECT_T('{"table":"menu_items","op":"insert","values":{"id":"__PRODUCT__","name":"Prueba temporal pedidos online","price":10000,"is_available":true}}');r:=alliance_pos_store.query(u,b,l,p);
  p:=JSON_OBJECT_T('{"item":{"productId":"__PRODUCT__","stock":5,"minStock":0,"unit":"unidad","salePrice":10000,"costPrice":1000}}');r:=alliance_pos_store.stock_action(u,b,l,'upsert_inventory',p);
  UPDATE alliance_pos_stock SET allow_negative=1 WHERE business_id=b AND location_id=l AND product_id='__PRODUCT__';
- order_data:=JSON_OBJECT_T('{"name":"Prueba rollback online __PRODUCT__","phone":"__PHONE__","mode":"delivery","city":"Ciudad temporal","address":"Direccion de prueba","notes":"No es un pedido real","consent":true,"date":"2000-01-01","time":"09:30","items":[{"productId":"__PRODUCT__","quantity":2,"unitPrice":10000}]}');
+ order_data:=JSON_OBJECT_T('{"name":"Prueba rollback online __PRODUCT__","phone":"__PHONE__","mode":"delivery","address":"Direccion de prueba","neighborhood":"Centro","notes":"No es un pedido real","consent":true,"date":"2000-01-01","time":"09:30","items":[{"productId":"__PRODUCT__","quantity":2,"unitPrice":10000}]}');
  req:=JSON_OBJECT_T();req.put('action','create');req.put('token','__TOKEN__');req.put('order',order_data);rejected(req,'INVALID_DATE');
  order_data.put('date','2027-02-30');req.put('order',order_data);rejected(req,'INVALID_DATE');
  order_data.put('date',TO_CHAR((SYSTIMESTAMP AT TIME ZONE 'America/Bogota')+INTERVAL '2' DAY,'YYYY-MM-DD'));req.put('order',order_data);
+ probe_request:=JSON_OBJECT_T(req.to_clob);probe_request.put('token','__OTHER_TOKEN__');probe_order:=JSON_OBJECT_T(order_data.to_clob);probe_order.put('neighborhood','');probe_request.put('order',probe_order);rejected(probe_request,'NEIGHBORHOOD_REQUIRED');
+ probe_order.put('address','Calle con barriobonito');probe_request.put('order',probe_order);rejected(probe_request,'NEIGHBORHOOD_REQUIRED');
+ SAVEPOINT optional_address;
+ probe_order.put('address','   ');probe_order.put('date',TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'America/Bogota','YYYY-MM-DD'));probe_order.put('time','00:00');probe_request.put('order',probe_order);r:=alliance_gcobarf_orders.dispatch(probe_request);account:=alliance_pos_store.document(b,l,'table_sessions',r.get_string('id'));check_value(account.get_string('delivery_address') IS NULL,'Direccion opcional, sin ciudad, hoy permitido');ROLLBACK TO optional_address;
+ SAVEPOINT embedded_neighborhood;
+ probe_order.put('address','Calle 10, BaRrIo Centro');probe_request.put('order',probe_order);r:=alliance_gcobarf_orders.dispatch(probe_request);check_value(r.get_number('total')=20000,'Barrio incluido en direccion no requiere otro campo');ROLLBACK TO embedded_neighborhood;
+ probe_order.put('date',JSON_ARRAY_T('["2026-11-20","2026-11-21"]'));probe_request.put('order',probe_order);rejected(probe_request,'INVALID_INPUT');
  items:=order_data.get_array('items');item:=TREAT(items.get(0) AS JSON_OBJECT_T);item.put('quantity',6);items.put(0,item,TRUE);order_data.put('items',items);req.put('order',order_data);rejected(req,'INSUFFICIENT_STOCK');
  item.put('quantity',1.5);items.put(0,item,TRUE);order_data.put('items',items);req.put('order',order_data);rejected(req,'INVALID_INPUT');
  item.put('quantity',2);item.put('unitPrice',1);items.put(0,item,TRUE);order_data.put('items',items);req.put('order',order_data);rejected(req,'PRICE_CHANGED');
@@ -28,6 +35,13 @@ BEGIN
  r:=alliance_gcobarf_orders.dispatch(req);sid:=r.get_string('id');check_value(r.get_string('status')='Pendiente de pago','Queda pendiente');check_value(r.get_number('total')=20000,'Total del servidor');
  SELECT stock INTO q FROM alliance_pos_stock WHERE business_id=b AND location_id=l AND product_id='__PRODUCT__';check_value(q=3,'Reserva dos unidades');
  account:=alliance_pos_store.document(b,l,'table_sessions',sid);customer_id:=account.get_string('customer_id');check_value(account.get_string('source')='online' AND account.get_string('delivery_address')='Direccion de prueba','Origen y domicilio en admin');
+ check_value(account.get_string('delivery_neighborhood')='Centro','Barrio conservado para el administrador');
+ SAVEPOINT second_order;
+ probe_request:=JSON_OBJECT_T(req.to_clob);probe_request.put('token','__OTHER_TOKEN__');probe_order:=JSON_OBJECT_T(order_data.to_clob);probe_order.put('date',TO_CHAR((SYSTIMESTAMP AT TIME ZONE 'America/Bogota')+INTERVAL '4' DAY,'YYYY-MM-DD'));probe_request.put('order',probe_order);r:=alliance_gcobarf_orders.dispatch(probe_request);check_value(r.get_string('id')<>sid,'Otra programacion es otra orden');account:=alliance_pos_store.document(b,l,'table_sessions',r.get_string('id'));check_value(account.get_string('customer_id')=customer_id,'Conserva el mismo cliente');ROLLBACK TO second_order;
+ SAVEPOINT admin_date;
+ p:=JSON_OBJECT_T('{"table":"table_sessions","op":"update","values":{},"filters":[]}');row_json:=JSON_OBJECT_T();row_json.put('delivery_date',TO_CHAR((SYSTIMESTAMP AT TIME ZONE 'America/Bogota')-INTERVAL '1' DAY,'YYYY-MM-DD'));p.put('values',row_json);items:=JSON_ARRAY_T();item:=JSON_OBJECT_T();item.put('field','id');item.put('op','eq');item.put('value',sid);items.append(item);p.put('filters',items);
+ BEGIN r:=alliance_pos_store.query(u,b,l,p);RAISE_APPLICATION_ERROR(-20088,'Admin acepto fecha pasada');EXCEPTION WHEN OTHERS THEN IF SQLCODE<>-20001 OR alliance_security.error_code<>'DELIVERY_DATE' THEN RAISE;END IF;ROLLBACK TO admin_date;END;
+ row_json.put('delivery_date',TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'America/Bogota','YYYY-MM-DD'));p.put('values',row_json);r:=alliance_pos_store.query(u,b,l,p);account:=alliance_pos_store.document(b,l,'table_sessions',sid);check_value(account.get_string('delivery_date')=TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'America/Bogota','YYYY-MM-DD'),'Admin acepta hoy');ROLLBACK TO admin_date;
  r:=alliance_operations.snapshot(u,b,l);SELECT COUNT(*) INTO n FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_deliveryholds' AND id=sid;check_value(n=1,'Reserva persistente');
  again:=alliance_gcobarf_orders.dispatch(req);check_value(again.get_string('id')=sid,'Reintento idempotente');SELECT stock INTO q FROM alliance_pos_stock WHERE business_id=b AND location_id=l AND product_id='__PRODUCT__';check_value(q=3,'Reintento no descuenta otra vez');
  order_data.put('notes','Cambio posterior');req.put('order',order_data);rejected(req,'ORDER_CHANGED');order_data.put('notes','No es un pedido real');req.put('order',order_data);
