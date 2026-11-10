@@ -7,6 +7,11 @@
   const localDay=date=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
   const prettyDay=date=>new Date(date+'T12:00:00-05:00').toLocaleDateString('es-CO',{weekday:'short',day:'numeric',month:'long',year:'numeric',timeZone:'America/Bogota'});
   const safeImage=value=>{if(/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(value||''))return value;try{const url=new URL(value,location.href);return value&&(url.protocol==='https:'||url.origin===location.origin)?url.href:'';}catch{return '';}};
+  const illustrativeImage=row=>{
+    const name=String(row.name||'').toLocaleLowerCase('es');
+    const type=/mixta|mixto|mezcla/.test(name)?'mixta':/pollo/.test(name)?'pollo':/carne|\bres\b|ternera/.test(name)?'carne':'general';
+    return './assets/bolsa-'+type+'-premium.webp';
+  };
   const keys={orders:'gcobarf-public-orders-v1',pending:'gcobarf-public-pending-v1'};
   const load=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
   let products=[],category='',cart=new Map(),connected=false,catalogBusy=false,submitting=false,ordersBusy=false,signature='',toastTimer,lastFocus;
@@ -37,10 +42,14 @@
     const query=$('#search').value.trim().toLocaleLowerCase('es');
     const rows=products.filter(row=>(!category||row.category===category)&&(!query||(row.name+' '+(row.description||'')).toLocaleLowerCase('es').includes(query)));
     $('#products').innerHTML=rows.length?rows.map(row=>{
-      const available=canBuy(row),selected=cart.get(row.id)?.quantity||0,image=safeImage(row.image);
-      return '<article class="product-card '+(available?'':'unavailable')+'" data-product="'+esc(row.id)+'"><div class="product-photo">'+(image?'<img src="'+esc(image)+'" alt="'+esc(row.name)+'" loading="lazy" decoding="async">':'<span class="product-placeholder" aria-hidden="true">G.</span>')+'<small>'+(available?'PARA SU PRÓXIMA COMIDA':'NO DISPONIBLE')+'</small></div><div class="product-info"><small>'+esc(row.category||'GCOBARF')+'</small><h3>'+esc(row.name)+'</h3><p>'+esc(row.description||'Elige las unidades para tu próxima entrega.')+'</p><div class="product-bottom"><strong>'+money(row.price)+'</strong><button class="add-product" data-add="'+esc(row.id)+'" type="button" aria-label="Agregar '+esc(row.name)+'" '+(!available||selected>=row.stock||submitting||pending?'disabled':'')+'>+</button></div><span class="stock-text">'+(available?row.stock+' disponibles'+(selected?' · '+selected+' en tu pedido':''):'Agotado o no disponible')+'</span></div></article>';
+      const available=canBuy(row),selected=cart.get(row.id)?.quantity||0,image=safeImage(row.image),fallback=illustrativeImage(row);
+      return '<article class="product-card '+(available?'':'unavailable')+'" data-product="'+esc(row.id)+'"><div class="product-photo"><img src="'+esc(image||fallback)+'" data-fallback="'+esc(fallback)+'" data-product-name="'+esc(row.name)+'" alt="'+esc((image?'':'Imagen ilustrativa de alimento para mascotas · ')+row.name)+'" loading="lazy" decoding="async"><span class="example-photo-label" '+(image?'hidden':'')+'>Imagen ilustrativa</span><small>'+(available?'PARA SU PRÓXIMA COMIDA':'NO DISPONIBLE')+'</small></div><div class="product-info"><small>'+esc(row.category||'GCOBARF')+'</small><h3>'+esc(row.name)+'</h3><p>'+esc(row.description||'Elige las unidades para tu próxima entrega.')+'</p><div class="product-bottom"><strong>'+money(row.price)+'</strong><button class="add-product" data-add="'+esc(row.id)+'" type="button" aria-label="Agregar '+esc(row.name)+'" '+(!available||selected>=row.stock||submitting||pending?'disabled':'')+'>+</button></div><span class="stock-text">'+(available?row.stock+' disponibles'+(selected?' · '+selected+' en tu pedido':''):'Agotado o no disponible')+'</span></div></article>';
     }).join(''):'<p class="empty">'+(products.length?'No encontramos productos con esos filtros.':'GCOBARF aún no tiene productos en su inventario. Vuelve pronto.')+'</p>';
-    $('#products').querySelectorAll('img').forEach(img=>img.addEventListener('error',()=>{const fallback=document.createElement('span');fallback.className='product-placeholder';fallback.textContent='G.';fallback.setAttribute('aria-hidden','true');img.replaceWith(fallback);},{once:true}));
+    $('#products').querySelectorAll('img').forEach(img=>img.addEventListener('error',()=>{
+      const label=img.parentElement.querySelector('.example-photo-label');label.hidden=false;
+      if(img.getAttribute('src')!==img.dataset.fallback){img.src=img.dataset.fallback;img.alt='Imagen ilustrativa de alimento para mascotas · '+img.dataset.productName;}
+      else{const message=document.createElement('span');message.className='photo-unavailable';message.textContent='Imagen no disponible';img.replaceWith(message);label.hidden=true;}
+    }));
   }
   function updateSubmit(){
     for(const control of form.elements)if(control.id!=='confirm-order')control.disabled=submitting||!!pending;
