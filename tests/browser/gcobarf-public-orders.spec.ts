@@ -2,11 +2,12 @@ import {test,expect,type Page} from '@playwright/test';
 import {backend,product} from './helpers/operational-backend';
 const deliveryDay=(offset=0)=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()+offset*86400000));
 
-async function storefront(page:Page,{lostAck=false,rejectStock=false}={}){
+async function storefront(page:Page,{lostAck=false,rejectStock=false,holdConfirmation=false}={}){
   const server=await backend(page);server.context.locations[0].slug='gcobarf';
   server.state.stock[product].stock=5;
   let rows=[{id:product,name:'GCOBARF · Pollo',category:'Alimento',price:10000,stock:5,unit:'unidad',available:true,description:'Su porción favorita',image:null},{id:'exhausted',name:'GCOBARF · Pavo',category:'Alimento',price:12000,stock:0,unit:'unidad',available:false,image:null}];
   const orders=new Map<string,any>(),creates:any[]=[];let lost=false;
+  let confirm=()=>{};const confirmation=new Promise<void>(resolve=>{confirm=resolve;});
   await page.context().route(/\/api\/v1\/(?:file\/)?rpc$/,async route=>{
     const request=route.request().postDataJSON();if(request.path!=='/gcobarf/public')return route.fallback();
     const body=request.body;let status=200,data:any;
@@ -27,9 +28,10 @@ async function storefront(page:Page,{lostAck=false,rejectStock=false}={}){
         if(lostAck&&!lost){lost=true;return route.abort('failed');}
       }
     }
+    if(holdConfirmation&&body.action==='create'&&status===200)await confirmation;
     await route.fulfill({contentType:'application/json',body:JSON.stringify({status,data})});
   });
-  return {...server,creates,orders,changeCatalog:(next:typeof rows)=>{rows=next;},rows};
+  return {...server,creates,orders,confirm,changeCatalog:(next:typeof rows)=>{rows=next;},rows};
 }
 async function checkout(page:Page,quantity=2){
   await page.goto('/negocios/gcobarf/pedidos.html');
@@ -84,6 +86,7 @@ test('recupera una respuesta perdida sin duplicar entregas ni descuentos',async(
 test('si otro cliente agota el producto informa el rechazo y conserva los datos para corregir',async({page})=>{
   const server=await storefront(page,{rejectStock:true});await checkout(page);await page.locator('#confirm-order').click();
   await expect(page.locator('#checkout-status')).toContainText('No quedan suficientes');await expect(page.locator('#success-dialog')).not.toBeVisible();await expect(page.locator('[name=name]')).toHaveValue('Ana Pérez');await expect(page.locator('[name=name]')).toBeEnabled();
+  await expect(page.locator('.success-confetti-piece')).toHaveCount(0);
   expect(server.state.docs.table_sessions).toHaveLength(0);expect(server.state.stock[product].stock).toBe(5);
   expect(await page.evaluate(()=>localStorage.getItem('gcobarf-public-pending-v1'))).toBeNull();
 });
@@ -147,4 +150,20 @@ test('permite hoy sin dirección y para otra entrega crea una orden nueva del mi
 test('bloquea días pasados antes de enviar el pedido',async({page})=>{
   const server=await storefront(page);await checkout(page,1);await expect(page.locator('[name=date]')).toHaveAttribute('min',deliveryDay());
   await page.locator('[name=date]').fill(deliveryDay(-1));await page.locator('#confirm-order').click();expect(server.creates).toHaveLength(0);await expect(page.locator('[name=date]')).toBeFocused();expect(await page.locator('[name=date]').evaluate((input:HTMLInputElement)=>input.checkValidity())).toBe(false);
+});
+
+test('celebra con confeti únicamente después de confirmar el pedido y lo limpia al cerrar',async({page})=>{
+  await page.setViewportSize({width:390,height:844});const server=await storefront(page,{holdConfirmation:true});await checkout(page);
+  await page.locator('#confirm-order').click();await expect.poll(()=>server.creates.length).toBe(1);
+  await expect(page.locator('#success-dialog')).toBeHidden();await expect(page.locator('.success-confetti-piece')).toHaveCount(0);await expect(page.locator('#confirm-order')).toBeDisabled();
+  server.confirm();await expect(page.locator('#success-dialog')).toBeVisible();await expect(page.locator('#success-title')).toContainText('con éxito');await expect(page.locator('.success-confetti-piece')).toHaveCount(56);await expect(page.locator('#success-detail')).toContainText('Pendiente de pago');expect(server.state.docs.table_sessions).toHaveLength(1);
+  await expect.poll(()=>page.locator('.success-confetti-piece').first().evaluate(piece=>piece.getBoundingClientRect().top)).toBeGreaterThan(35);
+  await page.screenshot({path:'.tools/interaction-preview/order-success-mobile.png'});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'.tools/interaction-preview/order-success-desktop.png'});
+  await page.locator('#success-close').click();await expect(page.locator('.success-confetti-piece')).toHaveCount(0);
+});
+
+test('confirma el pedido sin animaciones cuando el dispositivo pide movimiento reducido',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await storefront(page);await checkout(page,1);await page.locator('#confirm-order').click();
+  await expect(page.locator('#success-dialog')).toBeVisible();await expect(page.locator('#success-title')).toContainText('con éxito');await expect(page.locator('.success-confetti-piece')).toHaveCount(0);expect(await page.locator('#success-dialog .success-mark').evaluate(mark=>getComputedStyle(mark).animationName)).toBe('none');
 });

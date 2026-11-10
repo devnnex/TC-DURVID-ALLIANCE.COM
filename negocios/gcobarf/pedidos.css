@@ -96,3 +96,43 @@ body:has(.basket-summary:not([hidden])) .footer{padding-bottom:200px}
 @media(max-width:360px){.product-grid{grid-template-columns:1fr}.cart-line{grid-template-columns:42px minmax(0,1fr);gap:9px}.cart-thumbnail{width:42px;height:54px}.detail-quantity{width:130px}.basket-summary>strong{font-size:12px}}
 @media(prefers-reduced-motion:reduce){#product-dialog[open],#cart-dialog[open],.basket-summary{animation:none}button:active:not(:disabled),a.primary:active{transform:none}.basket-summary:active:not(:disabled){transform:translateX(-50%)}}
 .new-order{width:100%;margin-top:12px;min-height:44px}
+
+/* Celebrate only the confirmed order; effects are finite and never block controls. */
+#success-dialog{padding:0;max-height:calc(100dvh - 28px);overflow:visible;background:transparent;box-shadow:none}
+.success-content{position:relative;z-index:1;max-height:calc(100dvh - 28px);overflow-y:auto;padding:35px 28px 26px;border:1px solid #d2e3ff;border-radius:24px;background:radial-gradient(ellipse at 50% 0,#dfedff 0,transparent 48%),#fff;box-shadow:0 24px 90px #09265b40}
+.success-content>.close{position:absolute;right:14px;top:14px;z-index:2;background:#ffffffc9;color:#46669a}
+.success-symbol{position:relative;display:grid;place-items:center;width:124px;height:119px;margin:0 auto 15px}
+.success-halo{position:absolute;width:106px;height:106px;border:1px solid #c0d8ff;border-radius:50%;box-shadow:0 0 0 12px #e8f1ff99}
+.success-content .success-mark{position:relative;display:grid;place-items:center;width:77px;height:77px;margin:0;border:1px solid #78a9f2;border-radius:50%;background:linear-gradient(145deg,#438cf5,#1756c4);box-shadow:0 10px 28px #2869cf35;color:#fff}
+.success-mark svg{width:48px;height:48px}
+.success-mark path{stroke-dasharray:45;stroke-dashoffset:0}
+.success-spark{position:absolute;color:#468be6;font-size:20px}
+.spark-one{right:0;top:17px}.spark-two{left:0;bottom:18px;font-size:14px;color:#79b6f4}.spark-three{right:2px;bottom:5px;font-size:23px;color:#5b8fd9}
+.success-eyebrow{display:block;font-size:8px;letter-spacing:1.8px;color:#5174a7}
+#success-dialog .success-content h2{font-family:'DM Serif Display',Georgia,serif;font-size:37px;font-weight:400;letter-spacing:-1px;line-height:1.05;margin:13px 0 15px;color:#12336b}
+#success-copy{max-width:310px;margin:0 auto 21px;font-size:12px;line-height:1.65;color:#647b9e}
+#success-detail{padding:17px 16px 15px;border:1px solid #cbdffc;background:#f6f9ff;border-radius:15px}
+.success-order-label{display:block;font-size:8px;letter-spacing:1.5px;color:#6884ad}
+#success-detail>strong{display:block;font-size:20px;letter-spacing:.6px;color:#1d54ab;margin:7px 0 13px}
+.success-schedule{display:flex;align-items:center;gap:10px;padding-top:13px;border-top:1px solid #dfE9f8;text-align:left}
+.success-schedule>span{display:grid;place-items:center;width:34px;height:34px;flex-shrink:0;background:#e4eeff;border-radius:9px;color:#326cc7;font-size:21px}
+.success-schedule b{display:block;font-size:11px;font-weight:600;text-transform:capitalize;color:#244e8a}
+.success-schedule div>span{display:block;font-size:10px;color:#7186a6;margin-top:4px}
+#success-detail>.badge{display:inline-block;margin-top:13px;font-size:10px;background:#e7effc;color:#41679d}
+.success-payment-note{font-size:11px;line-height:1.55;color:#7183a0;margin:17px auto;max-width:290px}
+.success-content>.primary{width:100%;min-height:47px;justify-content:space-between}
+.success-content>.new-order{border-color:#dae5f6;font-size:11px}
+.success-confetti{position:fixed;inset:0;z-index:3;overflow:hidden;pointer-events:none}
+.success-confetti-piece{position:absolute;left:calc(var(--x)*1%);top:-25px;width:8px;height:12px;background:var(--piece-color);opacity:0;animation:gcobarf-confetti-fall var(--duration) linear var(--delay) 1 both;will-change:transform,opacity}
+.success-confetti-piece.round{width:7px;height:7px;border-radius:50%}.success-confetti-piece.strip{width:5px;height:16px}.success-confetti-piece.square{width:9px;height:9px;border-radius:2px}
+#success-dialog[open] .success-content{animation:gcobarf-success-arrive .32s cubic-bezier(.2,.8,.2,1) both}
+#success-dialog[open] .success-mark{animation:gcobarf-success-pop .52s cubic-bezier(.2,.8,.2,1) both}
+#success-dialog[open] .success-mark path{animation:gcobarf-success-check .42s .14s ease-out both}
+#success-dialog[open] .success-halo{animation:gcobarf-success-halo .7s ease-out both}
+@keyframes gcobarf-confetti-fall{0%{opacity:0;transform:translate3d(0,-20px,0) rotate(0deg)}8%{opacity:.95}78%{opacity:.95}100%{opacity:0;transform:translate3d(var(--drift),calc(100dvh + 55px),0) rotate(var(--spin))}}
+@keyframes gcobarf-success-arrive{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes gcobarf-success-pop{0%{transform:scale(.65);opacity:0}65%{transform:scale(1.06);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes gcobarf-success-check{from{stroke-dashoffset:45}to{stroke-dashoffset:0}}
+@keyframes gcobarf-success-halo{from{opacity:0;transform:scale(.65)}to{opacity:1;transform:scale(1)}}
+@media(max-width:480px){.success-content{padding:29px 23px 22px}.success-symbol{height:108px;margin-bottom:13px}#success-dialog .success-content h2{font-size:34px}.success-schedule b{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.success-confetti{display:none}#success-dialog[open] .success-content,#success-dialog[open] .success-mark,#success-dialog[open] .success-mark path,#success-dialog[open] .success-halo{animation:none}}

@@ -64,7 +64,20 @@
     </div>
     <footer class="sheet-action"><div><span>Total de productos</span><strong id="cart-total">$0</strong></div><button type="button" form="checkout" id="confirm-order" class="primary" disabled>Continuar con la entrega →</button></footer>
   </dialog>
-  <dialog id="success-dialog" aria-labelledby="success-title"><button class="close" id="success-close" aria-label="Cerrar confirmación">×</button><span class="success-mark" aria-hidden="true">✓</span><small>YA ESTÁ EN NUESTRA AGENDA</small><h2 id="success-title">¡Su próxima comida,<br>programada!</h2><div id="success-detail"></div><p>Tus productos quedaron apartados. GCOBARF gestionará el pago contigo.</p><button class="primary" id="view-deliveries">Ver mi programación →</button><button class="secondary new-order" id="new-order" type="button">Programar otro pedido</button></dialog>
+  <dialog id="success-dialog" aria-labelledby="success-title" aria-describedby="success-copy">
+    <div id="success-confetti" class="success-confetti" aria-hidden="true"></div>
+    <section class="success-content">
+      <button class="close" id="success-close" type="button" aria-label="Cerrar confirmación">×</button>
+      <div class="success-symbol" aria-hidden="true"><span class="success-halo"></span><span class="success-spark spark-one">✦</span><span class="success-spark spark-two">✦</span><span class="success-spark spark-three">✧</span><span class="success-mark"><svg viewBox="0 0 52 52" fill="none"><path d="m14 27 9 9 16-19" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></div>
+      <small class="success-eyebrow">YA ESTÁ EN NUESTRA AGENDA</small>
+      <h2 id="success-title">¡Pedido realizado<br>con éxito!</h2>
+      <p id="success-copy">Tus productos ya están apartados y tu entrega quedó agendada en GCOBARF.</p>
+      <div id="success-detail"></div>
+      <p class="success-payment-note">GCOBARF se comunicará contigo para coordinar el pago.</p>
+      <button class="primary" id="view-deliveries">Ver mi programación <span aria-hidden="true">→</span></button>
+      <button class="secondary new-order" id="new-order" type="button">Programar otro pedido</button>
+    </section>
+  </dialog>
   <div id="toast" role="status" hidden></div>
 </body>
 </html>

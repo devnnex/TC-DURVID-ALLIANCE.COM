@@ -17,6 +17,7 @@
   const load=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
   let products=[],category='',cart=new Map(),connected=false,catalogBusy=false,submitting=false,ordersBusy=false,signature='',toastTimer,lastFocus,lastProductFocus,activeProductId='',detailQuantity=1,cartStep='review';
   const quantityIssues=new Set();
+  let celebrationTimer;
   const draft=load(keys.cart,[]);
   if(Array.isArray(draft))for(const row of draft.slice(0,50))if(typeof row?.id==='string'&&typeof row.name==='string'&&Number.isInteger(row.quantity)&&row.quantity>0&&row.quantity<=10000)cart.set(row.id,{id:row.id,name:row.name,price:Number(row.price)||0,quantity:row.quantity});
   let saved=load(keys.orders,[]);if(!Array.isArray(saved))saved=[];saved=saved.filter(row=>/^[a-f0-9]{64}$/.test(row?.token)).slice(-50);
@@ -167,8 +168,19 @@
   function openCart(){lastFocus=document.activeElement;cartStep=pending?'details':'review';refreshDateBounds();renderCart();$('#cart-dialog').showModal();}
   function showSuccess(row){
     if($('#cart-dialog').open)$('#cart-dialog').close();
-    $('#success-detail').innerHTML='<strong>'+esc(row.number)+'</strong>'+esc(prettyDay(row.date))+' · '+esc(row.time)+'<br><span class="badge">'+esc(row.status)+'</span>';
+    $('#success-detail').innerHTML='<small class="success-order-label">TU NÚMERO DE PEDIDO</small><strong>'+esc(row.number)+'</strong><div class="success-schedule"><span aria-hidden="true">▦</span><div><b>'+esc(prettyDay(row.date))+'</b><span>Entrega a las '+esc(row.time)+' · Hora de Colombia</span></div></div><span class="badge">'+esc(row.status)+'</span>';
     if(!$('#success-dialog').open)$('#success-dialog').showModal();
+    celebrateOrder();
+  }
+  function stopCelebration(){clearTimeout(celebrationTimer);$('#success-confetti').replaceChildren();}
+  function celebrateOrder(){
+    stopCelebration();if(reducedMotion())return;
+    const colors=['#2463df','#56b7ff','#84dbf5','#a9b8ff','#4585ec','#bedbff'],pieces=document.createDocumentFragment();
+    for(let i=0;i<56;i++){
+      const piece=document.createElement('i');piece.className='success-confetti-piece '+(i%3===0?'round':i%3===1?'strip':'square');
+      piece.style.setProperty('--x',String((i*37+7)%100));piece.style.setProperty('--delay',((i*13)%55/100)+'s');piece.style.setProperty('--duration',(2.5+(i*17)%9/10)+'s');piece.style.setProperty('--drift',(((i*29)%150)-75)+'px');piece.style.setProperty('--spin',((i%2?-1:1)*(360+(i*67)%540))+'deg');piece.style.setProperty('--piece-color',colors[i%colors.length]);pieces.append(piece);
+    }
+    $('#success-confetti').append(pieces);celebrationTimer=setTimeout(stopCelebration,4200);
   }
   function remember(row,token){
     const next=[...saved.filter(value=>value.token!==token),{token,number:row.number}].slice(-50);
@@ -274,6 +286,7 @@
   $('#my-orders').addEventListener('click',event=>{if(event.target.closest('[data-recover]'))openCart();});
   $('#refresh-orders').addEventListener('click',()=>void refreshOrders());
   $('#success-close').addEventListener('click',()=>$('#success-dialog').close());
+  $('#success-dialog').addEventListener('close',stopCelebration);
   $('#view-deliveries').addEventListener('click',()=>{$('#success-dialog').close();$('#mis-entregas').scrollIntoView({behavior:'smooth'});});
   $('#new-order').addEventListener('click',()=>{$('#success-dialog').close();$('#catalogo').scrollIntoView({behavior:reducedMotion()?'auto':'smooth'});});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshDateBounds();void refreshCatalog();void refreshOrders();}});
