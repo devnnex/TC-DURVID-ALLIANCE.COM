@@ -41,6 +41,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_api AS
       END;
       alliance_activity.record_event(s.user_id,s.business_id,NULL,'users','LOGOUT','Cerró sesión');
       UPDATE alliance_api_sessions SET revoked=1 WHERE id=s.id;data.put('ok',TRUE);
+    ELSIF method_value='POST' AND path_value='/gcobarf/public' THEN data:=alliance_gcobarf_orders.dispatch(body);
     ELSIF method_value='POST' AND path_value='/pos/public' THEN data:=alliance_pos.public_dispatch(body);
     ELSE
       access_value:=req.get_string('access_token');s:=alliance_security.authenticate(access_value);

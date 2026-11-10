@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#172c27"><meta name="description" content="Pide los productos disponibles de GCOBARF Nutripet’s y programa tu próxima entrega en línea.">
+  <title>GCOBARF Nutripet’s · Programa tu pedido</title>
+  <link rel="stylesheet" href="pedidos.css"><script src="../../api-config.js"></script><script src="pedidos.js" defer></script>
+</head>
+<body>
+  <header class="site-header wrap">
+    <a class="brand" href="#inicio" aria-label="GCOBARF, inicio"><span class="brand-mark" aria-hidden="true">G.</span><span>GCOBARF<small>NUTRIPET’S</small></span></a>
+    <span class="slogan">BIENESTAR EN CADA PORCIÓN.</span>
+    <button class="cart-button" data-cart-open aria-label="Abrir mi pedido">Mi pedido <b data-cart-count>0</b></button>
+  </header>
+  <main class="wrap" id="inicio">
+    <div class="location-card"><span aria-hidden="true">⌖</span><div><small>Tu pedido en</small><strong>GCOBARF Nutripet’s · Entregas programadas</strong></div><a href="#como-pedir">Cómo pedir ↗</a></div>
+    <section class="hero">
+      <div class="hero-copy"><small>SU PRÓXIMA COMIDA EMPIEZA AQUÍ</small><h1>Su favorito.<br>A tu tiempo.</h1><p>Elige sus productos, decide la cantidad y agenda la entrega. Nosotros lo dejamos apartado.</p><a class="primary" href="#catalogo">Armar mi pedido <span aria-hidden="true">→</span></a></div>
+      <div class="hero-art" aria-hidden="true"><div class="hero-orbit"></div><span class="art-caption">HECHO PARA<br>CONSENTIRLOS.</span><svg viewBox="0 0 360 320" fill="none"><path d="M126 173c-22-15-27-41-12-64l28-42 35 35h36l32-35 22 41c15 27 7 52-14 67l-17 33h-92l-18-35Z" fill="#d6e5d7"/><path d="m139 97 10 24-23-3m111-21-10 24 23-3" fill="#9eb4a0"/><circle cx="161" cy="144" r="6" fill="#172c27"/><circle cx="219" cy="144" r="6" fill="#172c27"/><path d="m177 164 13 11 13-11h-26Z" fill="#172c27"/><path d="M168 181c9 12 35 12 44 0" stroke="#172c27" stroke-width="4" stroke-linecap="round"/><ellipse cx="189" cy="237" rx="102" ry="20" fill="#172c27" opacity=".13"/><path d="m94 215 18 58c3 10 150 10 154 0l18-58H94Z" fill="#f3efe4"/><ellipse cx="189" cy="215" rx="95" ry="20" fill="#fffaf0"/><ellipse cx="189" cy="215" rx="77" ry="11" fill="#8a624b"/><path d="M167 248h44" stroke="#172c27" stroke-width="3" stroke-linecap="round"/></svg><span class="art-seal">GCO<br>BARF</span></div>
+    </section>
+    <section id="como-pedir" class="steps" aria-label="Cómo pedir"><p><b>01</b><span>Elige lo que necesita<small>Disponibilidad del inventario actual</small></span></p><p><b>02</b><span>Programa su entrega<small>Escoge una fecha y una hora</small></span></p><p><b>03</b><span>Listo, queda apartado<small>El negocio te confirma el pago</small></span></p></section>
+    <section id="catalogo" class="catalog">
+      <div class="section-head"><div><small>EL MENÚ DE SUS FAVORITOS</small><h2>Un pedido, muchas colitas felices.</h2></div><span class="live-label" id="connection" role="status">Conectando inventario…</span></div>
+      <label class="search"><span aria-hidden="true">⌕</span><input type="search" id="search" placeholder="Busca su próximo favorito…" aria-label="Buscar productos" autocomplete="off"></label>
+      <div id="categories" class="categories" role="group" aria-label="Filtrar por categoría"></div>
+      <p id="catalog-message" role="status"></p><div id="products" class="product-grid" aria-live="polite"><p class="empty">Consultando productos disponibles…</p></div>
+    </section>
+    <section id="mis-entregas" class="my-deliveries">
+      <div class="section-head"><div><small>TU AGENDA</small><h2>Mis entregas programadas</h2><p>Consulta aquí los pedidos realizados desde este navegador.</p></div><button type="button" class="secondary" id="refresh-orders">Actualizar entregas</button></div>
+      <div id="my-orders" aria-live="polite"><p class="empty">Cuando confirmes tu pedido, su programación aparecerá aquí.</p></div>
+    </section>
+  </main>
+  <footer class="wrap footer"><a class="brand" href="#inicio">GCOBARF <small>Nutripet’s</small></a><p>Su bienestar, con tiempo y cariño.</p></footer>
+  <nav class="bottom-nav" aria-label="Navegación principal"><a href="#inicio">⌂<span>Inicio</span></a><a href="#catalogo">▦<span>Productos</span></a><button type="button" data-cart-open>◷<span>Mi pedido <b data-cart-count>0</b></span></button><a href="#mis-entregas">▤<span>Mis entregas</span></a></nav>
+  <dialog id="cart-dialog" aria-labelledby="cart-title">
+    <header class="sheet-head"><div><small>HECHO A SU MEDIDA</small><h2 id="cart-title">Tu pedido</h2></div><button type="button" class="close" id="cart-close" aria-label="Cerrar pedido">×</button></header>
+    <div class="sheet-body"><div id="cart-items"></div>
+      <form id="checkout">
+        <h3>¿A quién le entregamos?</h3>
+        <label>Nombre completo<input name="name" autocomplete="name" maxlength="160" required></label>
+        <label>Teléfono / WhatsApp<input name="phone" type="tel" autocomplete="tel" inputmode="tel" minlength="7" maxlength="40" pattern="[+0-9 \(\)\-]{7,40}" placeholder="Ej. 300 123 4567" required></label>
+        <fieldset class="choices"><legend>Tipo de entrega</legend><label><input type="radio" name="mode" value="delivery" checked> A domicilio</label><label><input type="radio" name="mode" value="pickup"> Recoger en el negocio</label></fieldset>
+        <div id="address-fields"><label>Ciudad / municipio<input name="city" autocomplete="address-level2" maxlength="100" required></label><label>Dirección y barrio<input name="address" autocomplete="street-address" maxlength="300" placeholder="Incluye apartamento o indicaciones" required></label></div>
+        <h3>¿Cuándo lo necesitas?</h3><p class="hint">Hora de Colombia. Las unidades se apartan al confirmar.</p>
+        <div class="two-fields"><label>Fecha de entrega<input name="date" type="date" required></label><label>Hora de entrega<input name="time" type="time" required></label></div>
+        <label>Observaciones (opcional)<textarea name="notes" rows="3" maxlength="500" placeholder="Indicaciones para tu entrega"></textarea></label>
+        <label class="consent"><input name="consent" type="checkbox" required><span>Autorizo a GCOBARF a usar estos datos para gestionar y contactarme sobre mi pedido.</span></label>
+        <div class="payment-note"><strong>Tu pedido queda pendiente de pago.</strong><p>GCOBARF se comunicará contigo para coordinar el pago y cualquier costo de domicilio. El total de productos no incluye domicilio.</p></div>
+      </form>
+      <p id="checkout-status" role="alert"></p>
+    </div>
+    <footer class="sheet-action"><div><span>Total de productos</span><strong id="cart-total">$0</strong></div><button type="submit" form="checkout" id="confirm-order" class="primary" disabled>Confirmar programación →</button></footer>
+  </dialog>
+  <dialog id="success-dialog" aria-labelledby="success-title"><button class="close" id="success-close" aria-label="Cerrar confirmación">×</button><span class="success-mark" aria-hidden="true">✓</span><small>YA ESTÁ EN NUESTRA AGENDA</small><h2 id="success-title">¡Su próxima comida,<br>programada!</h2><div id="success-detail"></div><p>Tus productos quedaron apartados. GCOBARF gestionará el pago contigo.</p><button class="primary" id="view-deliveries">Ver mi programación →</button></dialog>
+  <div id="toast" role="status" hidden></div>
+</body>
+</html>
