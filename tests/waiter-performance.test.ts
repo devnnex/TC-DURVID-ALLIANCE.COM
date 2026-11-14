@@ -1,10 +1,46 @@
 import {describe,it,expect} from 'vitest';
-import {waiterPerformance,type OrderSnapshot,type PerformanceSale} from '../packages/shared/waiter-performance';
+import {waiterPerformance,waiterTableLabel,type OrderSnapshot,type PerformanceSale} from '../packages/shared/waiter-performance';
 const now=Date.parse('2026-11-13T17:00:00Z'),at='2026-11-13T15:00:00Z';
 const members=[{id:'ana',name:'Ana'},{id:'luis',name:'Luis'},{id:'empty',name:'Sin actividad'}];
 function initial():OrderSnapshot{return {docs:{restaurant_tables:[{id:'table',table_name:'M1'}],service_requests:[{id:'oa',actor_user_id:'ana',created_at:at,request_type:'order',status:'resolved',session_id:'session',table_id:'table'},{id:'ob',actor_user_id:'luis',created_at:at,request_type:'order',status:'resolved',session_id:'session',table_id:'table'}],session_items:[{id:'la',order_id:'oa',quantity:1,unit_price:10000},{id:'lb',order_id:'ob',quantity:2,unit_price:10000}]},model:{tickets:[],customerPayments:[],debts:[]},sales:[]};}
 function sale():PerformanceSale{return {id:'sale',sessionId:'session',createdAt:at,waiterName:'Cajera',soldByUserId:'cashier',number:'F1',totals:{total:30000,subtotal:30000,tip:0},payments:[{method:'cash',amount:30000}],items:[{id:'la',quantity:1,unit_price:10000},{id:'lb',quantity:2,unit_price:10000}]};}
 describe('Progreso por comandas efectivamente cobradas',()=>{
+ it.each([['M1','MESA 1'],['m12','MESA 12'],[' M 23 ','MESA 23'],['Mesa24','MESA 24'],['Matera 1','Matera 1'],['Terraza 3','Terraza 3']])('formatea %s sin renombrar otras mesas', (name,label)=>{expect(waiterTableLabel(name)).toBe(label);});
+ it('asocia cada comanda con la venta exacta y no duplica su identificador',()=>{
+   const s=initial(),v=sale();s.sales=[v,v];
+   const rows=waiterPerformance(s,members,30,now);
+   for(const id of ['ana','luis'])expect(rows.find(r=>r.id===id)?.orders[0].sales).toEqual([{id:'sale',invoice:'F1'}]);
+   expect(rows.reduce((n,r)=>n+r.amount,0)).toBe(30000);
+ });
+ it('no asocia una venta de otra cuenta aunque se haya reutilizado la mesa',()=>{
+   const s=initial();s.sales=[{...sale(),sessionId:'new-session'}];
+   const row=waiterPerformance(s,members,30,now).find(r=>r.id==='ana')!;
+   expect(row).toMatchObject({amount:0,tips:0,paid:0});expect(row.orders[0].sales).toEqual([]);
+ });
+ it('mantiene el identificador de una venta a crédito sin inventar dinero cobrado',()=>{
+   const s=initial(),v=sale();v.payments=[{method:'credit',amount:30000}];s.sales=[v];
+   const row=waiterPerformance(s,members,30,now).find(r=>r.id==='ana')!;
+   expect(row).toMatchObject({amount:0,tips:0,paid:0});expect(row.orders[0].sales).toEqual([{id:'sale',invoice:'F1'}]);
+   s.model.customerPayments=[{id:'payment',at,allocations:[{debtId:'sale',amount:30000}]}];
+   expect(waiterPerformance(s,members,30,now).find(r=>r.id==='ana')).toMatchObject({amount:10000,paid:1});
+ });
+ it('separa los consumos del mesero de los añadidos por otro responsable en la misma mesa',()=>{
+   const s=initial(),v=sale();s.docs.service_requests=s.docs.service_requests.slice(0,1);
+   v.items=[{id:'la',quantity:2,unit_price:34348},{id:'manual',quantity:3,unit_price:16366}];
+   v.totals={subtotal:117794,total:129573};v.tipAmount=11779;v.payments=[{method:'cash',amount:129573}];s.sales=[v];
+   const row=waiterPerformance(s,members,30,now).find(r=>r.id==='ana')!;
+   expect(row).toMatchObject({amount:68696,tips:6869.37,paid:1});expect(row.orders[0].sales).toEqual([{id:'sale',invoice:'F1'}]);
+ });
+ it('excluye también del contador de cobradas las comandas anuladas',()=>{
+   const s=initial();s.sales=[sale()];s.model.tickets=[{id:'cancelled',orderId:'ob',status:'cancelled'}];
+   const row=waiterPerformance(s,members,30,now).find(r=>r.id==='luis')!;
+   expect(row).toMatchObject({amount:0,tips:0,paid:0,cancelled:1});expect(row.orders[0].sales).toEqual([]);
+ });
+ it('omite ventas anuladas y utiliza el ID real si no existe número de factura',()=>{
+   const s=initial(),v=sale();s.sales=[{...v,voided:true}];
+   expect(waiterPerformance(s,members,30,now).find(r=>r.id==='ana')?.orders[0].sales).toEqual([]);
+   delete v.number;s.sales=[v];expect(waiterPerformance(s,members,30,now).find(r=>r.id==='ana')?.orders[0].sales).toEqual([{id:'sale',invoice:'sale'}]);
+ });
  it('atribuye la propina aceptada a los meseros originales y separa ventas de propinas',()=>{const s=initial(),v=sale();v.tipAmount=3000;v.totals={subtotal:30000,total:33000};v.payments=[{method:'cash',amount:33000}];s.sales=[v];const rows=waiterPerformance(s,[...members,{id:'cashier',name:'Cajera'}],30,now);expect(rows.find(r=>r.id==='ana')).toMatchObject({amount:10000,tips:1000});expect(rows.find(r=>r.id==='luis')).toMatchObject({amount:20000,tips:2000});expect(rows.find(r=>r.id==='cashier')?.tips).toBe(0);expect(rows.find(r=>r.id==='ana')?.orders[0].collections[0]).toMatchObject({amount:10000,tip:1000,cashier:'Cajera'});});
  it('conserva cada centavo de propina en abonos y respeta el período del cobro',()=>{const s=initial(),v=sale();v.totals={subtotal:2,total:3,tip:1};v.payments=[{method:'cash',amount:1},{method:'credit',amount:2}];s.sales=[v];s.model.customerPayments=[{id:'first',at,allocations:[{debtId:'sale',amount:1}]},{id:'second',at,allocations:[{debtId:'sale',amount:1}]}];const rows=waiterPerformance(s,members,30,now);expect(rows.reduce((n,r)=>n+r.tips,0)).toBe(1);expect(rows.reduce((n,r)=>n+r.amount,0)).toBe(2);v.createdAt='2026-09-01T12:00:00Z';const recent=waiterPerformance(s,members,7,now);expect(Math.round(recent.reduce((n,r)=>n+r.tips,0)*100)).toBe(67);});
  it('no atribuye propinas anuladas ni las correspondientes a consumos sin comanda',()=>{const s=initial(),v=sale();v.items.push({id:'manual',quantity:1,unit_price:10000});v.totals={subtotal:40000,total:44000,tip:4000};v.payments=[{method:'cash',amount:44000}];s.sales=[v,{...v,id:'void',voided:true}];s.model.tickets=[{id:'cancelled',orderId:'ob',status:'cancelled'}];const rows=waiterPerformance(s,members,30,now);expect(rows.find(r=>r.id==='ana')?.tips).toBe(1000);expect(rows.find(r=>r.id==='luis')?.tips).toBe(0);});
