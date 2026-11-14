@@ -37,9 +37,8 @@ test('GCOBARF: editar unidad y nombre, fecha automática, borrador, merma y hoja
   await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await expect(page.locator('[data-sheet-line]')).toHaveValue('1');
   await expect(page.locator('[data-sheet-production-unit]')).toContainText('5.000');
-  await page.locator('[data-sheet-yield]').click();const yieldDialog=page.locator('#ingredientYieldDialog');
-  await yieldDialog.locator('[name=clean]').fill('20');await yieldDialog.locator('[type=submit]').click();
-  await expect(yieldDialog).not.toBeVisible();await expect(page.locator('[data-sheet-production-unit]')).toContainText('4.000');
+  await expect(page.getByRole('button',{name:'Configurar merma',exact:true})).toHaveCount(0);
+  await page.locator('[data-sheet-final-weight]').fill('0.8');await expect(page.locator('[data-sheet-production-unit]')).toContainText('6.250');
   await page.getByRole('button',{name:'+ Nuevo producto',exact:true}).click();modal=page.locator('#costSheetEditor');
   await expect(modal.locator('.cost-line')).toHaveCount(0);await modal.locator('[name=name]').fill('Segunda producción');
   await modal.locator('[name=channelId]').selectOption('direct');await modal.locator('[type=submit]').click();
@@ -230,10 +229,18 @@ test('GCOBARF: Inicio con calendario, secciones suspendidas y clientes disponibl
 
 for(const branch of ['gcobarf','cocteleria','cafeteria','sucursal'])test(`borrador de merma al cerrar por accidente: ${branch}`,async({page})=>{
   await open(page,branch);await seed(page,branch);
-  await page.getByRole('button',{name:'Configurar merma',exact:true}).first().click();
-  const modal=page.locator('#ingredientYieldDialog');await modal.locator('[name=clean]').fill('15');await page.keyboard.press('Escape');
-  await page.getByRole('button',{name:'Configurar merma',exact:true}).first().click();await expect(modal.locator('[name=clean]')).toHaveValue('15');
-  await modal.getByRole('button',{name:'Guardar y aplicar merma',exact:true}).click();await expect(modal).not.toBeVisible();
-  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await page.getByRole('button',{name:'Configurar merma',exact:true}).first().click();
-  await expect(modal.locator('[name=clean]')).toHaveValue('15');
+  if(branch==='gcobarf')await page.evaluate(()=>{
+    const key='alliance-operational-demo-v1:gcobarf',state=JSON.parse(localStorage.getItem(key)!);
+    state.operations=(window as any).AllianceOperationsEngine.empty();
+    state.operations.ingredients=[{id:'raw',name:'Pollo',unit:'g',quantity:100000,unitCost:10,minStock:0,revision:1}];
+    localStorage.setItem(key,JSON.stringify(state));
+  });
+  const final=page.locator(branch==='gcobarf'?'[data-sheet-final-weight="0"]':'[data-j-final="0"]');
+  const loss=page.locator(branch==='gcobarf'?'[data-sheet-loss="0"]':'[data-j-yield-badge="0"]');
+  await final.fill('850');await page.keyboard.press('Escape');
+  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
+  await expect(final).toHaveValue('850');await expect(loss).toContainText('15 %');
+  await page.locator(branch==='gcobarf'?'[data-sheet-save]':'#costingSave').click();
+  await expect(page.locator('#costingStatus')).toContainText(branch==='gcobarf'?'Guardado local':'Receta guardada');
+  await page.reload();await expect(loss).toContainText('15 %');
 });

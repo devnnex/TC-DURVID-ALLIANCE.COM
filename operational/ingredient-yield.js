@@ -1,7 +1,7 @@
 /* The same editor applies to production sheets and recipe worksheets. */
 globalThis.IngredientYieldPanel=(()=>{
   const E=AllianceCosting,esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const quantity=n=>Number(n).toLocaleString('es-CO',{maximumFractionDigits:3}),money=n=>AllianceMoney.format(n,{allowEmpty:false});
+  const quantity=n=>Number(n).toLocaleString('es-CO',{maximumFractionDigits:2}),money=n=>AllianceMoney.format(n,{allowEmpty:false});
   const states=[['stored','Como se compra / sin preparar'],['thawed','Descongelado o fresco'],['cleaned','Crudo y limpio'],['cooked','Cocido / listo para servir'],['frozen-cleaned','Congelado y limpio'],['frozen-cooked','Congelado, ya cocido']];
   const options=extra=>[...(extra?[['auto','Según las mermas que ajuste'],['same','El mismo estado del inventario']]:[]),...states].map(([v,t])=>'<option value="'+v+'">'+t+'</option>').join('');
   async function open({ingredient,line,save,stockUnit,draftKey}){

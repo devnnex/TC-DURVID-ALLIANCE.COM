@@ -86,33 +86,34 @@ test('GCOBARF suma las hojas guardadas del mes y actualiza el costo mensual sin 
   await month.fill('2026-11');await expect(page.locator('[data-sheet-save]')).toBeEnabled();
 });
 
-test('GCOBARF aplica los pesos y la merma manual sin duplicar el consumo inicial',async({page})=>{
+test('GCOBARF calcula la merma automáticamente sin duplicar el consumo inicial',async({page})=>{
   await page.context().setOffline(true);
   await page.goto(pathToFileURL(resolve('negocios/gcobarf/admin.html')).href+'?demo=1#costing');
   await expect(page.locator('#costingReload')).toBeEnabled();
   const model=excelModel();model.ingredients=[{...model.ingredients[0],name:'Carne',unit:'kg',quantity:10,purchasePrice:100000}];
   model.expenses=[];model.recipes=[{...model.recipes[0],output:1,lines:[{ingredientId:model.ingredients[0].id,quantity:1,unit:'kg'}]}];
+  await page.evaluate(()=>{
+    const key='alliance-operational-demo-v1:gcobarf',state=JSON.parse(localStorage.getItem(key)!);
+    state.operations=(window as any).AllianceOperationsEngine.empty();
+    state.operations.ingredients=[{id:'raw',name:'Carne',unit:'kg',quantity:1000,unitCost:10000,minStock:0,revision:1}];
+    localStorage.setItem(key,JSON.stringify(state));
+  });
   await page.evaluate(model=>(window as any).OracleDb.local.setItem('costing-saved',JSON.stringify({model,revision:1})),model);
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
   const initial=page.locator('[data-sheet-line="0"]'),final=page.locator('[data-sheet-final-weight="0"]'),loss=page.locator('[data-sheet-loss="0"]');
   await final.fill('0.8');await expect(loss).toContainText('0,2 kg (20 %)');
-  await expect(initial).toHaveValue('1');await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('8.000');
+  await expect(initial).toHaveValue('1');await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('12.500');
   await initial.fill('2');await expect(loss).toContainText('1,2 kg (60 %)');
-  await expect(final).toHaveValue('0.8');await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('8.000');
+  await expect(final).toHaveValue('0.8');await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('50.000');
   await page.locator('[data-sheet-save]').click();await expect(page.locator('#costingStatus')).toContainText('Guardado local');
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(initial).toHaveValue('2');await expect(final).toHaveValue('0.8');
-  await page.locator('[data-sheet-yield="0"]').click();const modal=page.locator('#ingredientYieldDialog');
-  await expect(modal.locator('[name=clean]')).toHaveValue('60');await modal.locator('[name=clean]').fill('25');
-  await expect(modal.locator('[data-yield-result=inventory]')).toHaveText('2 kg');
-  await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();
+  await expect(page.getByRole('button',{name:'Configurar merma',exact:true})).toHaveCount(0);
+  await final.fill('1.5');
   await expect(initial).toHaveValue('2');await expect(final).toHaveValue('1.5');await expect(loss).toContainText('0,5 kg (25 %)');
-  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('15.000');
-  await final.fill('0');await expect(loss).toContainText('2 kg (100 %)');
-  await page.locator('[data-sheet-save]').click();await expect(page.locator('#costingStatus')).toContainText('Guardado local');
-  await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();await expect(final).toHaveValue('0');
-  await page.locator('[data-sheet-yield="0"]').click();await expect(modal.locator('[name=clean]')).toHaveValue('100');
-  await modal.locator('[name=clean]').fill('0');await modal.locator('[type=submit]').click();await expect(modal).not.toBeVisible();
-  await expect(final).toHaveValue('2');await expect(loss).toContainText('(0 %)');
+  await expect(page.locator('[data-sheet-line-cost="0"]')).toContainText('26.667');
+  await final.fill('0');await expect(page.locator('[data-sheet-save]')).toBeDisabled();
+  await final.fill('2');
+  await expect(final).toHaveValue('2');await expect(loss).toHaveText('Sin merma');
   await final.fill('3');await expect(page.locator('[data-sheet-save]')).toBeDisabled();
   await final.fill('1');await expect(page.locator('[data-sheet-save]')).toBeEnabled();
 });

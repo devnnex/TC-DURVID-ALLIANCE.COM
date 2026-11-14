@@ -6,7 +6,9 @@ La hoja de recetas de cafetería y coctelería conserva su distribución. La col
 
 Los dos pesos están expresados en la unidad seleccionada de la línea. El rendimiento es `final / inicial`, y la merma es `(1 - rendimiento) × 100`. El cálculo conserva los decimales internos.
 
-Se reutiliza el contrato existente `lines[].processing`: medir sustituye las etapas manuales por el porcentaje agregado, sin sumarlo a ellas. Este porcentaje se representa en el campo `clean` por compatibilidad con el motor y Oracle; no identifica físicamente la causa de la pérdida. No requiere migración ni instalación de paquetes SQL. La configuración manual sigue disponible.
+La merma se muestra automáticamente junto al ingrediente, sin botón para configurarla manualmente. Cuando los pesos coinciden se indica «Sin merma». Los resultados de merma y rendimiento se presentan con un máximo de dos decimales y los costos en pesos enteros; el guardado conserva la precisión de las cantidades originales.
+
+Se reutiliza el contrato existente `lines[].processing`: medir sustituye las etapas manuales por el porcentaje agregado, sin sumarlo a ellas. Este porcentaje se representa en el campo `clean` por compatibilidad con el motor y Oracle; no identifica físicamente la causa de la pérdida. No requiere migración ni instalación de paquetes SQL. Las configuraciones antiguas se conservan al cargar la receta y se sustituyen al cambiar los pesos.
 
 El peso inicial conserva la cantidad de referencia que ya utilizaba la receta. Para mantener el rendimiento y las porciones declaradas, el consumo equivalente y el costo se dividen por el rendimiento, igual que en la merma manual. Por ejemplo, una referencia de 200 g cuyo peso final es 160 g tiene rendimiento de 80 %: el cálculo exige 250 g de inventario para mantener esa cantidad de referencia. A $10.000/kg, la línea cuesta $2.500, o $1.250 por porción si la receta produce dos porciones. Los pesos sirven para medir el rendimiento; no registran por sí solos una salida física.
 
@@ -37,7 +39,7 @@ Los desgloses conservan su elección al reemplazar tarjetas durante una actualiz
 - `npm test`: costos, rendimiento, reservas, sincronización, autenticación y atribución de cobros.
 - `npm run build`: tipos, frontend, API, panel integrado y caché versionada.
 - `tests/browser/measured-yield-performance.spec.ts`: pesos, guardado, móvil, estrellas, atribución, capacidad compartida, desgloses y cola de ventas/comandas con 24 horas de antigüedad y respuesta perdida.
-- Pruebas de navegador existentes de merma manual, acceso, rendimiento, comandas y operación offline.
+- Pruebas de navegador de merma automática, redondeo, borradores, acceso, rendimiento, comandas y operación offline.
 
 La prueba de 24 horas envejece los registros persistidos; no espera un día real. Se conserva la cola existente: se guarda antes de confirmar localmente y solo se retira una operación al recibir su confirmación individual. Los conflictos permanecen visibles para revisión.
 
