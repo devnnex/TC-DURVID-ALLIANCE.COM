@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 for(const [status,message] of [[429,'Demasiados intentos. Intenta nuevamente mas tarde.'],[401,'Usuario o contrasena incorrectos.']] as const)test(`muestra el motivo real del rechazo de acceso: ${status}`,async({page})=>{
-  await page.context().route('**/ords/**',async route=>{
+  await page.context().route(/\/api\/v1\/(?:file\/)?rpc$/,async route=>{
     await route.fulfill({contentType:'application/json',body:JSON.stringify({status,data:{error:{message}}})});
   });
   await page.goto('/negocios/cocteleria/admin.html');

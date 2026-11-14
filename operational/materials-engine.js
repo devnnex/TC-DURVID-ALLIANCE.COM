@@ -23,6 +23,15 @@ globalThis.AllianceMaterialsEngine=(()=>{
     return [...demand].flatMap(([id,needed])=>{const i=state.operations.ingredients.find(i=>i.id===id);return !i||needed>i.quantity+1e-8?[{id,name:i?.name||'Insumo no disponible',unit:i?.unit||'',available:items.length?Math.max(0,(i?.quantity||0)-(held.get(id)||0)):i?.quantity||0,needed:round(items.length?needed-(held.get(id)||0):needed),missing:round(needed-(i?.quantity||0))}]:[];});}
   function guard(state,items=[],excludeSession,actor){if(actor)globalThis.AllianceProduction?.reconcile(state,actor);const missing=shortages(state,items,excludeSession);if(missing.length)fail('No alcanza '+missing.map(i=>i.name).join(', ')+'. Abastece la macro de insumos.','MATERIALS_INSUFFICIENT',missing);}
   function portions(state,product,held=reserved(state)){const r=state.operations.recipes.find(r=>r.productId===product&&r.managed);if(!r)return null;return Math.max(0,Math.floor(Math.min(...r.lines.filter(p=>p.quantity>0).map(p=>{const i=state.operations.ingredients.find(i=>i.id===p.ingredientId);return i&&!i.archived?(i.quantity-(held.get(i.id)||0))/E().convert(p.quantity,p.unit,i.unit,state.units):0;}))+1e-8));}
+  function cartReservations(state,items=[]){
+    const held=reserved(state);
+    for(const line of items){const recipe=state.operations.recipes.find(r=>r.managed&&r.productId===(line.productId||line.menu_item_id));if(!recipe||!Number.isFinite(line.quantity)||line.quantity<=0)continue;
+      for(const part of recipe.lines){const raw=state.operations.ingredients.find(i=>i.id===part.ingredientId);if(raw)held.set(raw.id,(held.get(raw.id)||0)+E().convert(part.quantity,part.unit,raw.unit,state.units)*line.quantity);}
+    }
+    return held;
+  }
+  const cartCapacity=(state,product,items=[])=>portions(state,product,cartReservations(state,items));
+  function cartCapacities(state,items=[]){const held=cartReservations(state,items);return new Map(state.operations.recipes.filter(r=>r.managed).map(r=>[r.productId,portions(state,r.productId,held)]));}
   function supplyNeeds(state,recipeId,parts,output,salePortions=1){
     const previous=state.operations.recipeSupplies?.find(r=>r.recipeId===recipeId),held=reserved(state);
     return parts.map(p=>{const raw=state.operations.ingredients.find(i=>i.id===p.ingredientId),quantity=round(E().convert(p.quantity,p.unit,raw.unit,state.units)*output/salePortions),covered=previous?.parts.find(i=>i.ingredientId===raw.id)?.quantity||0;return {ingredientId:raw.id,name:raw.name,unit:raw.unit,quantity,covered,missing:round(Math.max(0,quantity-Math.max(raw.quantity-(held.get(raw.id)||0),covered)))};});
@@ -87,5 +96,5 @@ globalThis.AllianceMaterialsEngine=(()=>{
       apply(state,{id:crypto.randomUUID(),command:'materials_link',payload:{productId:linked.productId,recipeId:linked.recipeId,revision:state.costing.revision,salePortions:linked.salePortions,mappings}},actor);
     }
   }
-  return {norm,base,stockSuggestion,reserved,shortages,guard,portions,supplyNeeds,apply,syncProcessing};
+  return {norm,base,stockSuggestion,reserved,shortages,guard,portions,cartCapacity,cartCapacities,supplyNeeds,apply,syncProcessing};
 })();

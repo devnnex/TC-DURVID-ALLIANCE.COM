@@ -6058,8 +6058,10 @@ const App = (() => {
     if (!dialog || !target || !state.activeAccountDetailId) return;
     const session = state.sessions.find((entry) => entry.id === state.activeAccountDetailId);
     if (!session) {
-      if (dialog.open) dialog.close();
-      state.activeAccountDetailId = "";
+      if(dialog.open&&!target.querySelector('[data-account-changed]')){
+        const message=document.createElement('p');message.dataset.accountChanged='';message.className='op-hint';message.setAttribute('role','status');message.textContent='Esta cuenta cambió o fue cerrada. Se conserva el último desglose que abriste para que puedas revisarlo.';target.prepend(message);
+        target.querySelectorAll('button').forEach(button=>{if(!button.hasAttribute('data-close-dialog'))button.disabled=true;});
+      }
       return;
     }
     const items = newestSessionItems(session);

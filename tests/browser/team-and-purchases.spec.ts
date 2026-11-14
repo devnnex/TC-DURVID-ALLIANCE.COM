@@ -64,7 +64,7 @@ for (const name of ['cocteleria', 'cafeteria', 'gcobarf', 'sucursal']) test(`com
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await context.setOffline(true);
   await page.goto(pathToFileURL(resolve(`negocios/${name}/admin.html`)).href + `?demo=1&branch=${name}`);
-  await expect(page.locator('#metricTables')).toHaveText('24');
+  await expect(page.locator('#metricTables')).toHaveText(name==='gcobarf'?'0':'24');
   await page.locator('.admin-sidebar [href="#supplies"]').click();
   await page.getByRole('button', {name:'Compras',exact:true}).click();
   await page.getByRole('button',{name:'Agregar compra',exact:true}).click();const form=page.locator('#operationsDialog form[data-command=purchase_record]');

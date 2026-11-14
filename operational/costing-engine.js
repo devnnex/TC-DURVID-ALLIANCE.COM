@@ -4,6 +4,14 @@ globalThis.AllianceCosting = (() => {
   const empty = () => ({settings:{monthlyUnits:null,monthlyMinutes:null,taxRate:0,taxMode:'included'},ingredients:[],expenses:[],channels:[],recipes:[]});
   const processingStates={stored:0,thawed:1,cleaned:3,cooked:7,'frozen-cleaned':2,'frozen-cooked':6};
   const processingDefaults=()=>({version:1,stockState:'stored',recipeState:'auto',thaw:0,clean:0,cook:0});
+  // Measured yield replaces the manual stages; it must never compound with them.
+  function processingFromWeights(initial,final){
+    initial=number(initial,'Peso inicial',0.000001);final=number(final,'Peso final',0.000001);
+    if(final>initial)throw new Error('El peso final no puede superar el peso inicial.');
+    const clean=(1-final/initial)*100;
+    if(clean>99.999999)throw new Error('El rendimiento es demasiado bajo. Revisa los pesos.');
+    return {...processingDefaults(),clean};
+  }
   function processingTarget(p){const from=processingStates[p.stockState];if(p.recipeState==='same')return from;if(p.recipeState!=='auto')return processingStates[p.recipeState];let to=from;for(const [key,bits]of [['thaw',1],['clean',3],['cook',7]])if(p[key]>0)to|=bits;return to;}
   function measuredFactor(line){const initial=number(line.initialQuantity,'Peso inicial',0.000001),final=number(line.quantity,'Peso final');if(final>initial)throw new Error('El peso final no puede superar el peso inicial.');return final/initial;}
   function processingFactor(line,manual=false){
@@ -122,5 +130,5 @@ globalThis.AllianceCosting = (() => {
       minimumTotal:minimum===null?null:minimum*factor,recommendedTotal:recommended===null?null:recommended*factor,
       belowMinimum:minimum!==null&&recipe.currentPrice!==null&&recipe.currentPrice!==''&&Number(recipe.currentPrice)<minimum};
   }
-  return {empty,units,convert,alignIngredientUnit,updateIngredient,ingredientCost,monthlyProduction,productionTotal,lineCost,productionLineCosts,productionType,productionName,lineQuantity,processingFactor,processingTarget,processingDefaults,processingStates,neutralizeLosses,calculate,priceGuide,validate};
+  return {empty,units,convert,alignIngredientUnit,updateIngredient,ingredientCost,monthlyProduction,productionTotal,lineCost,productionLineCosts,productionType,productionName,lineQuantity,processingFactor,processingFromWeights,processingTarget,processingDefaults,processingStates,neutralizeLosses,calculate,priceGuide,validate};
 })();
