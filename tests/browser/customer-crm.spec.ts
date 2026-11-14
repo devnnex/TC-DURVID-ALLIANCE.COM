@@ -1,3 +1,4 @@
+import {chooseWaiterTable,reviewWaiterOrder,closeWaiterSuccess} from './helpers/waiter-flow';
 import {test,expect} from '@playwright/test';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
@@ -30,11 +31,11 @@ for(const slug of ['cafeteria','cocteleria'])test(slug+': el mesero registra des
   });
   await page.goto('/index.html');await page.evaluate(async()=>{await navigator.serviceWorker.ready;});await page.goto('/negocios/'+slug+'/index.html');
   await page.locator('#loginForm [name=username]').fill('tester');await page.locator('#loginForm [name=pin]').fill('test-password');await page.locator('#loginForm [type=submit]').click();await expect(page.locator('#waiterApp')).toBeVisible();
-  await expect(page.locator('[data-product]').first()).toBeEnabled();await page.locator('[data-product]').first().click();await page.locator('#waiterTable').selectOption('table-0');
+  await chooseWaiterTable(page,'table-0');await expect(page.locator('[data-product]').first()).toBeEnabled();await page.locator('[data-product]').first().click();await reviewWaiterOrder(page);
   await page.locator('#waiterRegisterCustomer').check();await page.locator('#waiterCustomerName').fill('Daniel Cliente');await page.locator('#waiterCustomerPhone').fill('3019876543');await page.locator('#waiterCustomerBirthday').fill('1995-11-14');
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.locator('.waiter-customer-registration').screenshot({path:'test-results/waiter-crm-'+slug+'.png'});
   await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().lastSync)).not.toBeNull();await context.setOffline(true);
-  await page.locator('#sendWaiterOrder').click();await expect(page.locator('#waiterStatus')).toContainText('registro guardados');await expect(page.locator('#waiterRegisterCustomer')).not.toBeChecked();await expect(page.locator('#waiterCustomerFields')).toBeHidden();expect(server.state.operations.customers).toHaveLength(0);
+  await page.locator('#sendWaiterOrder').click();await expect(page.locator('#waiterSuccessDialog')).toContainText('Comanda guardada');await closeWaiterSuccess(page);await expect(page.locator('#waiterStatus')).toContainText('registro guardados');await expect(page.locator('#waiterRegisterCustomer')).not.toBeChecked();await expect(page.locator('#waiterCustomerFields')).toBeHidden();expect(server.state.operations.customers).toHaveLength(0);
   await page.reload();await expect(page.locator('#waiterApp')).toBeVisible();await expect(page.locator('#waiterSent')).toContainText('Daniel Cliente');
   const denied=await page.evaluate(async()=>{try{await (window as any).OracleDb.remote('operations_apply',{id:crypto.randomUUID(),command:'customer_crm_save',payload:{id:'forbidden',revision:0,name:'Otro',phone:'3001112233',birthDate:'1990-01-01',contactConsent:true,active:true}});return '';}catch(error){return (error as Error).message;}});expect(denied).toContain('permiso');
   await context.setOffline(false);await page.evaluate(()=>(window as any).AllianceOffline.flush());await expect.poll(()=>server.counts().ackLost).toBe(true);await page.evaluate(()=>(window as any).AllianceOffline.flush());await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending),{timeout:30000}).toBe(0);

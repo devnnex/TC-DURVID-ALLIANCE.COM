@@ -4,8 +4,12 @@
 
 1. Abre el portal principal y elige **Mesero · Tomar pedidos**.
 2. Selecciona el negocio donde trabajarás e inicia sesión con tu cuenta. El jefe debe asignarte acceso y permiso para registrar consumos.
-3. Elige la mesa, toca los productos y ajusta sus cantidades. Añade observaciones si hacen falta.
-4. Pulsa **Enviar comanda a Inicio**. Puedes seguir su estado en Mis últimas comandas.
+3. En Coctelería y Cafetería, el recorrido tiene tres pasos: **Mesa**, **Productos y cantidades**, **Revisar y enviar**. Las mesas libres aparecen en verde y las que tienen una cuenta abierta muestran su consumo. Los botones **− / +** y la entrada manual respetan la capacidad de los insumos compartidos. El borrador conserva mesa, cantidades, notas, cliente autorizado y paso actual al recargar.
+4. En revisión, añade observaciones y, si el cliente lo autoriza, sus datos. Pulsa **Enviar comanda**. Una confirmación animada permite elegir otra mesa o agregar más consumo a la misma. El mesero permanece en su pantalla de pedidos. Puedes seguir el estado en Mis últimas comandas.
+
+Sin internet, la confirmación indica **Comanda guardada**; solo cambia a enviada cuando Oracle confirma ese identificador. Una operación que requiere revisión conserva sus datos y muestra el aviso correspondiente. Los otros tipos de negocio conservan su formulario de pedidos.
+
+Los enlaces directos, cambios de sección, accesos por QR y permisos actualizados usan la misma validación. Una sección no autorizada dirige a la primera disponible; una lista de permisos inválida no habilita Inicio por defecto. El acceso a la cuenta propia sigue disponible sin conceder administración de otros usuarios.
 
 Cada sucursal tiene su pantalla de pedidos. La plantilla de sucursales adicionales conserva el parámetro branch al pasar entre el panel y la vista del mesero. Una cuenta no puede enviar pedidos a una sucursal que no tenga asignada. Los datos de demostración se guardan aparte de Oracle.
 

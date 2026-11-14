@@ -38,5 +38,7 @@ Para trabajar sin internet y poder reabrir la aplicación usa Live Server en loc
 
 La implementación alternativa de /admin/ con Dexie conserva sus pruebas de catálogo; la operación multisucursal descrita aquí corresponde a los paneles conectados a Oracle ORDS.
 
+La interfaz del mesero y su nuevo recorrido por pasos se preparan también en el caché público. El indicador de conexión está disponible tanto en el panel administrativo como al tomar pedidos. La confirmación de envío consulta la operación concreta, sin confundirla con otros registros pendientes. Las pruebas cubren los cuatro sistemas: crear una comanda, aceptarla y cobrarla con propina sin conexión, cerrar la página, reabrirla y reconectar con una confirmación perdida, conservando el orden y una sola venta.
+
 
 Inicio y la vista del mesero comprueban además una versión breve de las comandas cada dos segundos mientras están visibles y conectados. Cuando cambia, descargan la sucursal actualizada. Las consultas de versión no generan visitas ni eventos de auditoría, y no descargan historiales completos si los pedidos siguen iguales. Los pedidos creados sin conexión llegan a otros dispositivos solamente al enviarse; se conservan los cambios de cuenta o precio para revisión. [Comandas](orders.md).

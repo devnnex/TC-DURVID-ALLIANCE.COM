@@ -641,17 +641,21 @@ const App = (() => {
   const isBoss = (user = state.currentUser) => user?.role === "boss";
   const isWaiter = (user = state.currentUser) => user?.role === "waiter";
   const roleLabel = (role) => ({ boss: "Jefe", admin: "Administrador", worker:"Trabajador", waiter: "Mesero",kitchen:"Cocina" }[role] || "Usuario");
+  const sectionReadPermission={dashboard:'home.read',service:'service.read',accounts:'accounts.read',tips:'sales.read',inventory:'inventory.read',costing:'inventory.read',movements:'movements.read',income:'sales.read',assistant:'assistant.read',menu:'tables.manage',brand:'brand.manage',users:'administration.manage',supplies:'supplies.read',kitchen:'kitchen.read',customers:'customers.read',cash:'cash.read'};
   const normalizedUserPermissions = (user = state.currentUser) => {
-    
-    
-    const sections=Array.isArray(user?.permissions)?[...new Set(user.permissions.filter((section) => [...ADMIN_SECTION_KEYS,"users"].includes(section)))]:[...ADMIN_SECTION_KEYS];
-    return personsOnly()?sections.filter(section=>!["service","accounts","menu"].includes(section)):sections;
+    if(!user||!Array.isArray(user.permissions))return [];
+    const live=OracleDb.user();if(!live||live.id!==user.id)return [];
+    const sections=[...new Set(user.permissions)].filter(section=>[...ADMIN_SECTION_KEYS,'users'].includes(section)&&document.querySelector('[data-admin-section="'+section+'"]')&&(section!=='tips'||tipsEnabled()));
+    // Own-account access is universal; it never grants access to managing other users.
+    const allowed=OracleDb.isDemo?sections:sections.filter(section=>section==='users'||OracleDb.permission(sectionReadPermission[section]));
+    return personsOnly()?allowed.filter(section=>!['service','accounts','menu'].includes(section)):allowed;
   };
   const canAccessAdminSection = (section, user = state.currentUser) => normalizedUserPermissions(user).includes(section);
-  const firstAllowedAdminSection = (user = state.currentUser) => normalizedUserPermissions(user)[0] || "service";
+  const firstAllowedAdminSection = (user = state.currentUser) => normalizedUserPermissions(user)[0] || null;
   const canDeleteRecords = () => isBoss();
 
   const syncAdminSectionAccess = () => {
+    $$('[data-admin-section].section-active').forEach(panel=>{if(!canAccessAdminSection(panel.dataset.adminSection))panel.classList.remove('section-active');});
     $$(".admin-sidebar nav a").forEach((link) => {
       const section = link.getAttribute("href")?.replace("#", "") || "";
       link.hidden = !canAccessAdminSection(section) || (link.hasAttribute("data-tip-feature") && !tipsEnabled());
@@ -681,6 +685,15 @@ const App = (() => {
     syncAdminSectionAccess();
     if (section === "tips" && !tipsEnabled()) section = canAccessAdminSection("accounts") ? "accounts" : firstAllowedAdminSection();
     if (!canAccessAdminSection(section)) section = firstAllowedAdminSection();
+    let notice=$('#adminAccessNotice');
+    if(!section){
+      ++state.adminSectionSwitchToken;window.cancelAnimationFrame(state.adminSectionSwitchFrame);window.clearTimeout(state.adminSectionSwitchTimer);state.activeAdminSection=null;
+      $$('[data-admin-section]').forEach(el=>el.classList.remove('section-active'));$$('.admin-sidebar nav a').forEach(link=>{link.classList.remove('active');link.removeAttribute('aria-current');});
+      if(!notice){notice=document.createElement('section');notice.id='adminAccessNotice';notice.className='panel';notice.setAttribute('role','status');notice.innerHTML='<div class="section-head"><div><h2>Sin secciones disponibles</h2><p>Pide al responsable que revise los accesos de tu usuario.</p></div></div>';$('.admin-app')?.append(notice);}
+      notice.hidden=false;notice.classList.add('section-active');const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);return;
+    }
+    if(notice){notice.hidden=true;notice.classList.remove('section-active');}
+    if(location.hash!=='#'+section){const clean=new URL(location.href);clean.hash=section;history.replaceState(null,'',clean);}
     window.AllianceForms?.flush?.();
     if(state.currentUser) void OracleDb.trackSection?.(section)?.catch(()=>{});
     state.activeAdminSection = section;
@@ -701,6 +714,7 @@ const App = (() => {
       if (state.activeAdminSection !== section || switchToken !== state.adminSectionSwitchToken) return;
       state.adminSectionSwitchTimer = window.setTimeout(() => {
         if (state.activeAdminSection !== section || switchToken !== state.adminSectionSwitchToken) return;
+        if(!canAccessAdminSection(section)){showAdminSection(firstAllowedAdminSection());return;}
         window.OperationsPanel?.open(section);
         if (section === "dashboard") {
           renderAlerts();
@@ -9274,11 +9288,13 @@ const App = (() => {
   };
 
   const openScannedTable = async (value) => {
+    if(!canAccessAdminSection('service')){toast('No tienes acceso a atender mesas en este negocio.','error','scan-section-denied');return;}
     let table = tableFromScannedValue(value);
     if (!table) {
       await loadCore();
       table = tableFromScannedValue(value);
     }
+    if(!canAccessAdminSection('service'))return;
     if (!table) {
       toast("No se encontro la mesa seleccionada. Actualiza la pagina e intenta de nuevo.", "error", "unknown-service-table");
       return;
@@ -10021,8 +10037,8 @@ const App = (() => {
     if (pendingScan) {
       const cleanUrl = new URL(location.href);
       cleanUrl.searchParams.delete("scan");
-      history.replaceState(null, "", `${cleanUrl.pathname}${cleanUrl.search}#service`);
-      await openScannedTable(pendingScan);
+      history.replaceState(null, "", `${cleanUrl.pathname}${cleanUrl.search}${state.activeAdminSection?'#'+state.activeAdminSection:''}`);
+      if(canAccessAdminSection('service'))await openScannedTable(pendingScan);else toast('No tienes acceso a atender mesas en este negocio.','error','scan-section-denied');
     }
     // El shell queda visible al instante; el snapshot pesado llega sin bloquear la interfaz.
     void refreshAdminNow();

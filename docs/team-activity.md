@@ -14,6 +14,12 @@ El costeo muestra quién lo guardó por última vez; cada producto aprobado mues
 
 La demostración conserva su seguimiento en este dispositivo, separado de Oracle, con un límite de 500 entradas. Las acciones de práctica no se registran como cambios reales.
 
+## Progreso y propinas de meseros
+
+El rendimiento muestra una fila recogida por mesero con sus ventas cobradas y las propinas recibidas. Al desplegarla aparecen los contadores, estrellas de cierre y el desglose de cada comanda y cobro. Actualizar los datos no recoge un detalle que el usuario haya abierto.
+
+Los cobros corresponden al autor original de la comanda, aunque cobre otra persona. Si varios meseros atienden una mesa, las ventas y la propina aceptada se atribuyen según el valor de los consumos de sus comandas, conservando los centavos. Se excluyen anulaciones y crédito pendiente; los abonos cuentan en su fecha real. Las propinas aparecen separadas de las ventas y no representan el reparto entre empleados calculado en Propinas. Un reintento del mismo cobro no vuelve a sumarlas.
+
 ## Instalación desde el portal
 
 Abrir `index.html` mediante Live Server o el enlace HTTPS de GitHub Pages. El portal ofrece **Instalar Alliance** cuando el navegador admite esa opción. En iPhone o iPad se usa **Compartir → Agregar a inicio**. La aplicación instalada inicia en la elección de negocios y permite recorrer los accesos y paneles.
