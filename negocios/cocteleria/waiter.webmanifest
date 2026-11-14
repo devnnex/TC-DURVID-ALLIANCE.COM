@@ -1,0 +1,27 @@
+{
+  "id": "./index.html",
+  "name": "Jespresso Olivia Coctelería · Meseros",
+  "short_name": "Mesero Jespresso",
+  "description": "Mesas y comandas · Vista del mesero",
+  "lang": "es-CO",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#c99a50",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "../../assets/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "../../assets/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -74,9 +74,11 @@ globalThis.WaiterFlow=(()=>{
     document.addEventListener('alliance-sync-status',()=>void checkConfirmation());window.addEventListener('online',()=>void checkConfirmation());window.addEventListener('offline',()=>void checkConfirmation());
     dialog.addEventListener('click',event=>{const button=event.target.closest('[data-success-next]');if(!button)return;const repeat=button.dataset.successNext==='same';dialog.close();if(repeat&&available().some(t=>t.id===lastTable)){tableSelect.value=lastTable;tableSelect.dispatchEvent(new Event('change',{bubbles:true}));show(2);}else show(1);});
     dialog.addEventListener('close',()=>{sentInfo=null;});
-    function sent(info){lastTable=info.tableId;sentInfo=info;tableSelect.value='';show(1,true,true);dialog.querySelector('[data-waiter-success-table]').textContent=info.tableName;dialog.querySelector('[data-success-next=same]').textContent='Agregar más a '+info.tableName;dialog.showModal();confirmation(info.queued?'pending':'confirmed');void checkConfirmation();}
+    function sending(info){sentInfo=null;dialog.dataset.state='sending';dialog.querySelector('#waiterSuccessTitle').textContent='Preparando tu comanda';dialog.querySelector('[data-waiter-success-message]').textContent='Guardando los productos y sus cantidades para el equipo.';dialog.querySelector('[data-waiter-success-table]').textContent=info.tableName;dialog.querySelector('.waiter-success-actions').hidden=true;if(!dialog.open)dialog.showModal();}
+    function failed(){dialog.close();}
+    function sent(info){lastTable=info.tableId;sentInfo=info;tableSelect.value='';show(1,true,true);dialog.querySelector('.waiter-success-actions').hidden=false;dialog.querySelector('[data-waiter-success-table]').textContent=info.tableName;dialog.querySelector('[data-success-next=same]').textContent='Agregar más a '+info.tableName;if(!dialog.open)dialog.showModal();confirmation(info.queued?'pending':'confirmed');void checkConfirmation();}
     function restore(){let draft;try{draft=JSON.parse(localStorage.getItem(getData().draftKey)||'null');}catch{}show(selected()&&(getData().cart.length||new URL(location.href).searchParams.has('mesa'))?(draft?.flowStep===3?3:2):1,false,true);}
-    show(1,false,true);return {get step(){return step;},update,restore,review:()=>show(3),sent};
+    show(1,false,true);return {get step(){return step;},update,restore,review:()=>show(3),sending,failed,sent};
   }
   return {amount,adjustQuantity,tableStates,create};
 })();

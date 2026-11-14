@@ -1,11 +1,25 @@
 import {test,expect,type Page} from '@playwright/test';
 import {backend,branch,product,user} from './helpers/operational-backend';
 import {chooseWaiterTable,reviewWaiterOrder} from './helpers/waiter-flow';
+import {ready} from './helpers/operational-backend';
 async function login(page:Page,slug:string,view='admin.html#dashboard'){
  await page.goto('/index.html');await page.evaluate(async()=>{await navigator.serviceWorker.ready;});const target=new URL('/negocios/'+slug+'/'+view,page.url());target.searchParams.set('branch',slug);await page.goto(target.href);
  await page.locator('#loginForm [name=username]').fill('tester');await page.locator('#loginForm [name=pin]').fill('test-password');await page.locator('#loginForm [type=submit]').click();
  await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline?.status().lastSync)).not.toBeNull();
 }
+for(const slug of ['cocteleria','cafeteria'])test(slug+': admin abierto y PWA de mesero permanecen en sus interfaces al enviar',async({page,context})=>{
+ const server=await backend(page);server.context.locations[0].slug=slug;await ready(page,'',slug);const adminUrl=page.url();
+ server.context.is_owner=false;server.context.permissions[branch]=['products.read','service.read','service.write'];
+ const waiter=await context.newPage();await waiter.emulateMedia({reducedMotion:'reduce'});await waiter.goto('/negocios/'+slug+'/index.html?branch='+slug);
+ await expect(waiter.locator('#waiterApp')).toBeVisible();
+ const manifestHref=await waiter.locator('link[rel=manifest]').getAttribute('href');expect(manifestHref).toBe('waiter.webmanifest');
+ const waiterManifest=await (await waiter.request.get('/negocios/'+slug+'/'+manifestHref)).json();const adminManifest=await(await waiter.request.get('/negocios/'+slug+'/manifest.webmanifest')).json();
+ expect(waiterManifest.id).not.toBe(adminManifest.id);expect(waiterManifest.start_url).toBe('./index.html');expect(adminManifest.start_url).toBe('./admin.html');
+ await expect(waiter.locator('#waiterPanelLink')).toBeHidden();await chooseWaiterTable(waiter,'table-0');await waiter.locator('[data-product]').first().click();await reviewWaiterOrder(waiter);await waiter.locator('#sendWaiterOrder').click();
+ await expect(waiter.locator('#waiterSuccessDialog')).toBeVisible();await expect(waiter.locator('#waiterSuccessDialog')).toContainText('¡Comanda enviada!',{timeout:15000});await waiter.locator('[data-success-next=tables]').click();
+ await expect(waiter.locator('#waiterTablesStep')).toBeVisible();await expect(waiter.locator('.admin-sidebar')).toHaveCount(0);expect(new URL(waiter.url()).pathname).toBe('/negocios/'+slug+'/index.html');expect(page.url()).toBe(adminUrl);
+ await waiter.reload();await expect(waiter.locator('#waiterTablesStep')).toBeVisible();await waiter.close();
+});
 for(const slug of ['cafeteria','cocteleria'])test(slug+': mesa primero, cantidades, revisión persistente y confirmación sin salir del mesero',async({page})=>{
  const server=await backend(page);server.context.locations[0].slug=slug;server.context.is_owner=false;server.context.permissions[branch]=['products.read','service.read','service.write'];
  server.state.docs.table_sessions=[{id:'open',table_id:'table-2',status:'open'}];server.state.docs.session_items=[{id:'l',session_id:'open',quantity:1,unit_price:49098,status:'served'},{id:'cancelled',session_id:'open',quantity:1,unit_price:10000,status:'cancelled'}];
