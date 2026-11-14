@@ -91,9 +91,9 @@ if (window.BRANCH_CONFIG?.slug && window.BRANCH_CONFIG.slug!=='gcobarf') window.
   }
   document.addEventListener('alliance-materials-updated',stockIndicators);
   function finalWeight(line){try{return Number((line.quantity*E.processingFactor(line)).toPrecision(15));}catch{return '';}}
-  function yieldIndicators(){for(const [index,line] of current().lines.entries()){
+  function yieldIndicators(){const lossOnly=['cafeteria','cocteleria'].includes(BRANCH_CONFIG.slug);for(const [index,line] of current().lines.entries()){
     const field=root().querySelector('[data-j-final="'+index+'"]'),badge=root().querySelector('[data-j-yield-badge="'+index+'"]');
-    if(!badge)continue;try{const factor=E.processingFactor(line);badge.hidden=!model.ingredients.find(i=>i.id===line.ingredientId)?.name?.trim();badge.textContent=factor>=1?'Sin merma':'Merma '+((1-factor)*100).toLocaleString('es-CO',{maximumFractionDigits:2})+' %';badge.title='Rendimiento '+(factor*100).toLocaleString('es-CO',{maximumFractionDigits:2})+' %. Se calcula automáticamente con el peso inicial y final.';
+    if(!badge)continue;try{const factor=E.processingFactor(line);badge.hidden=!model.ingredients.find(i=>i.id===line.ingredientId)?.name?.trim()||(lossOnly&&factor>=1);badge.textContent=factor>=1?(lossOnly?'':'Sin merma'):(lossOnly?'Merma: ':'Merma ')+((1-factor)*100).toLocaleString('es-CO',{maximumFractionDigits:2})+' %';badge.title='Rendimiento '+(factor*100).toLocaleString('es-CO',{maximumFractionDigits:2})+' %. Se calcula automáticamente con el peso inicial y final.';
       if(field&&document.activeElement!==field&&field.getAttribute('aria-invalid')!=='true')field.value=finalWeight(line);
     }catch{badge.hidden=true;}
   }}

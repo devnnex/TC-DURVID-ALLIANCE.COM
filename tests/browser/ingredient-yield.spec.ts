@@ -27,8 +27,9 @@ for(const branch of ['gcobarf','cocteleria','cafeteria','sucursal'])test(branch+
   await expect(page.getByRole('button',{name:'Configurar merma',exact:true})).toHaveCount(0);
   const weight=page.locator(branch==='gcobarf'?'[data-sheet-final-weight="0"]':'[data-j-final="0"]');
   const loss=page.locator(branch==='gcobarf'?'[data-sheet-loss="0"]':'[data-j-yield-badge="0"]');
-  await expect(loss).toHaveText('Sin merma');await weight.fill('71.234567');
-  await expect(loss).toHaveText(branch==='gcobarf'?'Merma: 3,77 kg (5,02 %)':'Merma 5,02 %');
+  const lossOnly=['cafeteria','cocteleria'].includes(branch);
+  await expect(loss).toHaveText(lossOnly?'':'Sin merma');if(lossOnly)await expect(loss).toBeHidden();await weight.fill('71.234567');
+  await expect(loss).toBeVisible();await expect(loss).toHaveText(branch==='gcobarf'?'Merma: 3,77 kg (5,02 %)':lossOnly?'Merma: 5,02 %':'Merma 5,02 %');
   if(branch==='gcobarf')await expect(loss.locator('..')).toHaveClass('cost-ingredient-cell');
   await page.locator(branch==='gcobarf'?'[data-sheet-save]':'#costingSave').click();
   await expect(page.locator('#costingStatus')).toContainText(branch==='gcobarf'?'Guardado local':'Receta guardada');
@@ -36,7 +37,7 @@ for(const branch of ['gcobarf','cocteleria','cafeteria','sucursal'])test(branch+
   if(branch==='gcobarf'){expect(stored.quantity).toBe(71.234567);expect(stored.initialQuantity).toBe(75);}
   else expect(stored.processing.clean).toBeCloseTo((1-71.234567/75)*100,10);
   await page.reload();await expect(loss).toContainText('5,02 %');
-  await weight.fill('75');await expect(loss).toHaveText('Sin merma');
+  await weight.fill('75');await expect(loss).toHaveText(lossOnly?'':'Sin merma');if(lossOnly)await expect(loss).toBeHidden();
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
