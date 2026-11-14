@@ -1,4 +1,12 @@
 /* Scoped to the Jespresso recipe worksheet; the first business is unchanged. */
+/* Give the unit name and native select arrow room at every worksheet width. */
+.jr-readable-units .jr-ingredients .jr-unit-col{width:17%}
+.jr-readable-units .jr-ingredients .jr-price-col{width:17%}
+.jr-readable-units .jr-ingredients .jr-total-col{width:12%}
+.jr-readable-units .jr-ingredients th:nth-child(4),.jr-readable-units .jr-ingredients td:nth-child(4){white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.jr-readable-units .jr-ingredients td:nth-child(4) select{white-space:nowrap;padding-inline:4px}
+.jr-readable-units .jr-package-label{white-space:nowrap;overflow-wrap:normal}
+.jr-readable-units .jr-package-label input{flex:1 1 0;min-width:0}
 .jr-ingredients td.jr-stock-insufficient{background:#fff0ed;box-shadow:inset 0 0 0 2px #d4775e;animation:jr-stock-pulse 2s ease-in-out infinite}
 .jr-ingredients .jr-stock-warning{margin:7px 0;padding:8px;border:1px solid #e4aa98;border-radius:6px;background:#fff8f4;color:#8c2f1e;font-size:12px;line-height:1.5;font-weight:650;text-align:left}
 .jr-ingredients .jr-stock-warning[hidden]{display:none}

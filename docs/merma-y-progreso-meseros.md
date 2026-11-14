@@ -16,6 +16,8 @@ El badge identifica la merma en el ingrediente. La exportación de Excel incluye
 
 En coctelería y cafetería, la celda del ingrediente parpadea suavemente cuando las existencias disponibles no alcanzan para la receta. El aviso permanece visible con el disponible, lo necesario, lo faltante y la indicación de abastecer. Compara unidades equivalentes, suma las filas que usan el mismo insumo, incluye la merma y las adiciones por cada porción y descuenta lo reservado en cuentas abiertas. Se actualiza al seleccionar un ingrediente, editar cantidades o recibir nuevas existencias, sin descontar inventario por consultar el costeo. Con movimiento reducido conserva el aviso y el resaltado sin animación.
 
+La columna de unidades dispone de más espacio a costa de precio/compra e importe, para mostrar «Unidades» y «unidades» completas. La flecha abre el selector con los datos disponibles sin esperar a la red y actualiza las opciones en segundo plano. Otro clic en la flecha, un clic afuera o Escape lo cierran; una respuesta tardía no vuelve a abrirlo. Las actualizaciones conservan el texto de búsqueda y utilizan los datos más recientes al seleccionar.
+
 Guardar sigue usando la revisión y protección contra cambios de recetas con cuentas abiertas. El vínculo de inventario utiliza el mismo consumo equivalente en navegador y servidor, incluyendo reservas, porciones y adiciones. No hay un segundo descuento por introducir los pesos.
 
 ## Comandas y dinero cobrado
