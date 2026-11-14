@@ -70,12 +70,12 @@ for (const name of ['cocteleria', 'cafeteria', 'gcobarf', 'sucursal']) test(`com
   await page.getByRole('button',{name:'Agregar compra',exact:true}).click();const form=page.locator('#operationsDialog form[data-command=purchase_record]');
   await expect(form).toBeVisible();
   await expect(form.locator('input:not([type=hidden])')).toHaveCount(3);
-  await expect(form.locator('select')).toHaveCount(0);
+  await expect(form.locator('select')).toHaveCount(1);
   await expect(page.locator('#supplies')).not.toContainText('Primero registra');
   await form.getByRole('button',{name:'Guardar compra'}).click();
   await expect(form.locator('[name=name]')).toBeFocused();
   await form.locator('[name=name]').fill('Cerveza');
-  await form.locator('[name=quantity]').fill('30');
+  await form.locator('[name=unit]').selectOption('u');await form.locator('[name=quantity]').fill('30');
   await form.locator('[name=total]').fill('62000');
   await expect(form.locator('[name=total]')).toHaveValue('$62.000');
   await expect(form.locator('.op-direct-cost')).toContainText('$2.067');
@@ -84,7 +84,7 @@ for (const name of ['cocteleria', 'cafeteria', 'gcobarf', 'sucursal']) test(`com
   await expect(form.locator('.op-direct-cost')).toContainText('$2.000');
   await form.locator('[name=quantity]').fill('0');
   await expect(form.locator('.op-direct-cost')).toContainText('Completa');
-  await form.locator('[name=quantity]').fill('30');
+  await form.locator('[name=unit]').selectOption('u');await form.locator('[name=quantity]').fill('30');
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   if(name==='cocteleria')await page.screenshot({path:'test-results/direct-purchase-mobile.png',fullPage:true});
@@ -105,7 +105,7 @@ test('compra directa autenticada sin conexión se confirma una sola vez',async({
   const server=await backend(page);await ready(page);await context.setOffline(true);
   await page.locator('.admin-sidebar [href="#supplies"]').click();await page.getByRole('button',{name:'Compras',exact:true}).click();
   await page.getByRole('button',{name:'Agregar compra',exact:true}).click();const form=page.locator('#operationsDialog form[data-command=purchase_record]');
-  await form.locator('[name=name]').fill('Cerveza');await form.locator('[name=quantity]').fill('30');await form.locator('[name=total]').fill('62000');
+  await form.locator('[name=name]').fill('Cerveza');await form.locator('[name=unit]').selectOption('u');await form.locator('[name=quantity]').fill('30');await form.locator('[name=total]').fill('62000');
   await form.getByRole('button',{name:'Guardar compra'}).click();await expect(page.locator('#operationsDialog')).toBeHidden();
   await expect(page.locator('#supplies .op-records')).toContainText('$2.067');
   await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending)).toBeGreaterThan(0);

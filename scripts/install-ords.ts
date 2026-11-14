@@ -1,7 +1,7 @@
 import { readFile,writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { executeSql } from './ords-sql.js';
-const files=['008_ords_schema.sql','009_operational_schema.sql','010_activity_schema.sql','011_operations_schema.sql','012_offline_review_schema.sql','013_fast_auth_schema.sql','014_team_roles.sql','015_flexible_usernames.sql','security.sql','auth_proof.sql','activity.sql','ingredient_yield.sql','materials_spec.sql','production_spec.sql','pos_store.sql','operations.sql','production.sql','customer_crm.sql','orders.sql','customer_schedule.sql','operations_commands.sql','operations_sales.sql','customer_payments.sql','pos_sales.sql','jespresso.sql','costing.sql','materials.sql','pos_api.sql','pos_batch.sql','administration.sql','catalog.sql','gcobarf_orders.sql','api.sql','publish.sql'];
+const files=['008_ords_schema.sql','009_operational_schema.sql','010_activity_schema.sql','011_operations_schema.sql','012_offline_review_schema.sql','013_fast_auth_schema.sql','014_team_roles.sql','015_flexible_usernames.sql','016_receipt_storage.sql','security.sql','auth_proof.sql','activity.sql','ingredient_yield.sql','materials_spec.sql','production_spec.sql','pos_store.sql','operations.sql','production.sql','customer_crm.sql','orders.sql','customer_schedule.sql','operations_commands.sql','operations_sales.sql','customer_payments.sql','pos_sales.sql','jespresso.sql','costing.sql','materials.sql','pos_api.sql','pos_batch.sql','administration.sql','catalog.sql','gcobarf_orders.sql','api.sql','publish.sql'];
 const root=new URL('../database/ords/',import.meta.url);
 const pieces:string[]=[],publishPieces:string[]=[];
 for(const name of files){

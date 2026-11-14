@@ -45,7 +45,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
   END;
   FUNCTION dispatch(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     action_value VARCHAR2(50):=p_body.get_string('action');payload JSON_OBJECT_T:=p_body.get_object('payload');r JSON_OBJECT_T:=JSON_OBJECT_T();q JSON_OBJECT_T;value_json JSON_OBJECT_T;arr JSON_ARRAY_T;out_json JSON_ARRAY_T;row_json JSON_OBJECT_T;filters JSON_ARRAY_T;f JSON_OBJECT_T;
-    job_id VARCHAR2(160):=p_body.get_string('operation_id');digest VARCHAR2(64);saved_hash VARCHAR2(64);saved_user VARCHAR2(36);saved_value CLOB;save_value CLOB;id_value VARCHAR2(80);table_value VARCHAR2(80);code_value VARCHAR2(64);n NUMBER;permission_value VARCHAR2(32767);is_write BOOLEAN:=FALSE;
+    job_id VARCHAR2(160):=p_body.get_string('operation_id');digest VARCHAR2(64);saved_hash VARCHAR2(64);saved_user VARCHAR2(36);saved_value CLOB;save_value CLOB;saved_compressed BLOB;compressed_value BLOB;id_value VARCHAR2(80);table_value VARCHAR2(80);code_value VARCHAR2(64);n NUMBER;permission_value VARCHAR2(32767);is_write BOOLEAN:=FALSE;
   BEGIN
     alliance_security.keys_only(p_body,'action,payload,operation_id,device_id,client_created_at');IF payload IS NULL THEN payload:=JSON_OBJECT_T();END IF;
     alliance_activity.client_context(p_body.get_string('device_id'),p_body.get_string('client_created_at'));
@@ -61,8 +61,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
       IF job_id IS NOT NULL THEN
         IF LENGTH(job_id)>160 THEN alliance_security.fail(400,'INVALID_INPUT','Operacion invalida.');END IF;
         save_value:=p_body.to_clob;digest:=LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(save_value,DBMS_CRYPTO.HASH_SH256)));
-        BEGIN SELECT fingerprint,actor_user_id,result_json INTO saved_hash,saved_user,saved_value FROM alliance_pos_receipts WHERE business_id=p_business AND location_id=p_location AND id=job_id;
-          IF saved_hash<>digest OR saved_user<>p_user THEN alliance_security.fail(409,'IDEMPOTENCY_REUSE','La operacion ya se uso con otros datos.');END IF;RETURN JSON_OBJECT_T(saved_value);
+        BEGIN SELECT fingerprint,actor_user_id,result_json,result_compressed INTO saved_hash,saved_user,saved_value,saved_compressed FROM alliance_pos_receipts WHERE business_id=p_business AND location_id=p_location AND id=job_id;
+          IF saved_hash<>digest OR saved_user<>p_user THEN alliance_security.fail(409,'IDEMPOTENCY_REUSE','La operacion ya se uso con otros datos.');END IF;RETURN JSON_OBJECT_T(alliance_receipt_storage.expand_result(saved_value,saved_compressed));
         EXCEPTION WHEN NO_DATA_FOUND THEN NULL;END;
       END IF;
     END IF;
@@ -111,7 +111,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     ELSE alliance_security.fail(404,'NOT_FOUND','Accion no disponible.');END IF;
     IF is_write AND action_value<>'operations_apply' THEN alliance_activity.pos_event(p_user,p_business,p_location,action_value,payload);END IF;
     IF is_write THEN alliance_pos_store.put_document(p_business,p_location,'op_reportsync','primary',JSON_OBJECT_T('{}'));END IF;
-    IF is_write AND job_id IS NOT NULL THEN save_value:=r.to_clob;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json)VALUES(p_business,p_location,job_id,p_user,digest,save_value);END IF;RETURN r;
+    IF is_write AND job_id IS NOT NULL THEN save_value:=r.to_clob;compressed_value:=alliance_receipt_storage.compress_result(save_value);IF compressed_value IS NOT NULL THEN save_value:='{"codec":"gzip-v1"}';END IF;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json,result_compressed)VALUES(p_business,p_location,job_id,p_user,digest,save_value,compressed_value);IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;END IF;RETURN r;
   END;
   FUNCTION public_dispatch(p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     r JSON_OBJECT_T:=JSON_OBJECT_T();payload JSON_OBJECT_T:=p_body.get_object('payload');action_value VARCHAR2(50):=p_body.get_string('action');business_value VARCHAR2(36);location_value VARCHAR2(36);table_id_value VARCHAR2(80);table_json CLOB;table_object JSON_OBJECT_T;arr JSON_ARRAY_T;out_json JSON_ARRAY_T;row_json JSON_OBJECT_T;session_object JSON_OBJECT_T;id_value VARCHAR2(80);body_value VARCHAR2(600);business_slug_value VARCHAR2(80);branch_slug_value VARCHAR2(80);table_code_value VARCHAR2(64);request_object JSON_OBJECT_T;entry JSON_OBJECT_T;product_object JSON_OBJECT_T;duplicate BOOLEAN;

@@ -1,0 +1,54 @@
+import {test,expect} from '@playwright/test';
+import {backend,ready} from './helpers/operational-backend';
+for(const slug of ['cocteleria','cafeteria','gcobarf','sucursal'])test(slug+': compras compactas, unidades opcionales, edición y eliminación',async({page})=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  const server=await backend(page);server.state.units.push({id:'kg',name:'Kilogramos',dimension:'MASS',factor:1000});server.context.locations[0].slug=slug;await ready(page,'',slug);
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('.admin-sidebar [href="#supplies"]').click();
+  await page.getByRole('button',{name:'Agregar compra',exact:true}).click();
+  const f=page.locator('#operationsDialog form');
+  await expect(f.locator('[name=unit]')).toHaveValue('');
+  await f.locator('[name=name]').fill('Vasos para llevar');await f.locator('[name=quantity]').fill('2 cajas de 12');await f.locator('[name=total]').fill('24000');
+  await expect(f.locator('output')).toContainText('Cantidad como texto');
+  await f.getByRole('button',{name:'Guardar compra',exact:true}).click();await expect(page.locator('#operationsDialog')).toBeHidden();
+  const row=page.locator('.op-purchase-row');await expect(row).toHaveCount(1);await expect(row.locator('summary')).toContainText('2 cajas de 12');await expect(row.locator('details')).not.toHaveAttribute('open','');
+  const accent=await page.evaluate(()=>{const e=document.createElement('div');e.style.color='var(--accent)';document.body.append(e);const color=getComputedStyle(e).color;e.remove();return color;});
+  await expect.poll(()=>row.evaluate(e=>getComputedStyle(e).borderLeftColor)).toBe(accent);
+  expect(await row.evaluate(e=>e.getBoundingClientRect().height)).toBeLessThan(145);
+  await row.locator('summary').click();await expect(row.locator('details')).toHaveAttribute('open','');
+  await expect(row).not.toContainText('Costo por unidad');
+  await row.getByRole('button',{name:'Editar compra',exact:true}).click();
+  await expect(f.locator('[name=quantity]')).toHaveValue('2 cajas de 12');
+  await f.locator('[name=unit]').selectOption('kg');await f.locator('[name=quantity]').fill('2.5');await f.locator('[name=total]').fill('100000');
+  await expect(f.locator('output')).toContainText('$40.000');
+  await f.getByRole('button',{name:'Guardar compra',exact:true}).click();await expect(page.locator('#operationsDialog')).toBeHidden();
+  await expect(row.locator('summary')).toContainText('2,5 kg');
+  if(!await row.locator('details').evaluate(e=>(e as HTMLDetailsElement).open))await row.locator('summary').click();
+  await expect(row).toContainText('Costo por kilogramo');await expect(row).toContainText('$40.000');
+  for(const width of [320,390,768]){await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/purchases-compact-'+slug+'.png',fullPage:true});
+  await row.getByRole('button',{name:'Eliminar compra',exact:true}).click();await page.locator('#systemMessageDialog [value=accept]').click();await expect(row).toHaveCount(0);
+  await expect.poll(()=>server.state.operations.purchases.length).toBe(0);
+  expect(errors).toEqual([]);
+});
+test('compras: solo veinte filas en pantalla y búsqueda sobre todo el historial',async({page})=>{
+  const server=await backend(page);
+  server.state.operations.purchases=Array.from({length:53},(_,i)=>({id:'p-'+i,kind:'simple',name:'Compra '+i,quantity:2,unit:'u',total:1000,unitPrice:500,revision:1,at:new Date().toISOString(),actorName:'Compradora'}));
+  await ready(page);await page.locator('.admin-sidebar [href="#supplies"]').click();await expect(page.locator('.op-purchase-row')).toHaveCount(20);
+  await expect(page.locator('.op-record-filters output')).toContainText('53 registros');
+  await page.getByRole('button',{name:'Siguiente',exact:true}).click();await expect(page.locator('.op-purchase-row')).toHaveCount(20);
+  await page.getByRole('button',{name:'Siguiente',exact:true}).click();await expect(page.locator('.op-purchase-row')).toHaveCount(13);
+  await page.locator('[data-supply-search]').fill('Compra 52');await expect(page.locator('.op-purchase-row')).toHaveCount(1);await expect(page.locator('.op-purchase-row summary')).toContainText('Compra 52');
+});
+test('compras sin internet: crear, editar y eliminar se sincronizan en orden sin duplicados',async({page,context})=>{
+  const server=await backend(page,{lostAck:true,lostAckAction:'operations_apply'});server.state.units.push({id:'ml',name:'Mililitros',dimension:'VOLUME',factor:1});await ready(page);await context.setOffline(true);
+  await page.locator('.admin-sidebar [href="#supplies"]').click();await page.getByRole('button',{name:'Agregar compra',exact:true}).click();const f=page.locator('#operationsDialog form');
+  await f.locator('[name=name]').fill('Compra local');await f.locator('[name=unit]').selectOption('ml');await f.locator('[name=quantity]').fill('250');await f.locator('[name=total]').fill('10000');await f.getByRole('button',{name:'Guardar compra',exact:true}).click();await expect(page.locator('#operationsDialog')).toBeHidden();
+  await page.locator('.op-purchase-row summary').click();await page.getByRole('button',{name:'Editar compra',exact:true}).click();await f.locator('[name=unit]').selectOption('');await f.locator('[name=quantity]').fill('Una botella');await f.getByRole('button',{name:'Guardar compra',exact:true}).click();await expect(page.locator('#operationsDialog')).toBeHidden();
+  await page.reload();await expect(page.locator('.op-purchase-row summary')).toContainText('Una botella');if(!await page.locator('.op-purchase-row details').evaluate(e=>(e as HTMLDetailsElement).open))await page.locator('.op-purchase-row summary').click();
+  await page.getByRole('button',{name:'Eliminar compra',exact:true}).click();await page.locator('#systemMessageDialog [value=accept]').click();await expect(page.locator('.op-purchase-row')).toHaveCount(0);
+  expect(server.state.operations.purchases).toHaveLength(0);
+  await context.setOffline(false);await page.evaluate(()=>void(window as any).AllianceOffline.flush());
+  await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending),{timeout:30000}).toBe(0);
+  expect(server.counts().ackLost).toBe(true);expect(server.state.operations.purchases).toHaveLength(0);expect(server.state.operations.cashMovements).toHaveLength(0);
+});

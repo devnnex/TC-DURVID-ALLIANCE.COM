@@ -69,11 +69,20 @@ globalThis.AllianceOperationsEngine=(()=>{
     else if(kind==='supplier_save')save('suppliers',{name:text(p.name,'proveedor'),phone:String(p.phone||''),document:String(p.document||''),active:p.active!==false});
     else if(kind==='ingredient_save'){const old=s.ingredients.find(r=>r.id===p.id);if(old&&old.unit!==p.unit)fail('Conserva la unidad base del insumo con movimientos.');unit(p.unit,units);save('ingredients',{name:text(p.name,'insumo'),unit:p.unit,quantity:old?.quantity||0,unitCost:old?.unitCost||0,minStock:num(p.minStock,'Alerta de existencias')});}
     else if(kind==='ingredient_adjust'){const ingredient=find(s,'ingredients',p.ingredientId);num(p.quantity,'Cantidad',0.00000001);text(p.reason,'motivo',300);if(!['waste','in','out'].includes(p.kind))fail('Ajuste no disponible.');if(p.kind==='in')ingredient.unitCost=(Math.max(ingredient.quantity,0)*ingredient.unitCost+num(p.totalCost,'Costo real de la entrada'))/(Math.max(ingredient.quantity,0)+p.quantity);move(s,ingredient,p.quantity*(p.kind==='in'?1:-1),p.kind,p.reason,meta);}
-    else if(kind==='purchase_record'){
-      if(Object.keys(p).some(k=>!['id','name','quantity','total'].includes(k)))fail('La compra solo admite nombre, cantidad y valor total.');
-      const id=text(p.id,'identificador',80),name=text(p.name,'nombre del producto'),quantity=num(p.quantity,'Cantidad comprada',0.000001),total=money(num(p.total,'Valor total'));
-      if(s.purchases.some(r=>r.id===id))fail('Esta compra ya existe.','DUPLICATE_OPERATION');
-      s.purchases.push({...meta,id,kind:'simple',name,quantity,total,unitPrice:total/quantity});
+    else if(['purchase_record','purchase_update','purchase_delete'].includes(kind)){
+      const deleting=kind==='purchase_delete';
+      if(Object.keys(p).some(k=>!(deleting?['id','revision']:['id','revision','name','quantity','quantityText','unit','total']).includes(k)))fail('La compra contiene campos no admitidos.');
+      const id=text(p.id,'identificador',80),old=s.purchases.find(r=>r.id===id);
+      if(kind==='purchase_record'){if(old)fail('Esta compra ya existe.','DUPLICATE_OPERATION');}
+      else {if(!old)fail('La compra ya no está disponible.','NOT_FOUND');if(old.kind!=='simple')fail('Esta compra tiene movimientos de inventario o pagos asociados.');if((old.revision||1)!==p.revision)fail('La compra cambió. Actualiza antes de guardar.','VERSION_CONFLICT');}
+      if(deleting)s.purchases=s.purchases.filter(r=>r.id!==id);
+      else {
+        const fields={kind:'simple',name:text(p.name,'nombre del producto'),total:money(num(p.total,'Valor total'))};
+        if(Object.hasOwn(p,'quantityText')){if(Object.hasOwn(p,'quantity')||Object.hasOwn(p,'unit'))fail('Elige cantidad con unidad o texto libre.');fields.quantityText=text(p.quantityText,'cantidad comprada');}
+        else {fields.quantity=num(p.quantity,'Cantidad comprada',0.000001);fields.unit=unit(p.unit??'u',units).id;fields.unitPrice=fields.total/fields.quantity;}
+        const row={...fields,...meta,id,revision:(old?.revision||1)+(old?1:0),createdById:old?.createdById||old?.actorId||actor.id,createdByName:old?.createdByName||old?.actorName||meta.actorName,createdAt:old?.createdAt||old?.occurredAt||old?.at||at};
+        if(old)s.purchases[s.purchases.indexOf(old)]=row;else s.purchases.push(row);
+      }
     }
     else if(kind==='purchase_add'){
       const supplier=find(s,'suppliers',p.supplierId);if(!supplier.active)fail('El proveedor está deshabilitado.');if(!p.lines?.length||p.lines.length>100)fail('Agrega los insumos comprados.');let total=0;

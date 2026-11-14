@@ -53,10 +53,36 @@ ELSIF command_value IN('supplier_save','customer_save','ingredient_save') THEN
 ELSIF command_value='ingredient_adjust' THEN
   alliance_security.keys_only(body,'ingredientId,quantity,kind,reason,totalCost');id_value:=alliance_security.text_value(body,'ingredientId',80);q:=alliance_operations.numeric_value(body,'quantity',0.00000001);name_value:=alliance_security.text_value(body,'reason',160);IF body.get_string('kind') NOT IN('waste','in','out') THEN alliance_security.fail(400,'INVALID_INPUT','Ajuste no disponible.');END IF;
   IF body.get_string('kind')='in' THEN ing:=alliance_operations.raw_item(b,l,id_value);cost_value:=(GREATEST(ing.get_number('quantity'),0)*ing.get_number('unitCost')+alliance_operations.numeric_value(body,'totalCost'))/(GREATEST(ing.get_number('quantity'),0)+q);IF cost_value>9999999999999999 THEN alliance_security.fail(400,'INVALID_INPUT','El valor por unidad es demasiado alto.');END IF;UPDATE alliance_raw_stock SET unit_cost=cost_value WHERE business_id=b AND location_id=l AND id=id_value;END IF;alliance_operations.raw_move(u,b,l,job,id_value,CASE WHEN body.get_string('kind')='in' THEN q ELSE -q END,body.get_string('kind'),SUBSTR(name_value,1,80));summary_value:='Registro un ajuste de insumos: '||name_value;
-ELSIF command_value='purchase_record' THEN
-  alliance_security.keys_only(body,'id,name,quantity,total');id_value:=alliance_security.text_value(body,'id',80);name_value:=alliance_security.text_value(body,'name',160);q:=alliance_operations.numeric_value(body,'quantity',0.000001,1000000000000);total_value:=ROUND(alliance_operations.numeric_value(body,'total',0,1000000000000),2);
-  IF alliance_operations.get_row(b,l,'purchases',id_value) IS NOT NULL THEN alliance_security.fail(409,'DUPLICATE_OPERATION','Esta compra ya existe.');END IF;
-  o:=JSON_OBJECT_T();o.put('kind','simple');o.put('name',name_value);o.put('quantity',q);o.put('total',total_value);o.put('unitPrice',total_value/q);alliance_operations.put_row(u,b,l,'purchases',id_value,o);summary_value:='Registro una compra: '||name_value;
+ELSIF command_value IN('purchase_record','purchase_update','purchase_delete') THEN
+  IF command_value='purchase_delete' THEN alliance_security.keys_only(body,'id,revision');ELSE alliance_security.keys_only(body,'id,revision,name,quantity,quantityText,unit,total');END IF;
+  id_value:=alliance_security.text_value(body,'id',80);old:=alliance_operations.get_row(b,l,'purchases',id_value);
+  IF command_value='purchase_record' THEN
+    IF old IS NOT NULL THEN alliance_security.fail(409,'DUPLICATE_OPERATION','Esta compra ya existe.');END IF;
+  ELSE
+    IF old IS NULL THEN alliance_security.fail(404,'NOT_FOUND','La compra ya no está disponible.');END IF;
+    IF old.get_string('kind')<>'simple' OR old.get_string('kind') IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Esta compra tiene movimientos de inventario o pagos asociados.');END IF;
+    IF NVL(old.get_number('revision'),1)<>alliance_operations.numeric_value(body,'revision') THEN alliance_security.fail(409,'VERSION_CONFLICT','La compra cambió. Actualiza antes de guardar.');END IF;
+  END IF;
+  IF command_value='purchase_delete' THEN
+    DELETE FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_purchases' AND id=id_value;
+    summary_value:='Eliminó una compra: '||old.get_string('name');
+  ELSE
+    name_value:=alliance_security.text_value(body,'name',160);total_value:=ROUND(alliance_operations.numeric_value(body,'total',0,1000000000000),2);
+    o:=JSON_OBJECT_T();o.put('kind','simple');o.put('name',name_value);o.put('total',total_value);
+    IF body.has('quantityText') THEN
+      IF body.has('quantity') OR body.has('unit') THEN alliance_security.fail(400,'INVALID_INPUT','Elige cantidad con unidad o texto libre.');END IF;
+      o.put('quantityText',alliance_security.text_value(body,'quantityText',160));
+    ELSE
+      q:=alliance_operations.numeric_value(body,'quantity',0.000001,1000000000000);unit_value:='u';
+      IF body.has('unit') THEN unit_value:=alliance_security.text_value(body,'unit',12);END IF;
+      SELECT COUNT(*) INTO n FROM units_of_measure WHERE id=unit_value;
+      IF n=0 THEN alliance_security.fail(400,'INVALID_INPUT','Unidad no disponible.');END IF;
+      o.put('quantity',q);o.put('unit',unit_value);o.put('unitPrice',total_value/q);
+    END IF;
+    revision_value:=1;IF old IS NOT NULL THEN revision_value:=NVL(old.get_number('revision'),1)+1;END IF;o.put('revision',revision_value);
+    alliance_operations.put_row(u,b,l,'purchases',id_value,o);
+    summary_value:=CASE command_value WHEN 'purchase_update' THEN 'Editó una compra: ' ELSE 'Registró una compra: ' END||name_value;
+  END IF;
 ELSIF command_value='purchase_add' THEN
   alliance_security.keys_only(body,'id,supplierId,reference,dueDate,lines,paid,method');id_value:=alliance_security.text_value(body,'id',80);other:=alliance_operations.checked(b,l,'suppliers',body.get_string('supplierId'));IF NOT other.get_boolean('active') THEN alliance_security.fail(400,'INVALID_INPUT','Proveedor deshabilitado.');END IF;IF alliance_operations.get_row(b,l,'purchases',id_value) IS NOT NULL THEN alliance_security.fail(409,'DUPLICATE_OPERATION','Esta compra ya existe.');END IF;
   lines:=body.get_array('lines');IF lines IS NULL OR lines.get_size<1 OR lines.get_size>100 THEN alliance_security.fail(400,'INVALID_INPUT','Agrega los insumos de la compra.');END IF;

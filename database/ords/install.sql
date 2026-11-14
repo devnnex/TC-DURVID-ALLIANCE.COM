@@ -187,6 +187,45 @@ BEGIN
 END;!';
   EXECUTE IMMEDIATE q'!DECLARE n NUMBER;BEGIN SELECT char_length INTO n FROM user_tab_columns WHERE table_name='USERS' AND column_name='USERNAME';IF n<320 THEN EXECUTE IMMEDIATE 'ALTER TABLE users MODIFY (username VARCHAR2(320 CHAR))';END IF;END;!';
   EXECUTE IMMEDIATE q'!DECLARE n NUMBER;BEGIN SELECT char_length INTO n FROM user_tab_columns WHERE table_name='ALLIANCE_AUTH_CHALLENGES' AND column_name='USERNAME';IF n<320 THEN EXECUTE IMMEDIATE 'ALTER TABLE alliance_auth_challenges MODIFY (username VARCHAR2(320 CHAR))';END IF;SELECT data_length INTO n FROM user_tab_columns WHERE table_name='ALLIANCE_AUTH_CHALLENGES' AND column_name='MESSAGE';IF n<4000 THEN EXECUTE IMMEDIATE 'ALTER TABLE alliance_auth_challenges MODIFY (message VARCHAR2(4000 BYTE))';END IF;END;!';
+  EXECUTE IMMEDIATE q'!-- Lossless internal storage only. Request fingerprints and API replies stay unchanged.
+DECLARE n NUMBER;BEGIN
+  SELECT COUNT(*) INTO n FROM user_tab_columns WHERE table_name='ALLIANCE_POS_RECEIPTS' AND column_name='RESULT_COMPRESSED';
+  IF n=0 THEN EXECUTE IMMEDIATE 'ALTER TABLE alliance_pos_receipts ADD (result_compressed BLOB)';END IF;
+END;!';
+  EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE alliance_receipt_storage AUTHID DEFINER AS
+  FUNCTION compress_result(t CLOB) RETURN BLOB;
+  FUNCTION expand_result(t CLOB,z BLOB) RETURN CLOB;
+END;!';
+  EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE BODY alliance_receipt_storage AS
+  FUNCTION compress_result(t CLOB) RETURN BLOB IS
+    source_value BLOB;compressed_value BLOB;dest_offset INTEGER:=1;src_offset INTEGER:=1;lang_context INTEGER:=0;warning INTEGER;
+  BEGIN
+    IF t IS NULL OR DBMS_LOB.GETLENGTH(t)<8192 THEN RETURN NULL;END IF;
+    DBMS_LOB.CREATETEMPORARY(source_value,TRUE,DBMS_LOB.CALL);
+    DBMS_LOB.CONVERTTOBLOB(source_value,t,DBMS_LOB.LOBMAXSIZE,dest_offset,src_offset,NLS_CHARSET_ID('AL32UTF8'),lang_context,warning);
+    IF warning<>0 THEN RAISE_APPLICATION_ERROR(-20003,'No fue posible preservar el texto del comprobante.');END IF;
+    compressed_value:=UTL_COMPRESS.LZ_COMPRESS(source_value,1);
+    IF DBMS_LOB.GETLENGTH(compressed_value)>=DBMS_LOB.GETLENGTH(source_value)*0.85 THEN DBMS_LOB.FREETEMPORARY(compressed_value);compressed_value:=NULL;END IF;
+    DBMS_LOB.FREETEMPORARY(source_value);RETURN compressed_value;
+  EXCEPTION WHEN OTHERS THEN
+    IF DBMS_LOB.ISTEMPORARY(source_value)=1 THEN DBMS_LOB.FREETEMPORARY(source_value);END IF;
+    IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;
+    RAISE;
+  END;
+  FUNCTION expand_result(t CLOB,z BLOB) RETURN CLOB IS
+    expanded_value BLOB;answer CLOB;dest_offset INTEGER:=1;src_offset INTEGER:=1;lang_context INTEGER:=0;warning INTEGER;
+  BEGIN
+    IF z IS NULL THEN RETURN t;END IF;
+    expanded_value:=UTL_COMPRESS.LZ_UNCOMPRESS(z);DBMS_LOB.CREATETEMPORARY(answer,TRUE,DBMS_LOB.CALL);
+    DBMS_LOB.CONVERTTOCLOB(answer,expanded_value,DBMS_LOB.LOBMAXSIZE,dest_offset,src_offset,NLS_CHARSET_ID('AL32UTF8'),lang_context,warning);
+    IF warning<>0 THEN RAISE_APPLICATION_ERROR(-20003,'No fue posible leer el comprobante completo.');END IF;
+    DBMS_LOB.FREETEMPORARY(expanded_value);RETURN answer;
+  EXCEPTION WHEN OTHERS THEN
+    IF DBMS_LOB.ISTEMPORARY(expanded_value)=1 THEN DBMS_LOB.FREETEMPORARY(expanded_value);END IF;
+    IF DBMS_LOB.ISTEMPORARY(answer)=1 THEN DBMS_LOB.FREETEMPORARY(answer);END IF;
+    RAISE;
+  END;
+END;!';
   EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE alliance_security AUTHID DEFINER AS
   FUNCTION new_id RETURN VARCHAR2;
   FUNCTION hash_text(p_text VARCHAR2) RETURN VARCHAR2;
@@ -804,7 +843,7 @@ END;!';
   FUNCTION get_row(b VARCHAR2,l VARCHAR2,k VARCHAR2,i VARCHAR2) RETURN JSON_OBJECT_T IS BEGIN RETURN alliance_pos_store.document(b,l,'op_'||LOWER(k),i);END;
   PROCEDURE put_row(u VARCHAR2,b VARCHAR2,l VARCHAR2,k VARCHAR2,i VARCHAR2,o IN OUT JSON_OBJECT_T) IS name_value VARCHAR2(160);previous_row JSON_OBJECT_T;BEGIN
     SELECT full_name INTO name_value FROM users WHERE business_id=b AND id=u;
-    IF LOWER(k) IN('customers','suppliers') THEN previous_row:=get_row(b,l,k,i);IF previous_row IS NULL THEN o.put('createdById',u);o.put('createdByName',name_value);o.put('createdAt',alliance_activity.occurred_at);ELSIF previous_row.has('createdById') THEN o.put('createdById',previous_row.get_string('createdById'));o.put('createdByName',previous_row.get_string('createdByName'));o.put('createdAt',previous_row.get_string('createdAt'));END IF;END IF;
+    IF LOWER(k) IN('customers','suppliers','purchases') THEN previous_row:=get_row(b,l,k,i);IF previous_row IS NULL THEN o.put('createdById',u);o.put('createdByName',name_value);o.put('createdAt',alliance_activity.occurred_at);ELSIF previous_row.has('createdById') THEN o.put('createdById',previous_row.get_string('createdById'));o.put('createdByName',previous_row.get_string('createdByName'));o.put('createdAt',previous_row.get_string('createdAt'));ELSIF LOWER(k)='purchases' THEN o.put('createdById',previous_row.get_string('actorId'));o.put('createdByName',previous_row.get_string('actorName'));o.put('createdAt',NVL(previous_row.get_string('occurredAt'),previous_row.get_string('at')));END IF;END IF;
     o.put('id',i);o.put('actorId',u);o.put('actorName',name_value);o.put('at',alliance_pos_store.stamp);o.put('occurredAt',alliance_activity.occurred_at);alliance_pos_store.put_document(b,l,'op_'||LOWER(k),i,o);
   END;
   FUNCTION checked(b VARCHAR2,l VARCHAR2,k VARCHAR2,i VARCHAR2) RETURN JSON_OBJECT_T IS o JSON_OBJECT_T;BEGIN o:=get_row(b,l,k,i);IF o IS NULL THEN alliance_security.fail(404,'NOT_FOUND','El registro no pertenece a esta sucursal o ya no existe.');END IF;RETURN o;END;
@@ -1140,10 +1179,36 @@ ELSIF command_value IN('supplier_save','customer_save','ingredient_save') THEN
 ELSIF command_value='ingredient_adjust' THEN
   alliance_security.keys_only(body,'ingredientId,quantity,kind,reason,totalCost');id_value:=alliance_security.text_value(body,'ingredientId',80);q:=alliance_operations.numeric_value(body,'quantity',0.00000001);name_value:=alliance_security.text_value(body,'reason',160);IF body.get_string('kind') NOT IN('waste','in','out') THEN alliance_security.fail(400,'INVALID_INPUT','Ajuste no disponible.');END IF;
   IF body.get_string('kind')='in' THEN ing:=alliance_operations.raw_item(b,l,id_value);cost_value:=(GREATEST(ing.get_number('quantity'),0)*ing.get_number('unitCost')+alliance_operations.numeric_value(body,'totalCost'))/(GREATEST(ing.get_number('quantity'),0)+q);IF cost_value>9999999999999999 THEN alliance_security.fail(400,'INVALID_INPUT','El valor por unidad es demasiado alto.');END IF;UPDATE alliance_raw_stock SET unit_cost=cost_value WHERE business_id=b AND location_id=l AND id=id_value;END IF;alliance_operations.raw_move(u,b,l,job,id_value,CASE WHEN body.get_string('kind')='in' THEN q ELSE -q END,body.get_string('kind'),SUBSTR(name_value,1,80));summary_value:='Registro un ajuste de insumos: '||name_value;
-ELSIF command_value='purchase_record' THEN
-  alliance_security.keys_only(body,'id,name,quantity,total');id_value:=alliance_security.text_value(body,'id',80);name_value:=alliance_security.text_value(body,'name',160);q:=alliance_operations.numeric_value(body,'quantity',0.000001,1000000000000);total_value:=ROUND(alliance_operations.numeric_value(body,'total',0,1000000000000),2);
-  IF alliance_operations.get_row(b,l,'purchases',id_value) IS NOT NULL THEN alliance_security.fail(409,'DUPLICATE_OPERATION','Esta compra ya existe.');END IF;
-  o:=JSON_OBJECT_T();o.put('kind','simple');o.put('name',name_value);o.put('quantity',q);o.put('total',total_value);o.put('unitPrice',total_value/q);alliance_operations.put_row(u,b,l,'purchases',id_value,o);summary_value:='Registro una compra: '||name_value;
+ELSIF command_value IN('purchase_record','purchase_update','purchase_delete') THEN
+  IF command_value='purchase_delete' THEN alliance_security.keys_only(body,'id,revision');ELSE alliance_security.keys_only(body,'id,revision,name,quantity,quantityText,unit,total');END IF;
+  id_value:=alliance_security.text_value(body,'id',80);old:=alliance_operations.get_row(b,l,'purchases',id_value);
+  IF command_value='purchase_record' THEN
+    IF old IS NOT NULL THEN alliance_security.fail(409,'DUPLICATE_OPERATION','Esta compra ya existe.');END IF;
+  ELSE
+    IF old IS NULL THEN alliance_security.fail(404,'NOT_FOUND','La compra ya no está disponible.');END IF;
+    IF old.get_string('kind')<>'simple' OR old.get_string('kind') IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Esta compra tiene movimientos de inventario o pagos asociados.');END IF;
+    IF NVL(old.get_number('revision'),1)<>alliance_operations.numeric_value(body,'revision') THEN alliance_security.fail(409,'VERSION_CONFLICT','La compra cambió. Actualiza antes de guardar.');END IF;
+  END IF;
+  IF command_value='purchase_delete' THEN
+    DELETE FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_purchases' AND id=id_value;
+    summary_value:='Eliminó una compra: '||old.get_string('name');
+  ELSE
+    name_value:=alliance_security.text_value(body,'name',160);total_value:=ROUND(alliance_operations.numeric_value(body,'total',0,1000000000000),2);
+    o:=JSON_OBJECT_T();o.put('kind','simple');o.put('name',name_value);o.put('total',total_value);
+    IF body.has('quantityText') THEN
+      IF body.has('quantity') OR body.has('unit') THEN alliance_security.fail(400,'INVALID_INPUT','Elige cantidad con unidad o texto libre.');END IF;
+      o.put('quantityText',alliance_security.text_value(body,'quantityText',160));
+    ELSE
+      q:=alliance_operations.numeric_value(body,'quantity',0.000001,1000000000000);unit_value:='u';
+      IF body.has('unit') THEN unit_value:=alliance_security.text_value(body,'unit',12);END IF;
+      SELECT COUNT(*) INTO n FROM units_of_measure WHERE id=unit_value;
+      IF n=0 THEN alliance_security.fail(400,'INVALID_INPUT','Unidad no disponible.');END IF;
+      o.put('quantity',q);o.put('unit',unit_value);o.put('unitPrice',total_value/q);
+    END IF;
+    revision_value:=1;IF old IS NOT NULL THEN revision_value:=NVL(old.get_number('revision'),1)+1;END IF;o.put('revision',revision_value);
+    alliance_operations.put_row(u,b,l,'purchases',id_value,o);
+    summary_value:=CASE command_value WHEN 'purchase_update' THEN 'Editó una compra: ' ELSE 'Registró una compra: ' END||name_value;
+  END IF;
 ELSIF command_value='purchase_add' THEN
   alliance_security.keys_only(body,'id,supplierId,reference,dueDate,lines,paid,method');id_value:=alliance_security.text_value(body,'id',80);other:=alliance_operations.checked(b,l,'suppliers',body.get_string('supplierId'));IF NOT other.get_boolean('active') THEN alliance_security.fail(400,'INVALID_INPUT','Proveedor deshabilitado.');END IF;IF alliance_operations.get_row(b,l,'purchases',id_value) IS NOT NULL THEN alliance_security.fail(409,'DUPLICATE_OPERATION','Esta compra ya existe.');END IF;
   lines:=body.get_array('lines');IF lines IS NULL OR lines.get_size<1 OR lines.get_size>100 THEN alliance_security.fail(400,'INVALID_INPUT','Agrega los insumos de la compra.');END IF;
@@ -1170,13 +1235,13 @@ ELSIF command_value='cash_shift_update' THEN
   IF NOT REGEXP_LIKE(NVL(body.get_string('startTime'),'-'),'^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$') OR NOT REGEXP_LIKE(NVL(body.get_string('endTime'),'-'),'^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$') OR body.get_string('startTime')=body.get_string('endTime') THEN alliance_security.fail(400,'INVALID_INPUT','Revisa las horas del turno.');END IF;
   before_value:=old.get_number('opening');amount:=alliance_operations.numeric_value(body,'opening');amount:=CASE method_value WHEN 'add' THEN before_value+amount WHEN 'replace' THEN amount ELSE before_value END;
   IF alliance_operations.cash_expected(b,l,old)-before_value+amount<0 THEN alliance_security.fail(409,'CASH_INSUFFICIENT','La base dejaria el efectivo esperado en negativo.');END IF;
-  o:=JSON_OBJECT_T(old.to_clob);IF NOT o.has('openedBy') THEN o.put('openedBy',old.get_string('actorName'));o.put('openedById',old.get_string('actorId'));o.put('openedAt',NVL(old.get_string('occurredAt'),old.get_string('at')));END IF;IF NOT o.has('initialOpening') THEN o.put('initialOpening',before_value);END IF;o.put('opening',ROUND(amount,2));o.put('date',name_value);o.put('startTime',body.get_string('startTime'));o.put('endTime',body.get_string('endTime'));o.put('revision',NVL(old.get_number('revision'),1)+1);
+  o:=JSON_OBJECT_T(old.to_clob);IF NOT o.has('openedBy') THEN o.put('openedBy',old.get_string('actorName'));o.put('openedByI!') || TO_CLOB(q'!d',old.get_string('actorId'));o.put('openedAt',NVL(old.get_string('occurredAt'),old.get_string('at')));END IF;IF NOT o.has('initialOpening') THEN o.put('initialOpening',before_value);END IF;o.put('opening',ROUND(amount,2));o.put('date',name_value);o.put('startTime',body.get_string('startTime'));o.put('endTime',body.get_string('endTime'));o.put('revision',NVL(old.get_number('revision'),1)+1);
   IF o.has('baseChanges') THEN arr:=o.get_array('baseChanges');ELSE arr:=JSON_ARRAY_T();END IF;row_json:=JSON_OBJECT_T();row_json.put('before',before_value);row_json.put('after',amount);row_json.put('action',method_value);row_json.put('at',at_value);row_json.put('actorId',u);SELECT full_name INTO label_value FROM users WHERE business_id=b AND id=u;row_json.put('actorName',label_value);arr.append(row_json);o.put('baseChanges',arr);alliance_operations.put_row(u,b,l,'cashSessions',id_value,o);summary_value:='Actualizo el horario o saldo base del turno';
 ELSIF command_value='cash_open' THEN
   alliance_security.keys_only(body,'id,opening,name,startTime,endTime,date');
   IF body.has('date') THEN name_value:=alliance_security.text_value(body,'date',10,'^[0-9]{4}-[0-9]{2}-[0-9]{2}$');BEGIN shift_date:=TO_DATE(name_value,'FXYYYY-MM-DD');EXCEPTION WHEN OTHERS THEN alliance_security.fail(400,'INVALID_INPUT','Revisa la fecha del turno.');END;END IF;
   IF (body.has('startTime') OR body.has('endTime')) AND (NOT REGEXP_LIKE(NVL(body.get_string('startTime'),'-'),'^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$') OR NOT REGEXP_LIKE(NVL(body.get_string('endTime'),'-'),'^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$')) THEN alliance_security.fail(400,'INVALID_INPUT','Revisa las horas del turno.');END IF;
-  id_value:=alliance_security.text_value(body,'id',80);IF alliance_operations.open_cash(b,l) IS NOT NULL OR alliance_operations.get_row(b,l,'cashSessions',id!') || TO_CLOB(q'!_value) IS NOT NULL THEN alliance_security.fail(409,'REGISTER_ALREADY_OPEN','La caja ya esta abierta o este turno ya existe.');END IF;o:=JSON_OBJECT_T(body.to_clob);amount:=alliance_operations.numeric_value(body,'opening');name_value:=alliance_security.text_value(body,'name',80);o.put('opening',ROUND(amount,2));o.put('status','open');alliance_operations.put_row(u,b,l,'cashSessions',id_value,o);o:=alliance_operations.get_row(b,l,'settings','primary');IF o IS NULL THEN o:=JSON_OBJECT_T();END IF;o.put('cashRequired',TRUE);alliance_operations.put_row(u,b,l,'settings','primary',o);summary_value:='Abrio la caja: '||name_value;
+  id_value:=alliance_security.text_value(body,'id',80);IF alliance_operations.open_cash(b,l) IS NOT NULL OR alliance_operations.get_row(b,l,'cashSessions',id_value) IS NOT NULL THEN alliance_security.fail(409,'REGISTER_ALREADY_OPEN','La caja ya esta abierta o este turno ya existe.');END IF;o:=JSON_OBJECT_T(body.to_clob);amount:=alliance_operations.numeric_value(body,'opening');name_value:=alliance_security.text_value(body,'name',80);o.put('opening',ROUND(amount,2));o.put('status','open');alliance_operations.put_row(u,b,l,'cashSessions',id_value,o);o:=alliance_operations.get_row(b,l,'settings','primary');IF o IS NULL THEN o:=JSON_OBJECT_T();END IF;o.put('cashRequired',TRUE);alliance_operations.put_row(u,b,l,'settings','primary',o);summary_value:='Abrio la caja: '||name_value;
 ELSIF command_value='cash_move' THEN
   alliance_security.keys_only(body,'sessionId,amount,kind,reason');id_value:=alliance_security.text_value(body,'sessionId',80);other:=alliance_operations.checked(b,l,'cashSessions',id_value);IF other.get_string('status')<>'open' THEN alliance_security.fail(409,'REGISTER_NOT_OPEN','La caja ya esta cerrada.');END IF;amount:=ROUND(alliance_operations.numeric_value(body,'amount',0.01),2);IF body.get_string('kind') NOT IN('in','out') THEN alliance_security.fail(400,'INVALID_INPUT','Movimiento invalido.');END IF;o:=JSON_OBJECT_T();o.put('sessionId',id_value);IF body.get_string('kind')='out' AND alliance_operations.cash_expected(b,l,other)<amount THEN alliance_security.fail(409,'CASH_INSUFFICIENT','La caja no tiene ese efectivo disponible.');END IF;o.put('amount',CASE WHEN body.get_string('kind')='out' THEN -amount ELSE amount END);o.put('kind',body.get_string('kind'));o.put('reference',alliance_security.text_value(body,'reason',160));alliance_operations.put_row(u,b,l,'cashMovements',job,o);summary_value:='Registro una entrada o retiro de caja';
 ELSIF command_value='cash_close' THEN
@@ -1992,7 +2057,7 @@ END;!';
   END;
   FUNCTION dispatch(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     action_value VARCHAR2(50):=p_body.get_string('action');payload JSON_OBJECT_T:=p_body.get_object('payload');r JSON_OBJECT_T:=JSON_OBJECT_T();q JSON_OBJECT_T;value_json JSON_OBJECT_T;arr JSON_ARRAY_T;out_json JSON_ARRAY_T;row_json JSON_OBJECT_T;filters JSON_ARRAY_T;f JSON_OBJECT_T;
-    job_id VARCHAR2(160):=p_body.get_string('operation_id');digest VARCHAR2(64);saved_hash VARCHAR2(64);saved_user VARCHAR2(36);saved_value CLOB;save_value CLOB;id_value VARCHAR2(80);table_value VARCHAR2(80);code_value VARCHAR2(64);n NUMBER;permission_value VARCHAR2(32767);is_write BOOLEAN:=FALSE;
+    job_id VARCHAR2(160):=p_body.get_string('operation_id');digest VARCHAR2(64);saved_hash VARCHAR2(64);saved_user VARCHAR2(36);saved_value CLOB;save_value CLOB;saved_compressed BLOB;compressed_value BLOB;id_value VARCHAR2(80);table_value VARCHAR2(80);code_value VARCHAR2(64);n NUMBER;permission_value VARCHAR2(32767);is_write BOOLEAN:=FALSE;
   BEGIN
     alliance_security.keys_only(p_body,'action,payload,operation_id,device_id,client_created_at');IF payload IS NULL THEN payload:=JSON_OBJECT_T();END IF;
     alliance_activity.client_context(p_body.get_string('device_id'),p_body.get_string('client_created_at'));
@@ -2008,8 +2073,8 @@ END;!';
       IF job_id IS NOT NULL THEN
         IF LENGTH(job_id)>160 THEN alliance_security.fail(400,'INVALID_INPUT','Operacion invalida.');END IF;
         save_value:=p_body.to_clob;digest:=LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(save_value,DBMS_CRYPTO.HASH_SH256)));
-        BEGIN SELECT fingerprint,actor_user_id,result_json INTO saved_hash,saved_user,saved_value FROM alliance_pos_receipts WHERE business_id=p_business AND location_id=p_location AND id=job_id;
-          IF saved_hash<>digest OR saved_user<>p_user THEN alliance_security.fail(409,'IDEMPOTENCY_REUSE','La operacion ya se uso con otros datos.');END IF;RETURN JSON_OBJECT_T(saved_value);
+        BEGIN SELECT fingerprint,actor_user_id,result_json,result_compressed INTO saved_hash,saved_user,saved_value,saved_compressed FROM alliance_pos_receipts WHERE business_id=p_business AND location_id=p_location AND id=job_id;
+          IF saved_hash<>digest OR saved_user<>p_user THEN alliance_security.fail(409,'IDEMPOTENCY_REUSE','La operacion ya se uso con otros datos.');END IF;RETURN JSON_OBJECT_T(alliance_receipt_storage.expand_result(saved_value,saved_compressed));
         EXCEPTION WHEN NO_DATA_FOUND THEN NULL;END;
       END IF;
     END IF;
@@ -2058,7 +2123,7 @@ END;!';
     ELSE alliance_security.fail(404,'NOT_FOUND','Accion no disponible.');END IF;
     IF is_write AND action_value<>'operations_apply' THEN alliance_activity.pos_event(p_user,p_business,p_location,action_value,payload);END IF;
     IF is_write THEN alliance_pos_store.put_document(p_business,p_location,'op_reportsync','primary',JSON_OBJECT_T('{}'));END IF;
-    IF is_write AND job_id IS NOT NULL THEN save_value:=r.to_clob;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json)VALUES(p_business,p_location,job_id,p_user,digest,save_value);END IF;RETURN r;
+    IF is_write AND job_id IS NOT NULL THEN save_value:=r.to_clob;compressed_value:=alliance_receipt_storage.compress_result(save_value);IF compressed_value IS NOT NULL THEN save_value:='{"codec":"gzip-v1"}';END IF;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json,result_compressed)VALUES(p_business,p_location,job_id,p_user,digest,save_value,compressed_value);IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;END IF;RETURN r;
   END;
   FUNCTION public_dispatch(p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     r JSON_OBJECT_T:=JSON_OBJECT_T();payload JSON_OBJECT_T:=p_body.get_object('payload');action_value VARCHAR2(50):=p_body.get_string('action');business_value VARCHAR2(36);location_value VARCHAR2(36);table_id_value VARCHAR2(80);table_json CLOB;table_object JSON_OBJECT_T;arr JSON_ARRAY_T;out_json JSON_ARRAY_T;row_json JSON_OBJECT_T;session_object JSON_OBJECT_T;id_value VARCHAR2(80);body_value VARCHAR2(600);business_slug_value VARCHAR2(80);branch_slug_value VARCHAR2(80);table_code_value VARCHAR2(64);request_object JSON_OBJECT_T;entry JSON_OBJECT_T;product_object JSON_OBJECT_T;duplicate BOOLEAN;
@@ -2087,9 +2152,9 @@ END;!';
       IF action_value IN('createServiceRequest','createServiceRequestsBatch') THEN
         IF action_value='createServiceRequestsBatch' THEN arr:=payload.get_array('requests');ELSE arr:=JSON_ARRAY_T();arr.append(payload);END IF;
         IF arr IS NULL OR arr.get_size>20 THEN alliance_security.fail(400,'INVALID_INPUT','Demasiadas solicitudes.');END IF;out_json:=JSON_ARRAY_T();
-        FOR i IN 0..arr.get_size-1 LOOP entry:=TREAT(arr.get(i) AS JSON_OBJECT_T);id_value:=entry.get_string('session_id');session_object:=alliance_pos_store.document(business_value,location_value,'table_sessions',id_value);
+        FOR i IN 0..arr.get_size-1 LOOP entry:=TREAT(arr.get(i) AS JSON_OBJECT_T);id_value:=entry.get_string('session_id');session_object:=alliance_pos_!') || TO_CLOB(q'!store.document(business_value,location_value,'table_sessions',id_value);
           IF session_object IS NULL OR session_object.get_string('table_id')<>table_id_value OR session_object.get_string('status')<>'open' THEN alliance_security.fail(403,'TABLE_ACCESS','La cuenta no pertenece a tu mesa o esta cerrada.');END IF;
-          IF entry.get_string('request_type') NOT IN('waiter','bill','other','chat','song') THEN !') || TO_CLOB(q'!alliance_security.fail(400,'INVALID_INPUT','Solicitud invalida.');END IF;
+          IF entry.get_string('request_type') NOT IN('waiter','bill','other','chat','song') THEN alliance_security.fail(400,'INVALID_INPUT','Solicitud invalida.');END IF;
           request_object:=alliance_pos_store.document(business_value,location_value,'service_requests',entry.get_string('request_id'));duplicate:=request_object IS NOT NULL;
           IF NOT duplicate THEN request_object:=JSON_OBJECT_T();request_object.put('id',alliance_security.text_value(entry,'request_id',80));request_object.put('session_id',id_value);request_object.put('table_id',table_id_value);request_object.put('request_type',entry.get_string('request_type'));request_object.put('message',SUBSTR(entry.get_string('message'),1,600));request_object.put('status','pending');request_object.put('created_at',alliance_pos_store.stamp);alliance_pos_store.put_document(business_value,location_value,'service_requests',request_object.get_string('id'),request_object);alliance_activity.record_event(NULL,business_value,location_value,'service','CLIENT_REQUEST','Solicitó atención en '||table_object.get_string('table_name'),request_object.get_string('id'));END IF;
           row_json:=JSON_OBJECT_T();row_json.put('request',request_object);row_json.put('duplicate',duplicate);out_json.append(row_json);

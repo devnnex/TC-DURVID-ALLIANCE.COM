@@ -16,6 +16,31 @@ try{
   const grouped=Array.from({length:10},(_,i)=>makeSupplier('Medición en grupo '+i));started=performance.now();const groupedResult=await rpc('/pos/batch',{operations:grouped});const batchMs=performance.now()-started;check(groupedResult.status===200&&groupedResult.data.results.length===10&&groupedResult.data.results.every((a:any)=>a.status===200&&!('value'in a)),'Grupo de diez confirmado con respuestas compactas');check((await rpc('/pos/batch',{operations:[singles[0],...grouped]})).data.results.every((a:any)=>a.status===200),'Reintentar en grupo conserva los mismos identificadores');
   const beforeFailure=makeSupplier('Antes del conflicto'),blockedWire=structuredClone(singles[1]),afterFailure=makeSupplier('Después del conflicto');blockedWire.operation_id=randomUUID();blockedWire.payload.id=blockedWire.operation_id;const partial=await rpc('/pos/batch',{operations:[beforeFailure,blockedWire,afterFailure]});check(partial.data.results.length===2&&partial.data.results[0].status===200&&partial.data.results[1].status===409,'Confirma el prefijo y detiene el grupo al primer conflicto');const partialState=await pos('operations_snapshot');check(partialState.data.value.model.suppliers.some((r:any)=>r.id===beforeFailure.payload.payload.id)&&!partialState.data.value.model.suppliers.some((r:any)=>r.id===afterFailure.payload.payload.id),'No ejecuta operaciones posteriores al conflicto');check((await rpc('/pos/batch',{operations:Array.from({length:21},()=>makeSupplier('Fuera de límite'))})).status===400,'Grupos acotados a veinte registros');console.log(JSON.stringify({oracleSyncTiming:{operations:10,individualRequests:10,batchRequests:1,individualMs:Math.round(singleMs),batchMs:Math.round(batchMs)}}));
   let result=await pos('operations_snapshot');check(result.status===200&&result.data.value.units.some((u:any)=>u.id==='lb'),'Unidades centrales y snapshot');
+  const direct=randomUUID(),directCreate={id:direct,name:'Café comprado',quantity:2.5,unit:'kg',total:100000};
+  await command('purchase_record',directCreate);result=await pos('operations_snapshot');
+  check(result.data.value.model.purchases[0].unitPrice===40000&&result.data.value.model.purchases[0].unit==='kg','Compra numérica con unidad y costo exacto');
+  const creator=result.data.value.model.purchases[0].createdById;
+  await command('purchase_update',{id:direct,revision:1,name:'Compra descrita',quantityText:'Dos cajas de 12',total:90000});
+  result=await pos('operations_snapshot');let directRow=result.data.value.model.purchases[0];
+  check(directRow.quantityText==='Dos cajas de 12'&&!('quantity'in directRow)&&!('unitPrice'in directRow)&&directRow.revision===2&&directRow.createdById===creator,'Texto libre elimina campos numéricos anteriores y conserva creador');
+  check((await pos('operations_apply',{id:randomUUID(),command:'purchase_update',payload:{...directCreate,revision:1}})).status===409,'Edición obsoleta rechazada');
+  check((await pos('operations_apply',{id:randomUUID(),command:'purchase_delete',payload:{id:direct,revision:1}})).status===409,'Eliminación obsoleta rechazada');
+  await command('purchase_update',{...directCreate,revision:2,unit:'ml',quantity:250,total:12000});
+  result=await pos('operations_snapshot');directRow=result.data.value.model.purchases[0];
+  check(directRow.revision===3&&directRow.unitPrice===48&&!('quantityText'in directRow),'Editar de texto a volumen conserva cálculo correcto');
+  const deletion=randomUUID();await command('purchase_delete',{id:direct,revision:3},deletion);await command('purchase_delete',{id:direct,revision:3},deletion);
+  result=await pos('operations_snapshot');check(!result.data.value.model.purchases.length&&!result.data.value.model.materialMovements.length&&!result.data.value.model.cashMovements.length,'Eliminar y reintentar no genera inventario, caja ni duplicados');
+  for(const patch of [{unit:'inventada'},{quantityText:'Caja',quantity:2},{quantity:0}]){
+    check((await pos('operations_apply',{id:randomUUID(),command:'purchase_record',payload:{...directCreate,id:randomUUID(),...patch}})).status===400,'Rechaza unidad/cantidad incoherente');
+  }
+  const logo='data:image/svg+xml,<svg>'+('Café ☕ — conservación exacta. '.repeat(3000))+'</svg>',imageId=randomUUID(),imagePayload={table:'business_settings',op:'upsert',values:{logo_url:logo},filters:[{col:'id',op:'eq',value:'primary'}],single:true};
+  const imageFirst=await pos('query',imagePayload,imageId),imageReplay=await pos('query',imagePayload,imageId);
+  check(imageFirst.status===200&&JSON.stringify(imageFirst.data)===JSON.stringify(imageReplay.data),'Respuesta comprimida se repite íntegra, con Unicode y sin reejecutar');
+  const compressed=await executeSql(`SELECT DBMS_LOB.GETLENGTH(result_compressed) compressed_bytes,DBMS_LOB.GETLENGTH(result_json) marker_characters FROM alliance_pos_receipts WHERE business_id='${business}' AND id='${imageId}'`);
+  const compressedRow=compressed[0].resultSet!.items[0] as any;
+  check(compressedRow.compressed_bytes>0&&compressedRow.compressed_bytes<logo.length/2&&compressedRow.marker_characters<100,'Comprime respuestas grandes sin duplicarlas en JSON');
+  const smallReceipt=await executeSql(`SELECT COUNT(*) n FROM alliance_pos_receipts WHERE business_id='${business}' AND id='${deletion}' AND result_compressed IS NULL`);
+  check((smallReceipt[0].resultSet!.items[0] as any).n===1,'Respuestas pequeñas conservan el camino rápido sin compresión');
   const supplier=randomUUID(),ingredient=randomUUID(),purchase=randomUUID();
   await command('supplier_save',{id:supplier,revision:0,name:'Proveedor de prueba',phone:'',document:'',active:true});
   await command('ingredient_save',{id:ingredient,revision:0,name:'Limon',unit:'g',minStock:100});
