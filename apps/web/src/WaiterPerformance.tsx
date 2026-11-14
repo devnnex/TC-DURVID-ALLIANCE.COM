@@ -4,7 +4,7 @@ import {waiterPerformance,waiterTableLabel,type OrderSnapshot,type PerformanceSa
 
 const money=(n:number)=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:2}).format(n);
 const date=(s:string)=>new Date(s).toLocaleString('es-CO',{timeZone:'America/Bogota',dateStyle:'short',timeStyle:'short'});
-export function WaiterPerformance({members,locationId,branchSlug}:{members:{id:string;name:string}[];locationId:string;branchSlug?:string}){
+export function WaiterPerformance({members,locationId,branchSlug}:{members:{id:string;name:string;progressSince?:string}[];locationId:string;branchSlug?:string}){
   const linkedSales=['cocteleria','cafeteria'].includes(branchSlug||'');
   const [snapshot,setSnapshot]=useState<OrderSnapshot>(),[days,setDays]=useState(30),[error,setError]=useState(''),[busy,setBusy]=useState(false),[opened,setOpened]=useState<string[]>([]),[limits,setLimits]=useState<Record<string,number>>({});
   const [complete,setComplete]=useState<{key:string;sales:PerformanceSale[]}>();

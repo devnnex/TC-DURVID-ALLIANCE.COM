@@ -34,11 +34,14 @@ export class OracleRepository implements Repository {
   saveProfile(actor:string,input:ProfileWrite,sessionId:string){return new OracleAdministration(this.pool).saveProfile(actor,input,sessionId);}
   saveLocation(actor:string,id:string|undefined,input:LocationInput){return new OracleAdministration(this.pool).location(actor,id,input);}
   saveUser(actor:string,id:string|undefined,input:UserWrite,locationId?:string){return new OracleAdministration(this.pool).user(actor,id,input,locationId);}
+  removeUser(actor:string,id:string,locationId?:string){return new OracleAdministration(this.pool).removeUser(actor,id,locationId);}
   async using<T>(fn: (c: oracledb.Connection)=>Promise<T>): Promise<T> {
     const c = await this.pool.getConnection();try {return await fn(c);} finally {await c.close();}
   }
-  async findUser(slug: string,username: string) {return this.using(async c=>{
-    const [r] = await rows(c,'SELECT u.*, b.slug FROM users u JOIN businesses b ON b.id=u.business_id WHERE b.slug=:slug AND u.username=:username AND u.active=1',{slug,username});
+  async findUser(slug: string,username: string,branch?:string) {return this.using(async c=>{
+    const matches = await rows(c,"SELECT u.*, b.slug FROM users u JOIN businesses b ON b.id=u.business_id WHERE b.slug=:slug AND u.username=:username AND u.active=1 AND u.deleted_at IS NULL AND EXISTS(SELECT 1 FROM user_location_roles g JOIN locations l ON l.business_id=g.business_id AND l.id=g.location_id WHERE g.business_id=u.business_id AND g.user_id=u.id AND (:branch IS NULL OR g.role_code='OWNER' OR (l.active=1 AND (l.id=:branch OR l.slug=:branch))))",{slug,username,branch:branch||null});
+    if(matches.length>1)throw new DomainError('BRANCH_REQUIRED','Selecciona el negocio para iniciar sesión con este usuario.',400);
+    const [r]=matches;
     return r ? {id:r.ID,business_id:r.BUSINESS_ID,business_slug:r.SLUG,name:r.FULL_NAME,username:r.USERNAME,password_hash:r.PASSWORD_HASH} : undefined;
   });}
   async context(userId: string): Promise<Context> {return this.using(async c=>{

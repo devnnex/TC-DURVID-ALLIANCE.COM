@@ -10,9 +10,10 @@ export type WaiterOrder={id:string;at:string;table:string;status:string;amount:n
 export function waiterTableLabel(name:string){const match=/^(?:M|MESA)\s*(\d+)$/i.exec(name.trim());return match?'MESA '+match[1]:name;}
 // Largest remainders retain every cent when a table contains several waiters' lines.
 function allocate(cents:number,weights:number[]){const sum=weights.reduce((a,b)=>a+b,0);if(sum<=0)return weights.map(()=>0);const exact=weights.map(w=>cents*w/sum),parts=exact.map(Math.floor);let rest=cents-parts.reduce((a,b)=>a+b,0);for(const {index} of exact.map((v,index)=>({index,remainder:v-parts[index]})).sort((a,b)=>b.remainder-a.remainder)){if(rest--<=0)break;parts[index]++;}return parts;}
-export function waiterPerformance(snapshot:OrderSnapshot,members:{id:string;name:string}[],days:number,now=Date.now()){
+export function waiterPerformance(snapshot:OrderSnapshot,members:{id:string;name:string;progressSince?:string}[],days:number,now=Date.now()){
   const since=now-days*86400000,inPeriod=(s:string)=>Date.parse(s)>=since&&Date.parse(s)<=now;
-  const requests=new Map(snapshot.docs.service_requests.filter(r=>r.request_type==='order').map(r=>[r.id,r]));
+  const resets=new Map(members.filter(m=>m.progressSince).map(m=>[m.id,Date.parse(m.progressSince!)]));
+  const requests=new Map(snapshot.docs.service_requests.filter(r=>r.request_type==='order'&&(!resets.has(r.actor_user_id||'')||Date.parse(r.created_at)>resets.get(r.actor_user_id||'')!)).map(r=>[r.id,r]));
   const lineOrders=new Map(snapshot.docs.session_items.filter(l=>l.order_id).map(l=>[l.id,l.order_id!]));
   const tables=new Map(snapshot.docs.restaurant_tables.map(t=>[t.id,t.table_name||'Mesa']));
   const cancelled=new Set(snapshot.model.tickets.filter(t=>t.status==='cancelled').map(t=>t.orderId||t.id));

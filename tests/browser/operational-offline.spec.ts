@@ -18,13 +18,13 @@ test('un conflicto entre equipos queda visible y conserva la venta pendiente',as
 
 
 test('entrar sin internet verifica la contraseña local y conserva los pendientes después de salir',async({page,context})=>{
-  test.setTimeout(60000);const server=await backend(page);await ready(page);await context.setOffline(true);await sell(page);await page.locator('#logoutButton').click();await expect(page.locator('#adminLogin')).toBeVisible();await expect.poll(()=>page.evaluate(async()=>{const key='credential:'+(window as any).ALLIANCE_CONFIG.API_URL+':tc-alliance:tester';return !!((await (window as any).AllianceOffline.authStore.get(key))?.requireOnlineLogin||localStorage.getItem('alliance-offline-revoked:'+key));})).toBe(true);
+  test.setTimeout(60000);const server=await backend(page);await ready(page);await context.setOffline(true);await sell(page);await page.locator('#logoutButton').click();await expect(page.locator('#adminLogin')).toBeVisible();await expect.poll(()=>page.evaluate(async()=>{const key=(window as any).AllianceOfflineAuth.credentialKey('tc-alliance','tester');return !!((await (window as any).AllianceOffline.authStore.get(key))?.requireOnlineLogin||localStorage.getItem('alliance-offline-revoked:'+key));})).toBe(true);
   // A navigation can interrupt IndexedDB cleanup; the immediate revocation marker remains authoritative.
-  await page.evaluate(async()=>{const w=window as any,key='credential:'+w.ALLIANCE_CONFIG.API_URL+':tc-alliance:tester',profile=await w.AllianceOffline.authStore.get(key);profile.requireOnlineLogin=false;await w.AllianceOffline.authStore.put(profile);});
+  await page.evaluate(async()=>{const w=window as any,key=w.AllianceOfflineAuth.credentialKey('tc-alliance','tester'),profile=await w.AllianceOffline.authStore.get(key);profile.requireOnlineLogin=false;await w.AllianceOffline.authStore.put(profile);});
   await page.locator('#loginForm [name=username]').fill('tester');await page.locator('#loginForm [name=pin]').fill('incorrecta');await page.locator('#loginForm button[type=submit]').click();await expect(page.locator('#adminLogin')).toBeVisible();await expect(page.locator('#loginForm button[type=submit]')).toBeEnabled();expect(server.state.sales).toHaveLength(0);
   await page.locator('#loginForm [name=pin]').fill('test-password');await page.locator('#loginForm button[type=submit]').click();await expect(page.locator('#adminLogin')).not.toBeVisible();await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending)).toBeGreaterThan(0);
   expect(await page.evaluate(()=>sessionStorage.getItem('alliance-ords-refresh'))).toBeNull();
-  const stored=await page.evaluate(async()=>JSON.stringify(await (window as any).AllianceOffline.authStore.get('credential:'+(window as any).ALLIANCE_CONFIG.API_URL+':tc-alliance:tester')));expect(stored).not.toContain('test-password');expect(stored).not.toContain('b'.repeat(64));
+  const stored=await page.evaluate(async()=>JSON.stringify(await (window as any).AllianceOffline.authStore.get((window as any).AllianceOfflineAuth.credentialKey('tc-alliance','tester'))));expect(stored).not.toContain('test-password');expect(stored).not.toContain('b'.repeat(64));
   await context.setOffline(false);await page.evaluate(()=>void (window as any).AllianceOffline.flush());await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending),{timeout:30000}).toBe(0);expect(server.state.sales).toHaveLength(1);
 });
 
@@ -68,5 +68,5 @@ test('una renovación que termina después de salir no reactiva la cuenta local'
  });
  await page.evaluate(async()=>await (window as any).OracleDb.rpc('logout'));
  await page.evaluate(async()=>{const w=window as any;w.releaseCredentialWrite();await w.pendingCredentialWrite;});
- await expect.poll(()=>page.evaluate(async()=>{const w=window as any,p=await w.AllianceOffline.authStore.get('credential:'+w.ALLIANCE_CONFIG.API_URL+':tc-alliance:tester');return p?.requireOnlineLogin===true&&!p?.activeWrap&&!w.AllianceOfflineAuth.ready(p.context.user.id);})).toBe(true);
+ await expect.poll(()=>page.evaluate(async()=>{const w=window as any,p=await w.AllianceOffline.authStore.get(w.AllianceOfflineAuth.credentialKey('tc-alliance','tester'));return p?.requireOnlineLogin===true&&!p?.activeWrap&&!w.AllianceOfflineAuth.ready(p.context.user.id);})).toBe(true);
 });

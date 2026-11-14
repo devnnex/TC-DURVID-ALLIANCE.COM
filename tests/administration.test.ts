@@ -75,6 +75,7 @@ describe('Transacciones de administración Oracle (driver simulado)',()=>{
   const fixture=()=>{
     const actor=randomUUID(),business=randomUUID(),location=randomUUID();
     const execute=vi.fn(async(sql:string,_binds?:any,_options?:any):Promise<any>=>{
+      if(sql.startsWith('SELECT COUNT(*) n FROM users target'))return {rows:[{N:0}]};
       if(sql.includes('SELECT u.* FROM users'))return {rows:[{ID:actor,BUSINESS_ID:business,ACTIVE:1}]};
       if(sql.includes('SELECT id FROM businesses'))return {rows:[{ID:business}]};
       if(sql.includes('FROM locations'))return {rows:[{ID:location,BUSINESS_ID:business}]};

@@ -47,7 +47,7 @@ describe('Cuenta propia y aislamiento de usuarios',()=>{
   const actor=randomUUID(),business=randomUUID(),session=randomUUID(),execute=vi.fn(async(sql:string):Promise<any>=>({rows:sql.startsWith('SELECT')?[{ID:actor,BUSINESS_ID:business,FULL_NAME:'Antes',USERNAME:'antes',ACTIVE:1}]:[],rowsAffected:1}));
   const connection={execute,commit:vi.fn(),rollback:vi.fn(),close:vi.fn()},repo=new OracleRepository({getConnection:async()=>connection} as unknown as oracledb.Pool);
   await repo.saveProfile(actor,{name:'Después',username:'despues',password_hash:'private-hash'},session);
-  const calls=execute.mock.calls.map(c=>c[0]);expect(calls.some(q=>/user_location_(roles|permissions)/.test(q))).toBe(false);expect(calls.some(q=>q.includes('AND id<>:sid'))).toBe(true);expect(connection.commit).toHaveBeenCalledOnce();
+  const calls=execute.mock.calls.map(c=>c[0]);expect(calls.some(q=>/^(?:INSERT INTO|UPDATE|DELETE FROM) user_location_(roles|permissions)/.test(q))).toBe(false);expect(calls.some(q=>q.includes('AND id<>:sid'))).toBe(true);expect(connection.commit).toHaveBeenCalledOnce();
   const audit=(execute.mock.calls as any[]).find(c=>c[0].includes('INSERT INTO administration_audit'));expect(JSON.stringify(audit)).not.toContain('private-hash');
   execute.mockImplementation(async(sql:string)=>{if(sql.startsWith('INSERT INTO administration_audit'))throw new Error('Audit failure');return {rows:[{ID:actor,BUSINESS_ID:business}],rowsAffected:1};});
   await expect(repo.saveProfile(actor,{name:'Otro',username:'otro'},session)).rejects.toThrow('Audit failure');expect(connection.rollback).toHaveBeenCalledOnce();expect(connection.commit).toHaveBeenCalledTimes(1);

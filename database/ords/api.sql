@@ -5,13 +5,13 @@ END;
 CREATE OR REPLACE PACKAGE BODY alliance_api AS
   FUNCTION dispatch(p_request CLOB) RETURN CLOB IS
     req JSON_OBJECT_T;body JSON_OBJECT_T;data JSON_OBJECT_T:=JSON_OBJECT_T();data_array JSON_ARRAY_T;result_json JSON_OBJECT_T:=JSON_OBJECT_T();error_json JSON_OBJECT_T:=JSON_OBJECT_T();
-    method_value VARCHAR2(6);path_value VARCHAR2(160);location_value VARCHAR2(36);id_value VARCHAR2(36);access_value VARCHAR2(64);refresh_value VARCHAR2(64);s alliance_api_sessions%ROWTYPE;
+    method_value VARCHAR2(6);path_value VARCHAR2(160);location_value VARCHAR2(36);id_value VARCHAR2(36);saved_user_id VARCHAR2(36);access_value VARCHAR2(64);refresh_value VARCHAR2(64);s alliance_api_sessions%ROWTYPE;
     n NUMBER;setup_enabled NUMBER;operations_json JSON_ARRAY_T;acks JSON_ARRAY_T;operation_value JSON_OBJECT_T;ack JSON_OBJECT_T;cursor_value NUMBER;bootstrap_json JSON_OBJECT_T;setup_value VARCHAR2(128);login_user JSON_OBJECT_T;branch_value VARCHAR2(80);login_business VARCHAR2(36);username_value users.username%TYPE;
   BEGIN
     alliance_activity.client_context;alliance_security.error_status:=500;alliance_security.error_code:='INTERNAL_ERROR';alliance_security.error_message:='No fue posible completar la operacion.';
     IF p_request IS NULL OR DBMS_LOB.GETLENGTH(p_request)>1048576 THEN alliance_security.fail(400,'INVALID_INPUT','Solicitud invalida o demasiado grande.');END IF;
     req:=JSON_OBJECT_T(p_request);alliance_security.keys_only(req,'method,path,body,access_token,refresh_token,location_id,setup_token');
-    method_value:=alliance_security.text_value(req,'method',6,'^(GET|POST|PUT)$');path_value:=alliance_security.text_value(req,'path',160);
+    method_value:=alliance_security.text_value(req,'method',6,'^(GET|POST|PUT|DELETE)$');path_value:=alliance_security.text_value(req,'path',160);
     IF method_value='GET' THEN SET TRANSACTION READ ONLY;END IF;
     IF req.has('body') THEN body:=req.get_object('body');ELSE body:=JSON_OBJECT_T();END IF;
     IF method_value='GET' AND path_value='/health' THEN data.put('ok',TRUE);data.put('provider','oracle-ords');data.put('version','0.4.0');data.put('scope','branch-operation-administration');
@@ -21,7 +21,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_api AS
     ELSIF method_value='POST' AND path_value='/admin/setup' THEN setup_value:=req.get_string('setup_token');data:=alliance_administration.setup(body,setup_value);
     ELSIF method_value='POST' AND path_value='/auth/login/challenge' THEN data:=alliance_auth_proof.challenge(body,req.get_string('location_id'));
     ELSIF method_value='POST' AND path_value IN('/auth/login','/auth/login/proof') THEN
-      IF path_value='/auth/login/proof' THEN data:=alliance_auth_proof.finish(body,req.get_string('location_id'));ELSE data:=alliance_security.login(body);END IF;login_user:=data.get_object('context').get_object('user');branch_value:=req.get_string('location_id');
+      IF path_value='/auth/login/proof' THEN data:=alliance_auth_proof.finish(body,req.get_string('location_id'));ELSE data:=alliance_security.login(body,req.get_string('location_id'));END IF;login_user:=data.get_object('context').get_object('user');branch_value:=req.get_string('location_id');
       -- A branch login returns its authorized initial view in the same response.
       IF branch_value IS NOT NULL THEN
         login_user:=data.get_object('context').get_object('user');login_business:=login_user.get_string('business_id');
@@ -57,11 +57,13 @@ CREATE OR REPLACE PACKAGE BODY alliance_api AS
         alliance_administration.save_location(s.user_id,s.business_id,id_value,body);
         IF id_value IS NULL THEN branch_value:=body.get_string('slug');SELECT id INTO id_value FROM locations WHERE business_id=s.business_id AND slug=branch_value;END IF;
         alliance_activity.record_event(s.user_id,s.business_id,NULL,'users','LOCATION_SAVE',CASE WHEN method_value='POST' THEN 'Creó una sucursal: ' ELSE 'Editó una sucursal: ' END||body.get_string('name'),id_value);data.put('ok',TRUE);
+      ELSIF method_value='DELETE' AND REGEXP_LIKE(path_value,'^/admin/users/[0-9a-fA-F-]{36}$') THEN
+        alliance_security.keys_only(body,'');id_value:=SUBSTR(path_value,14);alliance_administration.remove_user(s.user_id,s.business_id,id_value,req.get_string('location_id'));
+        alliance_activity.record_event(s.user_id,s.business_id,req.get_string('location_id'),'users','USER_REMOVE','Eliminó el acceso de un usuario',id_value);data.put('ok',TRUE);
       ELSIF method_value IN ('POST','PUT') AND (path_value='/admin/users' OR REGEXP_LIKE(path_value,'^/admin/users/[0-9a-fA-F-]{36}$')) THEN
         IF method_value='PUT' THEN id_value:=SUBSTR(path_value,14);IF LENGTH(id_value)<>36 THEN alliance_security.fail(400,'INVALID_INPUT','Falta el identificador de usuario.');END IF;
         ELSIF path_value<>'/admin/users' THEN alliance_security.fail(404,'NOT_FOUND','Ruta no disponible.');END IF;
-        alliance_administration.save_user(s.user_id,s.business_id,id_value,body,req.get_string('location_id'));
-        IF id_value IS NULL THEN username_value:=body.get_string('username');SELECT id INTO id_value FROM users WHERE business_id=s.business_id AND username=TRIM(username_value);END IF;
+        alliance_administration.save_user(s.user_id,s.business_id,id_value,body,req.get_string('location_id'),saved_user_id);id_value:=saved_user_id;
         alliance_activity.record_event(s.user_id,s.business_id,NULL,'users','USER_ACCESS_SAVE',CASE WHEN method_value='POST' THEN 'Creó un usuario: ' ELSE 'Editó un usuario o sus permisos: ' END||body.get_string('name'),id_value);data.put('ok',TRUE);
       ELSE
         location_value:=req.get_string('location_id');

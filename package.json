@@ -30,7 +30,8 @@
     "ords:test:costing": "tsx scripts/test-costing-live.ts",
     "ords:test:activity": "tsx scripts/test-activity-live.ts",
     "ords:test:operations": "tsx scripts/test-operations-live.ts",
-    "ords:test:orders": "tsx scripts/test-orders-live.ts"
+    "ords:test:orders": "tsx scripts/test-orders-live.ts",
+    "ords:test:users": "tsx scripts/test-user-removal-live.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",

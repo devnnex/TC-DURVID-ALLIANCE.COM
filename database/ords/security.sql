@@ -12,8 +12,8 @@ CREATE OR REPLACE PACKAGE alliance_security AUTHID DEFINER AS
   FUNCTION can_manage(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2 DEFAULT NULL) RETURN BOOLEAN;
   FUNCTION context_for(p_user VARCHAR2) RETURN JSON_OBJECT_T;
   FUNCTION authenticate(p_token VARCHAR2,p_refresh BOOLEAN DEFAULT FALSE) RETURN alliance_api_sessions%ROWTYPE;
-  FUNCTION issue_session(p_user VARCHAR2) RETURN JSON_OBJECT_T;
-  FUNCTION login(p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T;
+  FUNCTION issue_session(p_user VARCHAR2,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T;
+  FUNCTION login(p_body JSON_OBJECT_T,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T;
   FUNCTION renew(p_token VARCHAR2) RETURN JSON_OBJECT_T;
   PROCEDURE throttle(p_bucket VARCHAR2,p_max NUMBER);
   PROCEDURE require_location(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_permission VARCHAR2);
@@ -128,25 +128,25 @@ CREATE OR REPLACE PACKAGE BODY alliance_security AS
     SELECT expires_at-INTERVAL '7' DAY INTO login_time FROM alliance_api_sessions WHERE user_id=p_user AND access_hash=hash_text(p_access);
     ctx:=context_for(p_user);actor:=ctx.get_object('user');actor.put('last_login_at',TO_CHAR(login_time AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));ctx.put('user',actor);
     r.put('access_token',p_access);r.put('refresh_token',p_refresh);r.put('context',ctx);r.put('provider','oracle-ords');RETURN r;END;
-  FUNCTION issue_session(p_user VARCHAR2) RETURN JSON_OBJECT_T IS u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);slug_value VARCHAR2(80);
+  FUNCTION issue_session(p_user VARCHAR2,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T IS u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);slug_value VARCHAR2(80);
   BEGIN SELECT * INTO u FROM users WHERE id=p_user AND active=1;
     access_value:=LOWER(RAWTOHEX(DBMS_CRYPTO.RANDOMBYTES(32)));refresh_value:=LOWER(RAWTOHEX(DBMS_CRYPTO.RANDOMBYTES(32)));
     DELETE FROM alliance_api_sessions WHERE expires_at<SYSTIMESTAMP-INTERVAL '1' DAY;
     INSERT INTO alliance_api_sessions(id,business_id,user_id,access_hash,refresh_hash,access_expires,expires_at) VALUES(new_id,u.business_id,u.id,hash_text(access_value),hash_text(refresh_value),SYSTIMESTAMP+INTERVAL '15' MINUTE,SYSTIMESTAMP+INTERVAL '7' DAY);
     SELECT slug INTO slug_value FROM businesses WHERE id=u.business_id;
-    DELETE FROM alliance_login_limits WHERE bucket IN(hash_text('login:'||slug_value||':'||u.username),hash_text('challenge:'||slug_value||':'||u.username));
+    DELETE FROM alliance_login_limits WHERE bucket IN(hash_text('login:'||slug_value||':'||u.username||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END),hash_text('challenge:'||slug_value||':'||u.username||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END));
     RETURN session_result(u.id,access_value,refresh_value);
   END;
-  FUNCTION login(p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS slug_value VARCHAR2(80);username_value users.username%TYPE;password_value VARCHAR2(128);u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);valid BOOLEAN;
+  FUNCTION login(p_body JSON_OBJECT_T,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T IS slug_value VARCHAR2(80);username_value users.username%TYPE;password_value VARCHAR2(128);u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);valid BOOLEAN;
   BEGIN
     keys_only(p_body,'business_slug,username,password');slug_value:=text_value(p_body,'business_slug',80);username_value:=text_value(p_body,'username',320);password_value:=text_value(p_body,'password',128);
-    throttle('login:'||slug_value||':'||username_value,10);
-    BEGIN SELECT u.* INTO u FROM users u JOIN businesses b ON b.id=u.business_id WHERE b.slug=slug_value AND u.username=username_value AND u.active=1;
-    EXCEPTION WHEN NO_DATA_FOUND THEN u.password_hash:='pbkdf2-sha256$600000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000';END;
+    throttle('login:'||slug_value||':'||username_value||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END,10);
+    BEGIN SELECT u.* INTO u FROM users u JOIN businesses b ON b.id=u.business_id WHERE b.slug=slug_value AND u.username=username_value AND u.active=1 AND u.deleted_at IS NULL AND EXISTS(SELECT 1 FROM user_location_roles g JOIN locations l ON l.business_id=g.business_id AND l.id=g.location_id WHERE g.business_id=u.business_id AND g.user_id=u.id AND (branch_value IS NULL OR g.role_code='OWNER' OR (l.active=1 AND (l.slug=branch_value OR l.id=branch_value))));
+    EXCEPTION WHEN TOO_MANY_ROWS THEN fail(400,'BRANCH_REQUIRED','Selecciona el negocio para iniciar sesión con este usuario.');WHEN NO_DATA_FOUND THEN u.password_hash:='pbkdf2-sha256$600000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000';END;
     valid:=verify_password(password_value,u.password_hash);
     IF u.id IS NULL OR NOT valid THEN fail(401,'UNAUTHORIZED','Usuario o contrasena incorrectos.');END IF;
     IF u.password_hash LIKE 'pbkdf2-sha256$%' THEN DECLARE encoded VARCHAR2(512):=scram_hash(u.password_hash);BEGIN UPDATE users SET password_hash=encoded WHERE id=u.id AND password_hash=u.password_hash;END;END IF;
-    RETURN issue_session(u.id);
+    RETURN issue_session(u.id,branch_value);
   END;
   FUNCTION renew(p_token VARCHAR2) RETURN JSON_OBJECT_T IS s alliance_api_sessions%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);
   BEGIN

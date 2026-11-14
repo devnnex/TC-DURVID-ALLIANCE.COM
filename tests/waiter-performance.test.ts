@@ -5,6 +5,15 @@ const members=[{id:'ana',name:'Ana'},{id:'luis',name:'Luis'},{id:'empty',name:'S
 function initial():OrderSnapshot{return {docs:{restaurant_tables:[{id:'table',table_name:'M1'}],service_requests:[{id:'oa',actor_user_id:'ana',created_at:at,request_type:'order',status:'resolved',session_id:'session',table_id:'table'},{id:'ob',actor_user_id:'luis',created_at:at,request_type:'order',status:'resolved',session_id:'session',table_id:'table'}],session_items:[{id:'la',order_id:'oa',quantity:1,unit_price:10000},{id:'lb',order_id:'ob',quantity:2,unit_price:10000}]},model:{tickets:[],customerPayments:[],debts:[]},sales:[]};}
 function sale():PerformanceSale{return {id:'sale',sessionId:'session',createdAt:at,waiterName:'Cajera',soldByUserId:'cashier',number:'F1',totals:{total:30000,subtotal:30000,tip:0},payments:[{method:'cash',amount:30000}],items:[{id:'la',quantity:1,unit_price:10000},{id:'lb',quantity:2,unit_price:10000}]};}
 describe('Progreso por comandas efectivamente cobradas',()=>{
+ it('reinicia solo la generación del mesero en el negocio eliminado, sin alterar ventas históricas',()=>{
+   const s=initial();s.sales=[sale()];const before=structuredClone(s);
+   const rows=waiterPerformance(s,[{id:'ana',name:'Ana',progressSince:'2026-11-13T16:00:00Z'},...members.filter(m=>m.id!=='ana')],30,now);
+   expect(rows.find(r=>r.id==='ana')).toMatchObject({sent:0,accepted:0,paid:0,amount:0,tips:0,orders:[]});
+   expect(rows.find(r=>r.id==='luis')).toMatchObject({sent:1,paid:1,amount:20000});
+   expect(waiterPerformance(s,[{id:'new-ana',name:'Ana'}],30,now)[0]).toMatchObject({sent:0,paid:0,amount:0,orders:[]});
+   expect(waiterPerformance(s,members,30,now).find(r=>r.id==='ana')).toMatchObject({sent:1,paid:1,amount:10000});
+   expect(s).toEqual(before);
+ });
  it.each([['M1','MESA 1'],['m12','MESA 12'],[' M 23 ','MESA 23'],['Mesa24','MESA 24'],['Matera 1','Matera 1'],['Terraza 3','Terraza 3']])('formatea %s sin renombrar otras mesas', (name,label)=>{expect(waiterTableLabel(name)).toBe(label);});
  it('asocia cada comanda con la venta exacta y no duplica su identificador',()=>{
    const s=initial(),v=sale();s.sales=[v,v];

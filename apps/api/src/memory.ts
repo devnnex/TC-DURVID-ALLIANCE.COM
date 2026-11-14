@@ -16,7 +16,14 @@ export class MemoryRepository implements Repository {
   feed = new Map<string,Change[]>(); locations = new Map<string,Location>();
   managed = new Map<string,ManagedUser>();
   adminAudit: {actor:string;action:string;entity:string}[] = [];
-  async findUser(slug: string, username: string) { return [...this.users.values()].find(u => u.business_slug === slug && u.username === username && this.managed.get(u.id)?.active); }
+  private deletedUsers=new Set<string>();
+  async findUser(slug: string, username: string,branch?:string) {
+    const matches=[...this.users.values()].filter(u=>{const m=this.managed.get(u.id);return u.business_slug===slug&&u.username===username&&m?.active&&!this.deletedUsers.has(u.id)&&m.access.some(a=>a.roles.includes('OWNER')||!branch||a.location_id===branch||this.locations.get(a.location_id)?.slug===branch);});
+    if(matches.length>1)throw new DomainError('BRANCH_REQUIRED','Selecciona el negocio para iniciar sesión con este usuario.',400);return matches[0];
+  }
+  private usernameAvailable(b:string,id:string,username:string,access:ManagedUser['access']){
+    if([...this.users.values()].some(u=>u.business_id===b&&u.username===username&&u.id!==id&&!this.deletedUsers.has(u.id)&&this.managed.get(u.id)?.access.some(a=>a.roles.includes('OWNER')||access.some(candidate=>candidate.roles.includes('OWNER')||candidate.location_id===a.location_id))))throw new DomainError('USERNAME_EXISTS','Ya existe un usuario con ese nombre en este negocio.',409);
+  }
   async context(id: string):Promise<Context> {
     const u=this.users.get(id),m=this.managed.get(id);
     if(!u||!m?.active)throw new DomainError('UNAUTHORIZED','La sesión ya no está disponible.',401);
@@ -37,14 +44,14 @@ export class MemoryRepository implements Repository {
   async profile(actorId:string){await this.context(actorId);return structuredClone(this.managed.get(actorId)!);}
   async saveProfile(actorId:string,input:ProfileWrite,sessionId:string){
     const c=await this.context(actorId),user=this.users.get(actorId)!,member=this.managed.get(actorId)!;
-    if([...this.users.values()].some(u=>u.business_id===user.business_id&&u.username===input.username&&u.id!==actorId))throw new DomainError('USERNAME_EXISTS','Ya existe un usuario con ese nombre.',409);
+    this.usernameAvailable(user.business_id,actorId,input.username,member.access);
     this.users.set(actorId,{...user,name:input.name,username:input.username,...(input.password_hash?{password_hash:input.password_hash}:{})});
     this.managed.set(actorId,{...member,name:input.name,username:input.username,updatedBy:actorId,updatedByName:input.name,updatedAt:new Date().toISOString()});
     if(input.password_hash)for(const s of this.sessions.values())if(s.user_id===actorId&&s.id!==sessionId)s.revoked=true;
     this.adminAudit.push({actor:c.user.id,action:'USER_PROFILE_SAVE',entity:actorId});
   }
   private async teamManager(id:string){const c=await this.context(id);if(!c.is_owner&&!Object.values(c.permissions).some(p=>p.includes('administration.manage')))throw new DomainError('FORBIDDEN','No tienes permiso para gestionar usuarios.',403);return c;}
-  async administration(actorId:string):Promise<Administration>{const c=await this.teamManager(actorId),managed=Object.entries(c.permissions).filter(([,p])=>p.includes('administration.manage')).map(([id])=>id);return structuredClone({locations:[...this.locations.values()].filter(l=>l.business_id===c.user.business_id&&(c.is_owner||managed.includes(l.id))),users:[...this.managed.values()].filter(u=>this.users.get(u.id)?.business_id===c.user.business_id&&(c.is_owner||u.access.some(a=>managed.includes(a.location_id)))),roles:roleTemplates,sections});}
+  async administration(actorId:string):Promise<Administration>{const c=await this.teamManager(actorId),managed=Object.entries(c.permissions).filter(([,p])=>p.includes('administration.manage')).map(([id])=>id);return structuredClone({locations:[...this.locations.values()].filter(l=>l.business_id===c.user.business_id&&(c.is_owner||managed.includes(l.id))),users:[...this.managed.values()].filter(u=>this.users.get(u.id)?.business_id===c.user.business_id&&!this.deletedUsers.has(u.id)&&(c.is_owner||u.access.some(a=>managed.includes(a.location_id)))),roles:roleTemplates,sections});}
   async saveLocation(actorId:string,id:string|undefined,input:LocationInput){
     const c=await this.owner(actorId),b=c.user.business_id;
     if(id&&this.locations.get(id)?.business_id!==b)throw new DomainError('NOT_FOUND','Sucursal no disponible.',404);
@@ -54,17 +61,29 @@ export class MemoryRepository implements Repository {
   }
   async saveUser(actorId:string,id:string|undefined,input:UserWrite,locationId?:string){
     const c=await this.teamManager(actorId),b=c.user.business_id,existing=id?this.users.get(id):undefined;
+    if(id&&this.deletedUsers.has(id))throw new DomainError('NOT_FOUND','Usuario no disponible.',404);
     assertUserGrant(c,id?this.managed.get(id):undefined,input,locationId);
     if(id&&existing?.business_id!==b)throw new DomainError('NOT_FOUND','Usuario no disponible.',404);
     if(id&&this.managed.get(id)?.protected)throw new DomainError('PROTECTED_OWNER','La cuenta del propietario está protegida.',409);
     if(!id&&!input.password_hash)throw new DomainError('PASSWORD_REQUIRED','Define la contraseña del nuevo usuario.');
     if(input.access.some(a=>this.locations.get(a.location_id)?.business_id!==b))throw new DomainError('FORBIDDEN','Una sucursal pertenece a otro negocio.',403);
     if(input.access.some(a=>(a.roles as string[]).includes('OWNER')))throw new DomainError('FORBIDDEN','El rol propietario está protegido.',403);
-    if([...this.users.values()].some(u=>u.business_id===b&&u.username===input.username&&u.id!==id))throw new DomainError('USERNAME_EXISTS','Ya existe un usuario con ese nombre.',409);
+    this.usernameAvailable(b,id||'',input.username,[...(locationId?this.managed.get(id||'')?.access.filter(a=>a.location_id!==locationId)||[]:[]),...input.access]);
     const entity=id||randomUUID();this.users.set(entity,{id:entity,business_id:b,business_slug:c.user.business_slug,name:input.name,username:input.username,password_hash:input.password_hash||existing!.password_hash});
     const previous=this.managed.get(entity),now=new Date().toISOString();this.managed.set(entity,{...previous,id:entity,name:input.name,username:input.username,active:input.active,protected:false,access:structuredClone([...(locationId?previous?.access.filter(a=>a.location_id!==locationId)||[]:[]),...input.access]),...(!previous?{createdBy:actorId,createdByName:c.user.name,createdAt:now}:{}),updatedBy:actorId,updatedByName:c.user.name,updatedAt:now});
     for(const s of this.sessions.values())if(s.user_id===entity)s.revoked=true;
     this.adminAudit.push({actor:actorId,action:'USER_ACCESS_SAVE',entity});
+  }
+  async removeUser(actorId:string,id:string,locationId?:string){
+    const context=await this.teamManager(actorId),member=this.managed.get(id);
+    if(!member||this.users.get(id)?.business_id!==context.user.business_id||this.deletedUsers.has(id))throw new DomainError('NOT_FOUND','Usuario no disponible.',404);
+    if(member.protected)throw new DomainError('PROTECTED_OWNER','La cuenta del propietario está protegida.',409);
+    if(!locationId){if(member.access.length>1)throw new DomainError('LOCATION_REQUIRED','Selecciona el negocio del que vas a eliminar el usuario.',400);locationId=member.access[0]?.location_id;}
+    assertUserGrant(context,member,{name:member.name,username:member.username,active:member.active,access:[]},locationId);
+    member.progressSince={...member.progressSince,...(locationId?{[locationId]:new Date().toISOString()}:{})};
+    member.access=locationId?member.access.filter(a=>a.location_id!==locationId):[];
+    if(!member.access.length){member.active=false;this.deletedUsers.add(id);for(const session of this.sessions.values())if(session.user_id===id)session.revoked=true;}
+    this.adminAudit.push({actor:actorId,action:'USER_REMOVE',entity:id});
   }
   async saveSession(s: Session) { this.sessions.set(s.id,structuredClone(s)); }
   async getSession(id: string) { return this.sessions.get(id); }

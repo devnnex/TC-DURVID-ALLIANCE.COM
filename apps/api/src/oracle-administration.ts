@@ -24,6 +24,7 @@ export class OracleAdministration {
       const [before]=await rows(c,'SELECT id,full_name,username FROM users WHERE id=:id AND business_id=:b AND active=1 FOR UPDATE',{id:actor,b:u.BUSINESS_ID});if(!before)throw new DomainError('UNAUTHORIZED','Usuario no disponible.',401);
       await c.execute('UPDATE users SET full_name=:name,username=:username WHERE id=:id AND business_id=:b',{id:actor,b:u.BUSINESS_ID,name:input.name,username:input.username});
       if(input.password_hash){await c.execute('UPDATE users SET password_hash=:hash WHERE id=:id AND business_id=:b',{id:actor,b:u.BUSINESS_ID,hash:input.password_hash});await c.execute('UPDATE auth_sessions SET revoked=1 WHERE business_id=:b AND user_id=:id AND id<>:sid',{b:u.BUSINESS_ID,id:actor,sid:sessionId});}
+      await this.checkUsername(c,u.BUSINESS_ID,actor);
       await this.audit(c,actor,u.BUSINESS_ID,'USER_PROFILE_SAVE',actor,before,{name:input.name,username:input.username,password_changed:!!input.password_hash});await c.commit();
     }catch(e){await c.rollback();if((e as {errorNum?:number}).errorNum===1)throw new DomainError('USERNAME_EXISTS','Ya existe un usuario con ese nombre.',409);throw e;}finally{await c.close();}
   }
@@ -40,6 +41,26 @@ export class OracleAdministration {
       const current=await this.owner(c,actor);await fn(c,u.BUSINESS_ID,current.TEAM_CONTEXT);await c.commit();
     }catch(e){await c.rollback();if((e as {errorNum?:number}).errorNum===1)throw new DomainError('DUPLICATE','El identificador o usuario ya existe.',409);throw e;}finally{await c.close();}
   }
+  private async checkUsername(c:oracledb.Connection,b:string,id:string){
+    const [row]=await rows(c,"SELECT COUNT(*) n FROM users target JOIN users other ON other.business_id=target.business_id AND other.username=target.username AND other.id<>target.id AND other.deleted_at IS NULL WHERE target.business_id=:b AND target.id=:id AND (EXISTS(SELECT 1 FROM user_location_roles g WHERE g.business_id=:b AND g.user_id IN(target.id,other.id) AND g.role_code='OWNER') OR EXISTS(SELECT 1 FROM user_location_roles a JOIN user_location_roles d ON d.business_id=a.business_id AND d.location_id=a.location_id WHERE a.business_id=:b AND a.user_id=target.id AND d.user_id=other.id))",{b,id});
+    if(row.N)throw new DomainError('USERNAME_EXISTS','Ya existe un usuario con ese nombre en este negocio.',409);
+  }
+  async removeUser(actor:string,id:string,locationId?:string){await this.transaction(actor,async(c,b,context)=>{
+    const [existing]=await rows(c,'SELECT full_name,username,active FROM users WHERE business_id=:b AND id=:id AND deleted_at IS NULL',{b,id});
+    if(!existing)throw new DomainError('NOT_FOUND','Usuario no disponible.',404);
+    const grants=await rows(c,'SELECT location_id,role_code FROM user_location_roles WHERE business_id=:b AND user_id=:id',{b,id});
+    if(grants.some(g=>g.ROLE_CODE==='OWNER'))throw new DomainError('PROTECTED_OWNER','La cuenta del propietario está protegida.',409);
+    const access=[...new Set(grants.map(g=>g.LOCATION_ID))].map(location_id=>({location_id,roles:grants.filter(g=>g.LOCATION_ID===location_id).map(g=>g.ROLE_CODE),overrides:{}}));
+    if(!locationId){if(access.length>1)throw new DomainError('LOCATION_REQUIRED','Selecciona el negocio del que vas a eliminar el usuario.',400);locationId=access[0]?.location_id;}
+    const member={id,name:existing.FULL_NAME,username:existing.USERNAME,active:existing.ACTIVE===1,protected:false,access};
+    assertUserGrant(context,member,{name:member.name,username:member.username,active:member.active,access:[]},locationId);
+    const binds={b,id,...(locationId?{scope:locationId}:{})},scope=locationId?' AND location_id=:scope':'';
+    await c.execute('DELETE FROM user_location_permissions WHERE business_id=:b AND user_id=:id'+scope,binds);
+    await c.execute('DELETE FROM user_location_roles WHERE business_id=:b AND user_id=:id'+scope,binds);
+    const [remaining]=await rows(c,'SELECT COUNT(*) n FROM user_location_roles WHERE business_id=:b AND user_id=:id',{b,id});
+    if(!remaining.N){await c.execute('UPDATE users SET active=0,deleted_at=SYSTIMESTAMP WHERE business_id=:b AND id=:id',{b,id});await c.execute('UPDATE auth_sessions SET revoked=1 WHERE business_id=:b AND user_id=:id',{b,id});}
+    await this.audit(c,actor,b,'USER_REMOVE',id,member,{locationId:locationId||null,remainingAccess:remaining.N});
+  });}
   private async audit(c:oracledb.Connection,actor:string,b:string,action:string,entity:string,before:unknown,after:unknown){
     await c.execute('INSERT INTO administration_audit(id,business_id,actor_user_id,action,entity_id,before_json,after_json) VALUES (:id,:b,:actor,:action,:entity,:before,:after)',{id:randomUUID(),b,actor,action,entity,before:JSON.stringify(before),after:JSON.stringify(after)});
   }
@@ -47,7 +68,7 @@ export class OracleAdministration {
     const c=await this.pool.getConnection();try{
       await c.execute('SET TRANSACTION READ ONLY');const u=await this.owner(c,actor),b=u.BUSINESS_ID;
       const locations=(await rows(c,'SELECT * FROM locations WHERE business_id=:b ORDER BY name',{b})).filter(l=>u.TEAM_CONTEXT.permissions[l.ID]?.includes('administration.manage')).map(r=>({id:r.ID,business_id:b,name:r.NAME,slug:r.SLUG,color:r.COLOR,active:r.ACTIVE===1}));
-      let users:ManagedUser[]=(await rows(c,'SELECT id,full_name,username,active FROM users WHERE business_id=:b ORDER BY full_name',{b})).map(r=>({id:r.ID,name:r.FULL_NAME,username:r.USERNAME,active:r.ACTIVE===1,protected:false,access:[]}));
+      let users:ManagedUser[]=(await rows(c,'SELECT id,full_name,username,active FROM users WHERE business_id=:b AND deleted_at IS NULL ORDER BY full_name',{b})).map(r=>({id:r.ID,name:r.FULL_NAME,username:r.USERNAME,active:r.ACTIVE===1,protected:false,access:[]}));
       const grants=await rows(c,'SELECT * FROM user_location_roles WHERE business_id=:b',{b});
       const overrides=await rows(c,'SELECT * FROM user_location_permissions WHERE business_id=:b',{b});
       for(const user of users){
@@ -58,6 +79,8 @@ export class OracleAdministration {
       users=users.filter(user=>u.TEAM_CONTEXT.is_owner||user.access.some(a=>locations.some(l=>l.id===a.location_id)));
       const history=await rows(c,"SELECT h.entity_id,h.actor_user_id,h.before_json,h.created_at,u.full_name FROM administration_audit h LEFT JOIN users u ON u.id=h.actor_user_id AND u.business_id=h.business_id WHERE h.business_id=:b AND h.action='USER_ACCESS_SAVE' ORDER BY h.created_at,h.id",{b});
       for(const row of history){const member=users.find(m=>m.id===row.ENTITY_ID);if(!member)continue;const at=new Date(row.CREATED_AT).toISOString();if(row.BEFORE_JSON===null&&!member.createdBy)Object.assign(member,{createdBy:row.ACTOR_USER_ID,createdByName:row.FULL_NAME,createdAt:at});Object.assign(member,{updatedBy:row.ACTOR_USER_ID,updatedByName:row.FULL_NAME,updatedAt:at});}
+      const removals=await rows(c,"SELECT entity_id,after_json,created_at FROM administration_audit WHERE business_id=:b AND action='USER_REMOVE' ORDER BY created_at,id",{b});
+      for(const event of removals){const member=users.find(u=>u.id===event.ENTITY_ID),scope=JSON.parse(event.AFTER_JSON||'{}').locationId;if(member&&scope)member.progressSince={...member.progressSince,[scope]:new Date(event.CREATED_AT).toISOString()};}
       const rp=await rows(c,'SELECT * FROM role_permissions');
       const roles=roleTemplates.map(r=>({...r,permissions:rp.filter(p=>p.ROLE_CODE===r.code).map(p=>p.PERMISSION_CODE)}));
       return {locations,users,roles,sections};
@@ -75,7 +98,7 @@ export class OracleAdministration {
     await this.audit(c,actor,b,'LOCATION_SAVE',entity,existing?{name:existing.NAME,slug:existing.SLUG,color:existing.COLOR,active:existing.ACTIVE===1}:null,input);
   });}
   async user(actor:string,id:string|undefined,input:UserWrite,locationId?:string){await this.transaction(actor,async(c,b,context)=>{
-    const [existing]=id?await rows(c,'SELECT id,full_name,username,active FROM users WHERE business_id=:b AND id=:id',{b,id}):[];
+    const [existing]=id?await rows(c,'SELECT id,full_name,username,active FROM users WHERE business_id=:b AND id=:id AND deleted_at IS NULL',{b,id}):[];
     if(id&&!existing)throw new DomainError('NOT_FOUND','Usuario no disponible.',404);
     const prior=id?await rows(c,'SELECT * FROM user_location_roles WHERE business_id=:b AND user_id=:id',{b,id}):[];
     if(prior.some(g=>g.ROLE_CODE==='OWNER'))throw new DomainError('PROTECTED_OWNER','La cuenta del propietario está protegida.',409);
@@ -98,6 +121,7 @@ export class OracleAdministration {
       for(const role of new Set(a.roles))await c.execute('INSERT INTO user_location_roles(business_id,user_id,location_id,role_code) VALUES (:b,:u,:l,:role)',{b,u:entity,l:a.location_id,role});
       for(const [permission,effect] of Object.entries(a.overrides))await c.execute('INSERT INTO user_location_permissions(business_id,user_id,location_id,permission_code,effect) VALUES (:b,:u,:l,:permission,:effect)',{b,u:entity,l:a.location_id,permission,effect});
     }
+    await this.checkUsername(c,b,entity);
     await c.execute('UPDATE auth_sessions SET revoked=1 WHERE business_id=:b AND user_id=:id',{b,id:entity});
     const {password_hash:_,...safe}=input;
     await this.audit(c,actor,b,'USER_ACCESS_SAVE',entity,{user:existing||null,roles:prior,overrides:beforeOverrides},{...safe,password_changed:!!input.password_hash});

@@ -139,7 +139,7 @@ window.OracleDb = (() => {
     if(selectedLocation&&selectedLocation!==locationId())throw new Error('Gestiona los usuarios desde el negocio correspondiente.');
     selectedLocation=locationId();
     const method=(options.method||'GET').toUpperCase();
-    const valid=personal||method==='GET'&&path==='/admin/overview'||method==='POST'&&['/admin/users','/admin/activity','/activity/visit'].includes(path)||method==='PUT'&&/^\/admin\/users\/[0-9a-f-]{36}$/i.test(path);
+    const valid=personal||method==='GET'&&path==='/admin/overview'||method==='POST'&&['/admin/users','/admin/activity','/activity/visit'].includes(path)||['PUT','DELETE'].includes(method)&&/^\/admin\/users\/[0-9a-f-]{36}$/i.test(path);
     if(!valid)throw new Error('Operación de administración no permitida.');
     if(!navigator.onLine)throw new Error('Conéctate a internet para consultar o cambiar usuarios y permisos en servicio seguro. Tus otras secciones pueden seguir trabajando sin conexión.');
     if(!access)await renew(false);

@@ -21,11 +21,11 @@ test('Usuarios conserva la página y la sesión al crear y editar accesos', asyn
       data = { user: { id: user, business_id: business, business_slug: 'tc-alliance', username: 'tester', name: 'Responsable de prueba' }, locations: [location], is_owner: true, permissions: { [branch]: ['home.read', 'products.read', 'products.write', 'inventory.read', 'inventory.write', 'administration.manage'] } };
     } else if (request.path === '/admin/users' || request.path.startsWith('/admin/users/')) {
       expect(request.location_id).toBe(branch);
-      expect(request.method).toBe(request.path === '/admin/users' ? 'POST' : 'PUT');
+      expect(request.method).toBe(request.path === '/admin/users' ? 'POST' : writes.length===3?'DELETE':'PUT');
       writes.push(request);
       const member = { ...request.body, id: request.path === '/admin/users' ? randomUUID() : request.path.split('/').pop(), protected: false };
       const index = members.findIndex(m => m.id === member.id);
-      if (index < 0) members.push(member); else members[index] = member;
+      if(request.method==='DELETE')members.splice(index,1);else if (index < 0) members.push(member); else members[index] = member;
       data = { ok: true };
     } else if (request.path === '/admin/activity') data = { items: [], hasMore: false };
     else { await route.fallback(); return; }
@@ -56,7 +56,7 @@ test('Usuarios conserva la página y la sesión al crear y editar accesos', asyn
   await page.locator('.admin-sidebar [href="#users"]').click();
   expect(new URL(page.url()).pathname).toBe(path);
   await expect(page.locator('.team-role-guide')).toContainText('Jefe');
-  await page.getByRole('button',{name:'Usuarios y permisos',exact:true}).click();await page.locator('.team-user').filter({hasText:'Mesera actualizada'}).getByRole('switch').uncheck();await expect(page.locator('.team-user').filter({hasText:'Mesera actualizada'})).toContainText('Acceso pausado');expect(writes[2].body.active).toBe(false);await page.setViewportSize({width:1280,height:900});await page.screenshot({path:'test-results/team-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/team-mobile.png',fullPage:true});await page.getByRole('button',{name:'Retirar acceso de Mesera actualizada'}).click();await page.locator('#systemMessageDialog [value=accept]').click();await expect(page.locator('.team-user')).toHaveCount(1);expect(writes[3].body.access).toEqual([]);expect(writes).toHaveLength(4);
+  await page.getByRole('button',{name:'Usuarios y permisos',exact:true}).click();await page.locator('.team-user').filter({hasText:'Mesera actualizada'}).getByRole('switch').uncheck();await expect(page.locator('.team-user').filter({hasText:'Mesera actualizada'})).toContainText('Acceso pausado');expect(writes[2].body.active).toBe(false);await page.setViewportSize({width:1280,height:900});await page.screenshot({path:'test-results/team-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/team-mobile.png',fullPage:true});await page.getByRole('button',{name:'Retirar acceso de Mesera actualizada'}).click();await page.locator('#systemMessageDialog [value=accept]').click();await expect(page.locator('.team-user')).toHaveCount(1);expect(writes[3].method).toBe('DELETE');expect(writes).toHaveLength(4);
   expect(errors).toEqual([]);
 });
 

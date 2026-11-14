@@ -5,9 +5,18 @@ CREATE OR REPLACE PACKAGE alliance_administration AUTHID DEFINER AS
   PROCEDURE save_profile(p_user VARCHAR2,p_business VARCHAR2,p_session VARCHAR2,p_body JSON_OBJECT_T);
   PROCEDURE save_location(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_body JSON_OBJECT_T);
   PROCEDURE save_user(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_body JSON_OBJECT_T,p_location VARCHAR2 DEFAULT NULL);
+  PROCEDURE save_user(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_body JSON_OBJECT_T,p_location VARCHAR2,p_saved_id OUT VARCHAR2);
+  PROCEDURE remove_user(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_location VARCHAR2 DEFAULT NULL);
 END;
 /
 CREATE OR REPLACE PACKAGE BODY alliance_administration AS
+  PROCEDURE check_username(b VARCHAR2,u VARCHAR2) IS n NUMBER;BEGIN
+    SELECT COUNT(*) INTO n FROM users target JOIN users other ON other.business_id=target.business_id AND other.username=target.username AND other.id<>target.id AND other.deleted_at IS NULL
+    WHERE target.business_id=b AND target.id=u AND (
+      EXISTS(SELECT 1 FROM user_location_roles g WHERE g.business_id=b AND g.user_id IN(target.id,other.id) AND g.role_code='OWNER')
+      OR EXISTS(SELECT 1 FROM user_location_roles a JOIN user_location_roles c ON c.business_id=a.business_id AND c.location_id=a.location_id WHERE a.business_id=b AND a.user_id=target.id AND c.user_id=other.id));
+    IF n>0 THEN alliance_security.fail(409,'USERNAME_EXISTS','Ya existe un usuario con ese nombre en este negocio.');END IF;
+  END;
   PROCEDURE check_location(p_body JSON_OBJECT_T) IS v VARCHAR2(160);n NUMBER;
   BEGIN
     alliance_security.keys_only(p_body,'slug,name,color,active');
@@ -29,8 +38,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_administration AS
   BEGIN SELECT * INTO x FROM locations WHERE id=p_id AND business_id=p_business;
     r.put('id',x.id);r.put('business_id',x.business_id);r.put('slug',x.slug);r.put('name',x.name);r.put('color',x.color);r.put('active',x.active=1);RETURN r;
   END;
-  FUNCTION user_json(p_id VARCHAR2,p_business VARCHAR2) RETURN JSON_OBJECT_T IS r JSON_OBJECT_T:=JSON_OBJECT_T();a JSON_ARRAY_T:=JSON_ARRAY_T();entry JSON_OBJECT_T;roles_json JSON_ARRAY_T;overrides_json JSON_OBJECT_T;x users%ROWTYPE;
-  BEGIN SELECT * INTO x FROM users WHERE id=p_id AND business_id=p_business;
+  FUNCTION user_json(p_id VARCHAR2,p_business VARCHAR2) RETURN JSON_OBJECT_T IS r JSON_OBJECT_T:=JSON_OBJECT_T();a JSON_ARRAY_T:=JSON_ARRAY_T();entry JSON_OBJECT_T;roles_json JSON_ARRAY_T;overrides_json JSON_OBJECT_T;resets JSON_OBJECT_T:=JSON_OBJECT_T();reset_location VARCHAR2(36);x users%ROWTYPE;
+  BEGIN SELECT * INTO x FROM users WHERE id=p_id AND business_id=p_business AND deleted_at IS NULL;
     r.put('id',x.id);r.put('name',x.full_name);r.put('username',x.username);r.put('active',x.active=1);r.put('protected',alliance_security.owner(p_id,p_business));
     FOR l IN (SELECT DISTINCT location_id FROM user_location_roles WHERE business_id=p_business AND user_id=p_id ORDER BY location_id) LOOP
       entry:=JSON_OBJECT_T();roles_json:=JSON_ARRAY_T();overrides_json:=JSON_OBJECT_T();
@@ -42,7 +51,10 @@ CREATE OR REPLACE PACKAGE BODY alliance_administration AS
     FOR h IN(SELECT h.actor_user_id,h.before_json,u.full_name,TO_CHAR(h.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') at_value FROM administration_audit h LEFT JOIN users u ON u.id=h.actor_user_id AND u.business_id=h.business_id WHERE h.business_id=p_business AND h.entity_id=p_id AND h.action='USER_ACCESS_SAVE' ORDER BY h.created_at,h.id)LOOP
      IF h.before_json IS NULL AND NOT r.has('createdBy') THEN r.put('createdBy',h.actor_user_id);r.put('createdByName',h.full_name);r.put('createdAt',h.at_value);END IF;
      r.put('updatedBy',h.actor_user_id);r.put('updatedByName',h.full_name);r.put('updatedAt',h.at_value);
-    END LOOP;RETURN r;
+    END LOOP;
+    FOR h IN(SELECT after_json,TO_CHAR(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') at_value FROM administration_audit WHERE business_id=p_business AND entity_id=p_id AND action='USER_REMOVE' ORDER BY created_at,id) LOOP
+      reset_location:=JSON_VALUE(h.after_json,'$.locationId');IF reset_location IS NOT NULL THEN resets.put(reset_location,h.at_value);END IF;
+    END LOOP;r.put('progressSince',resets);RETURN r;
   END;
   FUNCTION profile(p_user VARCHAR2,p_business VARCHAR2) RETURN JSON_OBJECT_T IS n NUMBER;
   BEGIN
@@ -65,6 +77,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_administration AS
       hash_value:=alliance_security.password_hash(password_value);
     END IF;
     UPDATE users SET full_name=name_value,username=username_value,password_hash=NVL(hash_value,password_hash) WHERE id=p_user AND business_id=p_business AND active=1;
+    check_username(p_business,p_user);
     IF hash_value IS NOT NULL THEN
       UPDATE auth_sessions SET revoked=1 WHERE business_id=p_business AND user_id=p_user;
       UPDATE alliance_api_sessions SET revoked=1 WHERE business_id=p_business AND user_id=p_user AND id<>p_session;
@@ -104,7 +117,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_administration AS
     IF NOT alliance_security.can_manage(p_user,p_business) THEN alliance_security.fail(403,'FORBIDDEN','No tienes permiso para gestionar usuarios.');END IF;
     ctx:=alliance_security.context_for(p_user);perms:=ctx.get_object('permissions');
     FOR l IN (SELECT id FROM locations WHERE business_id=p_business ORDER BY name) LOOP IF manages(perms,l.id) THEN ls.append(location_json(l.id,p_business));END IF;END LOOP;
-    FOR u IN (SELECT id FROM users WHERE business_id=p_business ORDER BY full_name) LOOP entry:=user_json(u.id,p_business);aa:=entry.get_array('access');visible_access:=JSON_ARRAY_T();FOR i IN 0..aa.get_size-1 LOOP grant_entry:=TREAT(aa.get(i) AS JSON_OBJECT_T);IF manages(perms,grant_entry.get_string('location_id')) THEN visible_access.append(grant_entry);END IF;END LOOP;IF visible_access.get_size>0 OR alliance_security.owner(p_user,p_business) THEN entry.put('access',visible_access);us.append(entry);END IF;END LOOP;
+    FOR u IN (SELECT id FROM users WHERE business_id=p_business AND deleted_at IS NULL ORDER BY full_name) LOOP entry:=user_json(u.id,p_business);aa:=entry.get_array('access');visible_access:=JSON_ARRAY_T();FOR i IN 0..aa.get_size-1 LOOP grant_entry:=TREAT(aa.get(i) AS JSON_OBJECT_T);IF manages(perms,grant_entry.get_string('location_id')) THEN visible_access.append(grant_entry);END IF;END LOOP;IF visible_access.get_size>0 OR alliance_security.owner(p_user,p_business) THEN entry.put('access',visible_access);us.append(entry);END IF;END LOOP;
     FOR role_row IN (SELECT code,name FROM roles ORDER BY code) LOOP entry:=JSON_OBJECT_T();pa:=JSON_ARRAY_T();
       FOR p IN (SELECT permission_code FROM role_permissions WHERE role_code=role_row.code ORDER BY permission_code) LOOP pa.append(p.permission_code);END LOOP;
       entry.put('code',role_row.code);entry.put('name',role_row.name);entry.put('permissions',pa);rs.append(entry);
@@ -125,7 +138,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_administration AS
     IF p_id IS NULL AND active_value=1 THEN alliance_pos.initialize(p_business,entity);END IF;
     audit(p_user,p_business,'LOCATION_SAVE',entity,before_value,p_body.to_clob);
   END;
-  PROCEDURE save_user(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_body JSON_OBJECT_T,p_location VARCHAR2 DEFAULT NULL) IS
+  PROCEDURE save_user(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_body JSON_OBJECT_T,p_location VARCHAR2 DEFAULT NULL) IS saved_id VARCHAR2(36);BEGIN save_user(p_user,p_business,p_id,p_body,p_location,saved_id);END;
+  PROCEDURE save_user(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_body JSON_OBJECT_T,p_location VARCHAR2,p_saved_id OUT VARCHAR2) IS
     entity VARCHAR2(36):=NVL(p_id,alliance_security.new_id);before_value CLOB;safe_body JSON_OBJECT_T;hash_value VARCHAR2(512);password_value VARCHAR2(128);n NUMBER;
     arr JSON_ARRAY_T;entry JSON_OBJECT_T;role_array JSON_ARRAY_T;overrides_json JSON_OBJECT_T;override_keys JSON_KEY_LIST;location_value VARCHAR2(36);role_value VARCHAR2(40);effect_value VARCHAR2(5);seen JSON_OBJECT_T:=JSON_OBJECT_T();permissions_json JSON_OBJECT_T;ctx JSON_OBJECT_T;
     name_value VARCHAR2(160);username_value users.username%TYPE;active_value NUMBER;actor_perms JSON_OBJECT_T;actor_array JSON_ARRAY_T;
@@ -189,10 +203,42 @@ CREATE OR REPLACE PACKAGE BODY alliance_administration AS
         IF n=0 THEN alliance_security.fail(400,'INVALID_INPUT','Editar productos requiere consultar el catalogo.');END IF;
       END IF;
     END LOOP;
+    check_username(p_business,entity);
     UPDATE auth_sessions SET revoked=1 WHERE business_id=p_business AND user_id=entity;
     UPDATE alliance_api_sessions SET revoked=1 WHERE business_id=p_business AND user_id=entity;
     safe_body:=JSON_OBJECT_T(p_body.to_clob);safe_body.remove('password');safe_body.put('password_changed',hash_value IS NOT NULL);
     audit(p_user,p_business,'USER_ACCESS_SAVE',entity,before_value,safe_body.to_clob);
+    p_saved_id:=entity;
+  END;
+  PROCEDURE remove_user(p_user VARCHAR2,p_business VARCHAR2,p_id VARCHAR2,p_location VARCHAR2 DEFAULT NULL) IS
+    before_value CLOB;ctx JSON_OBJECT_T;perms JSON_OBJECT_T;after_value JSON_OBJECT_T:=JSON_OBJECT_T();n NUMBER;scope_value VARCHAR2(36):=p_location;
+  BEGIN
+    lock_business(p_user,p_business);ctx:=alliance_security.context_for(p_user);perms:=ctx.get_object('permissions');
+    BEGIN before_value:=user_json(p_id,p_business).to_clob;EXCEPTION WHEN NO_DATA_FOUND THEN alliance_security.fail(404,'NOT_FOUND','Usuario no disponible.');END;
+    IF alliance_security.owner(p_id,p_business) THEN alliance_security.fail(409,'PROTECTED_OWNER','La cuenta del propietario está protegida.');END IF;
+    IF scope_value IS NULL THEN
+      SELECT COUNT(DISTINCT location_id),MIN(location_id) INTO n,scope_value FROM user_location_roles WHERE business_id=p_business AND user_id=p_id;
+      IF n>1 THEN alliance_security.fail(400,'LOCATION_REQUIRED','Selecciona el negocio del que vas a eliminar el usuario.');END IF;
+    END IF;
+    IF scope_value IS NOT NULL THEN
+      alliance_security.require_location(p_user,p_business,scope_value,'administration.manage');
+      SELECT COUNT(*) INTO n FROM user_location_roles WHERE business_id=p_business AND user_id=p_id AND location_id=scope_value;
+      IF n=0 THEN alliance_security.fail(404,'NOT_FOUND','Este usuario no pertenece al negocio abierto.');END IF;
+    END IF;
+    FOR g IN(SELECT location_id,role_code FROM user_location_roles WHERE business_id=p_business AND user_id=p_id AND (scope_value IS NULL OR location_id=scope_value)) LOOP
+      IF NOT manages(perms,g.location_id) OR (g.role_code='BOSS' AND NOT alliance_security.location_owner(p_user,p_business,g.location_id)) THEN alliance_security.fail(403,'FORBIDDEN','No puedes eliminar este usuario en ese negocio.');END IF;
+    END LOOP;
+    DELETE FROM user_location_permissions WHERE business_id=p_business AND user_id=p_id AND (scope_value IS NULL OR location_id=scope_value);
+    DELETE FROM user_location_roles WHERE business_id=p_business AND user_id=p_id AND (scope_value IS NULL OR location_id=scope_value);
+    SELECT COUNT(*) INTO n FROM user_location_roles WHERE business_id=p_business AND user_id=p_id;
+    IF n=0 THEN
+      UPDATE users SET active=0,deleted_at=SYSTIMESTAMP WHERE business_id=p_business AND id=p_id;
+      UPDATE auth_sessions SET revoked=1 WHERE business_id=p_business AND user_id=p_id;
+      UPDATE alliance_api_sessions SET revoked=1 WHERE business_id=p_business AND user_id=p_id;
+      DELETE FROM alliance_auth_challenges WHERE user_id=p_id;
+    END IF;
+    after_value.put('locationId',scope_value);after_value.put('remainingAccess',n);
+    audit(p_user,p_business,'USER_REMOVE',p_id,before_value,after_value.to_clob);
   END;
 END;
 /

@@ -55,7 +55,7 @@ export const userInput = z.object({name:z.string().trim().min(1).max(160),userna
   for(const a of v.access){const p=effectivePermissions(a.roles,a.overrides);if(p.includes('products.write')&&!p.includes('products.read'))c.addIssue({code:'custom',path:['access'],message:'Editar productos requiere consultar el catálogo.'});}
 });
 export type Access = {location_id:string;roles:string[];overrides:Record<string,'ALLOW'|'DENY'>};
-export type ManagedUser = {id:string;name:string;username:string;active:boolean;protected:boolean;access:Access[];createdBy?:string;createdByName?:string;createdAt?:string;updatedBy?:string;updatedByName?:string;updatedAt?:string};
+export type ManagedUser = {id:string;name:string;username:string;active:boolean;protected:boolean;access:Access[];createdBy?:string;createdByName?:string;createdAt?:string;updatedBy?:string;updatedByName?:string;updatedAt?:string;progressSince?:Record<string,string>};
 export type UserWrite = Omit<z.infer<typeof userInput>,'password'> & {password_hash?:string};
 // Personal edits never accept access, roles, active state or a target user ID.
 export const profileInput = z.object({name:z.string().trim().min(1).max(160),username:z.string().trim().min(1).max(320),password:z.string().min(4).max(12).optional()}).strict();

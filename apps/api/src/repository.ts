@@ -6,7 +6,7 @@ export type Setup = { slug: string; business_name: string; location_name?: strin
 export interface Repository {
   health():Promise<boolean>;
   setupRequired():Promise<boolean>;
-  findUser(slug: string, username: string): Promise<UserRecord | undefined>;
+  findUser(slug: string, username: string,branch?:string): Promise<UserRecord | undefined>;
   context(userId: string): Promise<Context>;
   setup(input: Setup): Promise<Context>;
   administration(actorId:string):Promise<Administration>;
@@ -14,6 +14,7 @@ export interface Repository {
   saveProfile(actorId:string,input:ProfileWrite,sessionId:string):Promise<void>;
   saveLocation(actorId:string,id:string|undefined,input:LocationInput):Promise<void>;
   saveUser(actorId:string,id:string|undefined,input:UserWrite,locationId?:string):Promise<void>;
+  removeUser(actorId:string,id:string,locationId?:string):Promise<void>;
   saveSession(session: Session): Promise<void>;
   getSession(id: string): Promise<Session | undefined>;
   rotateSession(oldHash: string, newHash: string): Promise<Session | undefined>;

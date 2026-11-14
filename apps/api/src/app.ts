@@ -19,7 +19,7 @@ export async function createApp(repo: Repository, cfg: AppConfig) {
   const origins=allowedWebOrigins(cfg.origin,cfg.production);
   if(cfg.publicApiUrl){const url=new URL(cfg.publicApiUrl);if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname.replace(/\/$/,'')!=='/api/v1')throw new Error('PUBLIC_API_URL debe ser la URL HTTPS pública de la API, terminada en /api/v1.');origins.push(url.origin);}
   if(!cfg.production)origins.push('http://127.0.0.1:3001','http://localhost:3001');
-  await app.register(cors,{origin:origins,credentials:true});
+  await app.register(cors,{origin:origins,credentials:true,methods:['GET','HEAD','POST','PUT','DELETE']});
   app.addHook('onRequest',async request=>{
     // CORS alone cannot prevent writes from an untrusted browser origin.
     const origin=request.headers.origin;
@@ -65,8 +65,8 @@ export async function createApp(repo: Repository, cfg: AppConfig) {
     const {password,...rest}=input;return repo.setup({...rest,password_hash:await hashPassword(password)});
   });
   app.post('/api/v1/auth/login',{config:{rateLimit:{max:10,timeWindow:'1 minute'}}},async(request,reply)=>{
-    const body=z.object({business_slug:z.string().min(1).max(80),username:z.string().trim().min(1).max(320),password:z.string().min(1).max(128)}).strict().parse(request.body);
-    const user=await repo.findUser(body.business_slug,body.username);const valid=await checkPassword(body.password,user?.password_hash||await hashPassword(token()));
+    const body=z.object({business_slug:z.string().min(1).max(80),username:z.string().trim().min(1).max(320),password:z.string().min(1).max(128),branch:z.string().min(1).max(80).optional()}).strict().parse(request.body);
+    const user=await repo.findUser(body.business_slug,body.username,body.branch||String(request.headers['x-location-id']||'')||undefined);const valid=await checkPassword(body.password,user?.password_hash||await hashPassword(token()));
     if(!user||!valid)throw new DomainError('UNAUTHORIZED','Usuario o contraseña incorrectos.',401);
     const refresh=token(),sid=randomUUID(),loginAt=Date.now();await repo.saveSession({id:sid,user_id:user.id,business_id:user.business_id,refresh_hash:digest(refresh),expires_at:loginAt+7*86400000,revoked:false});
     reply.setCookie('alliance_refresh',refresh,refreshCookie);
@@ -105,6 +105,12 @@ export async function createApp(repo: Repository, cfg: AppConfig) {
     const locationId=request.headers['x-location-id']===undefined?undefined:uuid.parse(request.headers['x-location-id']);
     await repo.saveUser(context.user.id,id,{...input,password_hash:password?await hashPassword(password):undefined},locationId);return {ok:true};
   }});
+  app.delete('/api/v1/admin/users/:id',async request=>{
+    const {context}=await authenticate(request);await repo.administration(context.user.id);
+    const {id}=z.object({id:uuid}).parse(request.params);
+    const locationId=request.headers['x-location-id']===undefined?undefined:uuid.parse(request.headers['x-location-id']);
+    await repo.removeUser(context.user.id,id,locationId);return {ok:true};
+  });
   app.post('/api/v1/devices/register',async request=>{
     const p=await principal(request);const input=z.object({id:uuid,name:z.string().trim().min(1).max(120)}).strict().parse(request.body);
     await repo.registerDevice(p,input.id,input.name);return {ok:true};
