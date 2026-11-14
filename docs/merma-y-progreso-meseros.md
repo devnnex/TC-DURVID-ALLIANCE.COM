@@ -22,6 +22,8 @@ El selector de insumos se ubica a 6 píxeles de la flecha, independientemente de
 
 Guardar sigue usando la revisión y protección contra cambios de recetas con cuentas abiertas. El vínculo de inventario utiliza el mismo consumo equivalente en navegador y servidor, incluyendo reservas, porciones y adiciones. No hay un segundo descuento por introducir los pesos.
 
+En cafetería y coctelería, las recetas guardadas se presentan en filas con nombre, variante, porciones, costo por porción y precio final de venta. La misma fila permite abrir el desglose de ingredientes, ver y editar la receta o eliminarla. El desglose conserva su estado al guardar. Una receta guardada puede existir sin estar agregada al inventario; al agregar al inventario se guardan primero sus cambios pendientes.
+
 ## Comandas y dinero cobrado
 
 En Usuarios se muestran tarjetas de los usuarios con rol Mesero en la sucursal: importe cobrado, participación del equipo, barra comparativa, comandas enviadas, atendidas, cobradas, pendientes, rechazadas y anuladas. Se puede elegir 24 horas, 7, 30 o 90 días.
