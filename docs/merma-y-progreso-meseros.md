@@ -14,6 +14,8 @@ El peso inicial conserva la cantidad de referencia que ya utilizaba la receta. P
 
 El badge identifica la merma en el ingrediente. La exportación de Excel incluye ambos pesos y el porcentaje. Se rechaza el peso final mayor al inicial, vacío o cero cuando el inicial es positivo. Las líneas existentes sin utilización pueden mantener ambos valores en cero. Al cambiar el insumo se retira la merma del anterior para no transferir su rendimiento accidentalmente.
 
+En coctelería y cafetería, la celda del ingrediente parpadea suavemente cuando las existencias disponibles no alcanzan para la receta. El aviso permanece visible con el disponible, lo necesario, lo faltante y la indicación de abastecer. Compara unidades equivalentes, suma las filas que usan el mismo insumo, incluye la merma y las adiciones por cada porción y descuenta lo reservado en cuentas abiertas. Se actualiza al seleccionar un ingrediente, editar cantidades o recibir nuevas existencias, sin descontar inventario por consultar el costeo. Con movimiento reducido conserva el aviso y el resaltado sin animación.
+
 Guardar sigue usando la revisión y protección contra cambios de recetas con cuentas abiertas. El vínculo de inventario utiliza el mismo consumo equivalente en navegador y servidor, incluyendo reservas, porciones y adiciones. No hay un segundo descuento por introducir los pesos.
 
 ## Comandas y dinero cobrado

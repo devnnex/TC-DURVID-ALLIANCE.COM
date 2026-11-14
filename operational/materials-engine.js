@@ -19,6 +19,22 @@ globalThis.AllianceMaterialsEngine=(()=>{
   function fail(message,code='MATERIALS_INPUT',details){const e=new Error(message);e.code=code;e.materials=details;throw e;}
   function number(v,label,min=0,max=1e12){if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)fail('Revisa '+label+'.');return v;}
   function reserved(state,excludeSession){const sums=new Map();for(const line of state.docs.session_items||[]){if(state.operations.preparations?.some(p=>p.id===line.id&&p.status==='active')||line.status==='cancelled'||line.session_id===excludeSession||!state.docs.table_sessions.some(s=>s.id===line.session_id&&s.status==='open'))continue;const r=state.operations.recipes.find(r=>r.productId===line.menu_item_id&&r.managed);if(!r)continue;for(const p of r.lines){const i=state.operations.ingredients.find(i=>i.id===p.ingredientId);if(i)sums.set(i.id,(sums.get(i.id)||0)+E().convert(p.quantity,p.unit,i.unit,state.units)*line.quantity);}}return sums;}
+  function recipeShortages(state,recipe){
+    const held=reserved(state),demand=new Map(),invalid=new Set();
+    for(const [index,line] of recipe.lines.entries()){
+      const ingredient=state.costing?.model?.ingredients.find(i=>i.id===line.ingredientId);if(!ingredient?.name?.trim())continue;
+      const suggestion=stockSuggestion(state,ingredient);
+      // An ambiguous name needs an explicit selection before stock can be compared.
+      if(suggestion.ambiguous)continue;
+      const raw=state.operations.ingredients.find(i=>i.id===suggestion.stockId&&!i.archived),id=raw?.id||'missing:'+ingredient.id,unit=raw?.unit||ingredient.unit;
+      try{
+        const quantity=AllianceCosting.lineQuantity(line)*(line.stage==='portion'?number(recipe.output,'porciones',0.000001):1),needed=E().convert(quantity,line.unit,unit,state.units);
+        const row=demand.get(id)||{id:raw?.id||null,name:raw?.name||ingredient.name,unit,available:Math.max(0,(raw?.quantity||0)-(held.get(raw?.id)||0)),needed:0,indexes:[]};
+        row.needed+=needed;row.indexes.push(index);demand.set(id,row);
+      }catch{invalid.add(id);}
+    }
+    return [...demand.entries()].filter(([id,row])=>!invalid.has(id)&&row.needed>row.available+1e-8).map(([,row])=>({...row,missing:row.needed-row.available}));
+  }
   function shortages(state,items=[],excludeSession){const held=reserved(state,excludeSession),demand=new Map(held);for(const line of items){const r=state.operations.recipes.find(r=>r.productId===(line.menu_item_id||line.menuItemId||line.productId)&&r.managed);if(!r)continue;for(const p of r.lines){const i=state.operations.ingredients.find(i=>i.id===p.ingredientId);if(!i||i.archived)fail('Un insumo de la receta no está disponible.','MATERIALS_MISSING');demand.set(i.id,(demand.get(i.id)||0)+E().convert(p.quantity,p.unit,i.unit,state.units)*line.quantity);}}
     return [...demand].flatMap(([id,needed])=>{const i=state.operations.ingredients.find(i=>i.id===id);return !i||needed>i.quantity+1e-8?[{id,name:i?.name||'Insumo no disponible',unit:i?.unit||'',available:items.length?Math.max(0,(i?.quantity||0)-(held.get(id)||0)):i?.quantity||0,needed:round(items.length?needed-(held.get(id)||0):needed),missing:round(needed-(i?.quantity||0))}]:[];});}
   function guard(state,items=[],excludeSession,actor){if(actor)globalThis.AllianceProduction?.reconcile(state,actor);const missing=shortages(state,items,excludeSession);if(missing.length)fail('No alcanza '+missing.map(i=>i.name).join(', ')+'. Abastece la macro de insumos.','MATERIALS_INSUFFICIENT',missing);}
@@ -96,5 +112,5 @@ globalThis.AllianceMaterialsEngine=(()=>{
       apply(state,{id:crypto.randomUUID(),command:'materials_link',payload:{productId:linked.productId,recipeId:linked.recipeId,revision:state.costing.revision,salePortions:linked.salePortions,mappings}},actor);
     }
   }
-  return {norm,base,stockSuggestion,reserved,shortages,guard,portions,cartCapacity,cartCapacities,supplyNeeds,apply,syncProcessing};
+  return {norm,base,stockSuggestion,reserved,recipeShortages,shortages,guard,portions,cartCapacity,cartCapacities,supplyNeeds,apply,syncProcessing};
 })();

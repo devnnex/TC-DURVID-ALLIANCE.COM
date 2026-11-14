@@ -8,6 +8,39 @@ function initial(){const model=ctx.AllianceCosting.empty();model.ingredients=[{i
 const apply=(s:any,command:string,payload:any)=>{const next=structuredClone(s);return M.apply(next,{id:randomUUID(),command,payload},actor);};
 const link={productId:'product',recipeId:'recipe',revision:1,salePortions:1,mappings:[{ingredientId:'tartara',stockId:'raw-tartara'},{ingredientId:'milk',stockId:'raw-milk'}]};
 function ready(){let s=apply(initial(),'materials_link',link);for(const [id,unit]of [['raw-tartara','g'],['raw-milk','ml']])s=apply(s,'materials_adjust',{ingredientId:id,quantity:1000,unit,kind:'in',totalCost:10000,reason:'Abastecer'});return s;}
+
+describe('Existencias necesarias al costear una receta',()=>{
+  it('compara el lote completo y las adiciones por porción, descontando reservas abiertas',()=>{
+    const s=ready(),recipe=s.costing.model.recipes[0];
+    s.operations.ingredients.find((i:any)=>i.id==='raw-milk').quantity=700;
+    s.docs.table_sessions=[{id:'table',status:'open'}];s.docs.session_items=[{id:'pending',session_id:'table',menu_item_id:'product',quantity:2,status:'pending'}];
+    const before=structuredClone(s),missing=M.recipeShortages(s,recipe);
+    expect(missing).toHaveLength(1);expect(missing[0]).toMatchObject({id:'raw-milk',available:540,needed:640,missing:100,indexes:[1]});
+    expect(s).toEqual(before);
+    s.docs.table_sessions[0].status='closed';expect(M.recipeShortages(s,recipe)).toEqual([]);
+  });
+  it('suma filas del mismo insumo y convierte kilos y gramos antes de comparar',()=>{
+    const s=ready(),recipe=s.costing.model.recipes[0];
+    s.costing.model.ingredients[1].stockId='raw-tartara';s.costing.model.ingredients[1].unit='g';
+    recipe.lines[0].quantity=0.6;recipe.lines[0].unit='kg';
+    recipe.lines[1].quantity=60;recipe.lines[1].unit='g';
+    expect(M.recipeShortages(s,recipe)).toMatchObject([{id:'raw-tartara',unit:'g',available:1000,needed:1080,missing:80,indexes:[0,1]}]);
+    s.operations.ingredients[0].quantity=1080;expect(M.recipeShortages(s,recipe)).toEqual([]);
+  });
+  it('incluye el consumo equivalente por merma y elimina el aviso al ajustar la receta',()=>{
+    const s=ready(),recipe=s.costing.model.recipes[0];recipe.lines[0].quantity=100;
+    recipe.lines[0].processing={...ctx.AllianceCosting.processingDefaults(),clean:20};
+    s.operations.ingredients[0].quantity=120;
+    expect(M.recipeShortages(s,recipe)).toMatchObject([{id:'raw-tartara',needed:125,available:120,missing:5,indexes:[0]}]);
+    recipe.lines[0].processing.clean=0;expect(M.recipeShortages(s,recipe)).toEqual([]);
+  });
+  it('avisa de un ingrediente nuevo sin existencias y omite cantidades inválidas',()=>{
+    const s=initial(),recipe=s.costing.model.recipes[0];
+    expect(M.recipeShortages(s,recipe)).toMatchObject([{id:null,available:0,needed:75,indexes:[0]},{id:null,available:0,needed:640,indexes:[1]}]);
+    recipe.lines[0].quantity=null;recipe.output=null;
+    expect(M.recipeShortages(s,recipe)).toEqual([]);
+  });
+});
 describe('Macro de insumos y recetas por unidad vendida',()=>{
   it('aumentar capacidad agrega todos los ingredientes proporcionalmente y actualiza otras recetas',()=>{
     ctx.BRANCH_CONFIG={slug:'cocteleria'};
