@@ -34,8 +34,11 @@ globalThis.AllianceOrdersLocal=(state,action,p,user)=>{
       if(line.unitPrice!==item.price)fail('El precio cambió. Actualiza y revisa la comanda antes de enviarla.');
       return {productId:item.id,name:item.name,quantity:line.quantity,unitPrice:item.price,notes:String(line.notes||'')};
     });
+    if(p.customerRegistration!==undefined){if(!p.customerRegistration||typeof p.customerRegistration!=='object'||Array.isArray(p.customerRegistration))fail('Revisa los datos del cliente.');AllianceOperationsEngine.crmProfile(p.customerRegistration,now);}
+    globalThis.AllianceMaterialsEngine?.guard(state);
     const request={id:p.id,table_id:p.tableId,request_type:'order',status:'pending',created_at:now,actor_user_id:user.id,actor_name:user.full_name,order:{items,notes:String(p.notes||''),total:items.reduce((n,i)=>n+Math.round(i.quantity*i.unitPrice*100)/100,0)},message:'Comanda enviada por '+user.full_name};
-    requests.push(request);globalThis.AllianceMaterialsEngine?.guard(state);allianceOrderVersion(state,'service_requests',request.id);return copy(request);
+    if(p.customerRegistration){const customer=AllianceOperationsEngine.registerOrderCustomer(state.operations,p.customerRegistration,user,now,p.id);request.order.customerId=customer.id;request.order.customerName=customer.name;}
+    requests.push(request);allianceOrderVersion(state,'service_requests',request.id);return copy(request);
   }
   const request=requests.find(r=>r.id===p.requestId&&r.request_type==='order');
   if(!request)fail('La comanda no está disponible.');
@@ -49,8 +52,10 @@ globalThis.AllianceOrdersLocal=(state,action,p,user)=>{
     if(open.length>1||(open[0]?.id||request.currentSessionId||null)!==(p.expectedSessionId||null))fail('La cuenta de esta mesa cambió en otro equipo. Actualiza y revisa la comanda.');
     let session=open[0];if(!session){session={id:request.currentSessionId||request.id,table_id:request.table_id,status:'open',opened_at:now,created_at:now,created_by_user_id:user.id,assigned_waiter_id:request.actor_user_id,assigned_waiter:{id:request.actor_user_id,full_name:request.actor_name}};state.docs.table_sessions.push(session);allianceOrderVersion(state,'table_sessions',session.id);}
     const lines=request.order.items.map((i,index)=>({id:'order-'+request.id+'-'+index,session_id:session.id,menu_item_id:i.productId,item_name:i.name,quantity:i.quantity,unit_price:i.unitPrice,notes:i.notes,status:'pending',created_at:now,created_by_user_id:request.actor_user_id,created_by_user:{id:request.actor_user_id,full_name:request.actor_name},accepted_by_user_id:user.id,order_id:request.id}));
+    if(request.order.customerId)for(const line of lines){line.customer_id=request.order.customerId;line.customer_name=request.order.customerName;}
     state.docs.session_items.push(...lines);for(const line of lines)allianceOrderVersion(state,'session_items',line.id);
     state.operations.tickets.push({id:request.id,orderId:request.id,sessionId:session.id,table:table.table_name,status:'preparing',items:lines.map(i=>({id:i.id,name:i.item_name,quantity:i.quantity,notes:i.notes})),notes:request.order.notes,sentById:request.actor_user_id,sentBy:request.actor_name,actorId:user.id,actorName:user.full_name,at:now,updatedAt:now,updatedBy:user.full_name,updatedById:user.id});
+    if(request.order.customerId)Object.assign(state.operations.tickets.at(-1),{customerId:request.order.customerId,customerName:request.order.customerName});
     Object.assign(request,{session_id:session.id,ticket_id:request.id,status:'acknowledged',acknowledged_at:now,acknowledged_by_user_id:user.id,accepted_by_name:user.full_name});
   }else if(action==='order_reject')Object.assign(request,{status:'resolved',resolved_at:now,resolved_by_user_id:user.id,resolved_by_name:user.full_name});
   else fail('Acción no disponible.');

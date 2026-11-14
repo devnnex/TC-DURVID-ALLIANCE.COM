@@ -6,7 +6,7 @@ END;
 CREATE OR REPLACE PACKAGE BODY alliance_orders AS
   PROCEDURE touch(b VARCHAR2,l VARCHAR2) IS row_value JSON_OBJECT_T;BEGIN row_value:=alliance_pos_store.document(b,l,'op_ordersync','primary');IF row_value IS NULL THEN row_value:=JSON_OBJECT_T('{"revision":0}');END IF;row_value.put('revision',row_value.get_number('revision')+1);alliance_pos_store.put_document(b,l,'op_ordersync','primary',row_value);END;
   FUNCTION run_action(u VARCHAR2,b VARCHAR2,l VARCHAR2,a VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
-    r JSON_OBJECT_T;tab JSON_OBJECT_T;product JSON_OBJECT_T;line JSON_OBJECT_T;item JSON_OBJECT_T;order_value JSON_OBJECT_T;session_value JSON_OBJECT_T;ticket JSON_OBJECT_T;sender JSON_OBJECT_T;
+    r JSON_OBJECT_T;tab JSON_OBJECT_T;product JSON_OBJECT_T;line JSON_OBJECT_T;item JSON_OBJECT_T;order_value JSON_OBJECT_T;session_value JSON_OBJECT_T;ticket JSON_OBJECT_T;sender JSON_OBJECT_T;customer_value JSON_OBJECT_T;
     items JSON_ARRAY_T;lines JSON_ARRAY_T:=JSON_ARRAY_T();ticket_lines JSON_ARRAY_T:=JSON_ARRAY_T();id_value VARCHAR2(80);session_id VARCHAR2(80);table_id_value VARCHAR2(80);line_id VARCHAR2(80);actor_name VARCHAR2(160);stamp VARCHAR2(30):=alliance_pos_store.stamp;
     context_value JSON_OBJECT_T;perms JSON_ARRAY_T;allowed BOOLEAN:=FALSE;quantity NUMBER;price NUMBER;total NUMBER:=0;n NUMBER;notes VARCHAR2(500);
   BEGIN
@@ -21,7 +21,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_orders AS
       alliance_production.reconcile(u,b,l);ticket.put('status','cancelled');alliance_pos_store.put_document(b,l,'op_tickets',id_value,ticket);alliance_pos_store.reconcile_session(u,b,l,session_id);alliance_pos_store.audit(u,b,'ORDER_CANCEL',id_value,NULL,ticket.to_clob);alliance_activity.record_event(u,b,l,'service','ORDER_CANCEL','Retiró la comanda y sus consumos de la cuenta',id_value);RETURN ticket;
     END IF;
     IF a='order_submit' THEN
-      alliance_security.keys_only(p,'id,tableId,items,notes');id_value:=alliance_security.text_value(p,'id',60,'^[a-zA-Z0-9_-]+$');
+      alliance_security.keys_only(p,'id,tableId,items,notes,customerRegistration');id_value:=alliance_security.text_value(p,'id',60,'^[a-zA-Z0-9_-]+$');
       IF alliance_pos_store.document(b,l,'service_requests',id_value) IS NOT NULL THEN alliance_security.fail(409,'DUPLICATE_ORDER','Esta comanda ya existe.');END IF;
       tab:=alliance_pos_store.document(b,l,'restaurant_tables',p.get_string('tableId'));
       IF tab IS NULL OR NOT tab.get_boolean('is_active') THEN alliance_security.fail(400,'INVALID_TABLE','Elige una mesa disponible en esta sucursal.');END IF;
@@ -36,6 +36,10 @@ CREATE OR REPLACE PACKAGE BODY alliance_orders AS
         item:=JSON_OBJECT_T();item.put('productId',product.get_string('id'));item.put('name',product.get_string('name'));item.put('quantity',quantity);item.put('unitPrice',price);item.put('notes',line.get_string('notes'));lines.append(item);total:=total+ROUND(quantity*price,2);
       END LOOP;
       order_value:=JSON_OBJECT_T();order_value.put('items',lines);order_value.put('notes',p.get_string('notes'));order_value.put('total',total);
+      IF p.has('customerRegistration') THEN
+        customer_value:=p.get_object('customerRegistration');IF customer_value IS NULL THEN alliance_security.fail(400,'CRM_INPUT','Revisa los datos del cliente.');END IF;
+        customer_value:=alliance_customer_crm.register_order(u,b,l,customer_value,id_value);order_value.put('customerId',customer_value.get_string('id'));order_value.put('customerName',customer_value.get_string('name'));
+      END IF;
       r:=JSON_OBJECT_T();r.put('id',id_value);r.put('table_id',tab.get_string('id'));r.put('request_type','order');r.put('status','pending');r.put('created_at',stamp);r.put('actor_user_id',u);r.put('actor_name',actor_name);r.put('order',order_value);r.put('message','Comanda enviada por '||actor_name);
       alliance_materials.guard_open(b,l);alliance_pos_store.put_document(b,l,'service_requests',id_value,r);alliance_pos_store.audit(u,b,'ORDER_SUBMIT',id_value,NULL,r.to_clob);alliance_activity.record_event(u,b,l,'service','ORDER_SUBMIT','Envio una comanda a '||tab.get_string('table_name'),id_value);
     ELSIF a IN('order_accept','order_reject') THEN
@@ -56,10 +60,10 @@ CREATE OR REPLACE PACKAGE BODY alliance_orders AS
         sender:=JSON_OBJECT_T();sender.put('id',r.get_string('actor_user_id'));sender.put('full_name',r.get_string('actor_name'));
         items:=r.get_object('order').get_array('items');
         FOR i IN 0..items.get_size-1 LOOP
-          line:=TREAT(items.get(i) AS JSON_OBJECT_T);line_id:='order-'||id_value||'-'||TO_CHAR(i);item:=JSON_OBJECT_T();item.put('id',line_id);item.put('session_id',session_id);item.put('menu_item_id',line.get_string('productId'));item.put('item_name',line.get_string('name'));item.put('quantity',line.get_number('quantity'));item.put('unit_price',line.get_number('unitPrice'));item.put('notes',line.get_string('notes'));item.put('status','pending');item.put('created_at',stamp);item.put('created_by_user_id',r.get_string('actor_user_id'));item.put('created_by_user',sender);item.put('accepted_by_user_id',u);item.put('order_id',id_value);alliance_pos_store.put_document(b,l,'session_items',line_id,item);
+          line:=TREAT(items.get(i) AS JSON_OBJECT_T);line_id:='order-'||id_value||'-'||TO_CHAR(i);item:=JSON_OBJECT_T();item.put('id',line_id);item.put('session_id',session_id);item.put('menu_item_id',line.get_string('productId'));item.put('item_name',line.get_string('name'));item.put('quantity',line.get_number('quantity'));item.put('unit_price',line.get_number('unitPrice'));item.put('notes',line.get_string('notes'));item.put('status','pending');item.put('created_at',stamp);item.put('created_by_user_id',r.get_string('actor_user_id'));item.put('created_by_user',sender);item.put('accepted_by_user_id',u);item.put('order_id',id_value);IF r.get_object('order').has('customerId') THEN item.put('customer_id',r.get_object('order').get_string('customerId'));item.put('customer_name',r.get_object('order').get_string('customerName'));END IF;alliance_pos_store.put_document(b,l,'session_items',line_id,item);
           item:=JSON_OBJECT_T();item.put('id',line_id);item.put('name',line.get_string('name'));item.put('quantity',line.get_number('quantity'));item.put('notes',line.get_string('notes'));ticket_lines.append(item);
         END LOOP;
-        ticket:=JSON_OBJECT_T();ticket.put('id',id_value);ticket.put('orderId',id_value);ticket.put('sessionId',session_id);ticket.put('table',tab.get_string('table_name'));ticket.put('status','preparing');ticket.put('items',ticket_lines);ticket.put('notes',r.get_object('order').get_string('notes'));ticket.put('sentById',r.get_string('actor_user_id'));ticket.put('sentBy',r.get_string('actor_name'));ticket.put('updatedBy',actor_name);ticket.put('updatedById',u);ticket.put('updatedAt',stamp);alliance_operations.put_row(u,b,l,'tickets',id_value,ticket);
+        ticket:=JSON_OBJECT_T();ticket.put('id',id_value);ticket.put('orderId',id_value);ticket.put('sessionId',session_id);ticket.put('table',tab.get_string('table_name'));ticket.put('status','preparing');ticket.put('items',ticket_lines);ticket.put('notes',r.get_object('order').get_string('notes'));ticket.put('sentById',r.get_string('actor_user_id'));ticket.put('sentBy',r.get_string('actor_name'));ticket.put('updatedBy',actor_name);ticket.put('updatedById',u);ticket.put('updatedAt',stamp);IF r.get_object('order').has('customerId') THEN ticket.put('customerId',r.get_object('order').get_string('customerId'));ticket.put('customerName',r.get_object('order').get_string('customerName'));END IF;alliance_operations.put_row(u,b,l,'tickets',id_value,ticket);
         r.put('session_id',session_id);r.put('ticket_id',id_value);r.put('status','acknowledged');r.put('acknowledged_at',stamp);r.put('acknowledged_by_user_id',u);r.put('accepted_by_name',actor_name);
       ELSE r.put('status','resolved');r.put('resolved_at',stamp);r.put('resolved_by_user_id',u);r.put('resolved_by_name',actor_name);END IF;
       alliance_pos_store.put_document(b,l,'service_requests',id_value,r);alliance_pos_store.audit(u,b,UPPER(a),id_value,NULL,r.to_clob);alliance_activity.record_event(u,b,l,'service',UPPER(a),CASE WHEN a='order_accept' THEN 'Acepto y agrego la comanda a la mesa' ELSE 'Rechazo la comanda sin agregar consumos' END,id_value);

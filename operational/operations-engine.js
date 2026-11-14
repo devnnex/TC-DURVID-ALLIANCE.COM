@@ -7,6 +7,31 @@ globalThis.AllianceOperationsEngine=(()=>{
   function num(v,name,min=0,max=1e12){if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)fail(name+': revisa el valor.');return v;}
   function text(v,name,max=160){if(typeof v!=='string'||!v.trim()||v.length>max)fail('Completa '+name+'.');return v.trim();}
   function validDate(value){return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number(value.slice(0,4))>=1900&&Number(value.slice(0,4))<=9999&&Number.isFinite(Date.parse(value+'T12:00:00Z'))&&new Date(value+'T12:00:00Z').toISOString().slice(0,10)===value;}
+  const crmEnabled=()=>['cocteleria','cafeteria'].includes(globalThis.BRANCH_CONFIG?.slug);
+  const colombiaDate=at=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(at));
+  function phoneKey(phone){const digits=String(phone||'').replace(/\D/g,'');return digits.length===10?'57'+digits:digits;}
+  function crmProfile(p,at=new Date().toISOString()){
+    if(!crmEnabled())fail('El CRM está disponible en cafetería y coctelería.');
+    const name=text(p.name,'el nombre del cliente'),phone=text(p.phone,'el teléfono',40),birthDate=p.birthDate;
+    if(!/^[+\d\s().-]+$/.test(phone)||phoneKey(phone).length<7||phoneKey(phone).length>15)fail('Revisa el teléfono del cliente.');
+    if(!validDate(birthDate)||birthDate>colombiaDate(at))fail('Selecciona una fecha de cumpleaños válida, anterior o igual a hoy.');
+    if(p.contactConsent!==true)fail('Confirma que el cliente autorizó su registro.');
+    return {name,phone,phoneKey:phoneKey(phone),birthDate,contactConsent:true};
+  }
+  function crmBirthdays(customers,today=colombiaDate(new Date())){
+    const year=Number(today.slice(0,4)),occurrence=(birth,y)=>{
+      const month=Number(birth.slice(5,7)),day=Number(birth.slice(8)),last=new Date(Date.UTC(y,month,0)).getUTCDate();
+      return y+'-'+String(month).padStart(2,'0')+'-'+String(Math.min(day,last)).padStart(2,'0');
+    };
+    const rows=customers.filter(c=>c.active!==false&&validDate(c.birthDate)).map(customer=>{const current=occurrence(customer.birthDate,year);return {customer,date:current<today?occurrence(customer.birthDate,year+1):current,today:current===today};});
+    return {today:rows.filter(r=>r.today),month:rows.filter(r=>r.customer.birthDate.slice(5,7)===today.slice(5,7)).sort((a,b)=>a.customer.birthDate.slice(8).localeCompare(b.customer.birthDate.slice(8))),upcoming:rows.sort((a,b)=>a.date.localeCompare(b.date)||a.customer.name.localeCompare(b.customer.name))};
+  }
+  function registerOrderCustomer(s,p,actor,at,orderId){
+    const profile=crmProfile(p,at),old=s.customers.find(c=>phoneKey(c.phone)===profile.phoneKey);
+    if(old)return {id:old.id,name:profile.name};
+    const id='crm-'+orderId,row={...profile,id,active:true,document:'',allowCredit:false,creditLimit:0,paymentFrequency:'once',paymentDate:'',source:'waiter',sourceOrderId:orderId,revision:1,createdAt:at,createdById:actor.id,createdByName:actor.full_name||actor.name,actorId:actor.id,actorName:actor.full_name||actor.name,at,occurredAt:at,consentAt:at,consentById:actor.id,consentByName:actor.full_name||actor.name};
+    s.customers.push(row);return {id,name:profile.name};
+  }
   function suggestedPaymentDate(customer,debts,today){
     const pending=debts.filter(d=>d.customerId===customer?.id&&!d.voided&&d.total>d.paid&&d.dueDate>=today).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
     const anchor=customer?.paymentDate,frequency=customer?.paymentFrequency||'once';
@@ -58,13 +83,17 @@ globalThis.AllianceOperationsEngine=(()=>{
       const paid=money(num(p.paid,'Pago',0,money(total)));if(!['cash','transfer','card','other'].includes(p.method))fail('Elige el medio de pago.');cash(s,-paid,p.id,p.method,meta);s.purchases.push({...meta,id:p.id,supplierId:supplier.id,supplierName:supplier.name,reference:text(p.reference,'referencia',100),lines,total:money(total),paid,dueDate:p.dueDate||'',method:p.method});
     }else if(kind==='purchase_pay'||kind==='debt_pay'){
       const record=find(s,kind==='purchase_pay'?'purchases':'debts',p.recordId);if(record.kind==='simple')fail('Esta compra es un registro de costo por unidad y no utiliza abonos de proveedor.');const balance=money(record.total-record.paid);const amount=money(num(p.amount,'Abono',0.01,balance));if(!['cash','transfer','card','other'].includes(p.method))fail('Elige el medio de pago.');cash(s,kind==='purchase_pay'?-amount:amount,record.id,p.method,meta);record.paid=money(record.paid+amount);s.settlements.push({...meta,recordId:record.id,type:kind,amount,method:p.method,reference:String(p.reference||'')});
+    }else if(kind==='customer_crm_save'){
+      const profile=crmProfile(p,at),old=s.customers.find(c=>c.id===p.id);
+      if(s.customers.some(c=>c.id!==p.id&&phoneKey(c.phone)===profile.phoneKey))fail('Ya existe un cliente con este teléfono. Busca su ficha para editarlo.','DUPLICATE_CUSTOMER');
+      save('customers',{...profile,active:p.active!==false,document:old?.document||'',allowCredit:old?.allowCredit??false,creditLimit:old?.creditLimit||0,paymentFrequency:old?.paymentFrequency||'once',paymentDate:old?.paymentDate||'',source:old?.source||'crm',consentAt:old?.contactConsent?old.consentAt||at:at,consentById:old?.contactConsent?old.consentById||actor.id:actor.id,consentByName:old?.contactConsent?old.consentByName||meta.actorName:meta.actorName});
     }else if(kind==='customer_save'){
       const old=s.customers.find(c=>c.id===p.id),paymentFrequency=p.paymentFrequency??old?.paymentFrequency??'once',paymentDate=p.paymentDate??old?.paymentDate??'';
       if(!['once','weekly','fortnightly','monthly'].includes(paymentFrequency)||paymentDate&&!validDate(paymentDate)||paymentFrequency!=='once'&&!paymentDate)fail('Revisa la frecuencia y la fecha de pago.');
       for(const expected of p.rescheduleDebts||[]){const debt=find(s,'debts',expected.id);if(debt.customerId!==p.id||debt.voided||debt.paid>=debt.total||debt.dueDate!==expected.dueDate||debt.paid!==expected.paid||debt.total!==expected.total)fail('El saldo o su fecha cambió. Actualiza antes de guardar.','VERSION_CONFLICT');if(!validDate(paymentDate))fail('Selecciona la nueva fecha de pago.');debt.dueDateChanges||=[];debt.dueDateChanges.push({...meta,previousDate:debt.dueDate,newDate:paymentDate});debt.dueDate=paymentDate;}
       save('customers',{name:text(p.name,'cliente'),phone:String(p.phone||''),document:String(p.document||''),contactConsent:!!p.contactConsent,allowCredit:true,creditLimit:num(p.creditLimit,'Límite de crédito'),active:p.active!==false,paymentFrequency,paymentDate});
     }
-    else if(kind==='debt_add'){const customer=find(s,'customers',p.customerId);if(!customer.active)fail('Este cliente no tiene crédito habilitado.');const total=money(num(p.total,'Saldo',0.01));const owed=s.debts.filter(r=>r.customerId===customer.id&&!r.voided).reduce((a,r)=>a+r.total-r.paid,0);if(customer.creditLimit>0&&owed+total>customer.creditLimit)fail('El saldo excede el límite de crédito.');s.debts.push({...meta,id:p.id,customerId:customer.id,customerName:customer.name,total,paid:0,dueDate:text(p.dueDate,'vencimiento',10),reference:text(p.reference,'origen del saldo',160),source:'opening'});}
+    else if(kind==='debt_add'){const customer=find(s,'customers',p.customerId);if(!customer.active||customer.allowCredit===false)fail('Este cliente no tiene crédito habilitado.');const total=money(num(p.total,'Saldo',0.01));const owed=s.debts.filter(r=>r.customerId===customer.id&&!r.voided).reduce((a,r)=>a+r.total-r.paid,0);if(customer.creditLimit>0&&owed+total>customer.creditLimit)fail('El saldo excede el límite de crédito.');s.debts.push({...meta,id:p.id,customerId:customer.id,customerName:customer.name,total,paid:0,dueDate:text(p.dueDate,'vencimiento',10),reference:text(p.reference,'origen del saldo',160),source:'opening'});}
     else if(kind==='cash_open'){if(s.cashSessions.some(r=>r.status==='open'))fail('La caja ya está abierta.','REGISTER_ALREADY_OPEN');s.cashSessions.push({...meta,revision:1,date:p.date||at.slice(0,10),id:p.id,status:'open',opening:money(num(p.opening,'Base de caja')),name:text(p.name,'nombre del turno',80),...(p.startTime||p.endTime?{startTime:p.startTime,endTime:p.endTime}:{})});if((p.startTime||p.endTime)&&(!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(p.startTime)||!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(p.endTime)))fail('Revisa las horas del turno.');s.settings.cashRequired=true;}
     else if(kind==='cash_move'){const session=find(s,'cashSessions',p.sessionId);if(session.status!=='open')fail('La caja ya está cerrada.');const amount=money(num(p.amount,'Movimiento',0.01));if(!['in','out'].includes(p.kind))fail('Movimiento no disponible.');if(p.kind==='out'&&expected(s,session)<amount)fail('La caja no tiene ese efectivo disponible.');s.cashMovements.push({...meta,sessionId:session.id,amount:p.kind==='out'?-amount:amount,kind:p.kind,reference:text(p.reason,'motivo',160)});}
     else if(kind==='cash_close'){const session=find(s,'cashSessions',p.sessionId);if(session.status!=='open')fail('La caja ya está cerrada.');const value=expected(s,session);if(money(p.expected)!==value)fail('La caja cambió mientras contabas. Revisa el nuevo esperado.','CASH_CHANGED');session.expected=value;session.actual=money(num(p.actual,'Efectivo contado'));session.difference=money(session.actual-value);session.status='closed';session.closedAt=at;session.closedBy=meta.actorName;session.notes=String(p.notes||'');}
@@ -74,5 +103,5 @@ globalThis.AllianceOperationsEngine=(()=>{
     else fail('Operación no disponible.');
     return s;
   }
-  return {empty,apply,convert,expected,move,cash,money,find,collections,validDate,suggestedPaymentDate};
+  return {empty,apply,convert,expected,move,cash,money,find,collections,validDate,suggestedPaymentDate,crmEnabled,colombiaDate,phoneKey,crmProfile,crmBirthdays,registerOrderCustomer};
 })();
