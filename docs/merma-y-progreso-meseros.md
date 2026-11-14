@@ -18,6 +18,8 @@ En coctelería y cafetería, la celda del ingrediente parpadea suavemente cuando
 
 La columna de unidades dispone de más espacio a costa de precio/compra e importe, para mostrar «Unidades» y «unidades» completas. La flecha abre el selector con los datos disponibles sin esperar a la red y actualiza las opciones en segundo plano. Otro clic en la flecha, un clic afuera o Escape lo cierran; una respuesta tardía no vuelve a abrirlo. Las actualizaciones conservan el texto de búsqueda y utilizan los datos más recientes al seleccionar.
 
+El selector de insumos se ubica a 6 píxeles de la flecha, independientemente de la altura del nombre del ingrediente. Solo la lista de opciones se desplaza; el buscador permanece visible y el contenedor no agrega otra barra. Si no hay espacio debajo, el selector se abre arriba de la flecha y se mantiene dentro de la pantalla.
+
 Guardar sigue usando la revisión y protección contra cambios de recetas con cuentas abiertas. El vínculo de inventario utiliza el mismo consumo equivalente en navegador y servidor, incluyendo reservas, porciones y adiciones. No hay un segundo descuento por introducir los pesos.
 
 ## Comandas y dinero cobrado

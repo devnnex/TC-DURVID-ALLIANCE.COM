@@ -29,17 +29,26 @@ for(const branch of ['cafeteria','cocteleria'])test(branch+': unidades legibles 
     });
     expect(fit.lines).toBe(1);expect(fit.packageLines).toBe(1);expect(fit.available).toBeGreaterThanOrEqual(fit.text);expect(fit.pageFits).toBe(true);
   }
-  await page.setViewportSize({width:1366,height:900});
+  await page.setViewportSize({width:1366,height:1400});
   await page.locator('.jr-ingredients').screenshot({path:'test-results/recipe-units-'+branch+'.png'});
   const opened=await page.evaluate(()=>{
-    const w=window as any;w.stockWaits=[];w.stockChoices=w.MaterialsPanel.stockOptions();
+    const w=window as any;w.stockWaits=[];w.stockChoices=[...w.MaterialsPanel.stockOptions(),...Array.from({length:80},(_,i)=>({id:'extra-'+i,name:'Ingrediente '+i,unit:'g',quantity:100,unitCost:1}))];
     w.MaterialsPanel.stockOptions=()=>w.stockChoices;
     w.MaterialsPanel.refresh=()=>new Promise(resolve=>w.stockWaits.push(resolve));
+    (document.querySelector('[data-j-ingredient=name]') as HTMLTextAreaElement).style.height='130px';
     (document.querySelector('[data-j-action=source]') as HTMLButtonElement).click();
     return !!document.querySelector('.cost-stock-menu:popover-open');
   });
   expect(opened).toBe(true);
   const arrow=page.locator('[data-j-action=source]'),menu=page.locator('.cost-stock-menu');
+  const placement=await menu.evaluate(panel=>{
+    const trigger=document.querySelector('[data-j-action=source]')!,list=panel.querySelector('[role=listbox]')!;
+    return {gap:panel.getBoundingClientRect().top-trigger.getBoundingClientRect().bottom,outerScroll:panel.scrollHeight-panel.clientHeight,listScroll:list.scrollHeight-list.clientHeight,overflow:getComputedStyle(panel).overflowY};
+  });
+  expect(placement.gap).toBeCloseTo(6,0);expect(placement.overflow).toBe('hidden');expect(placement.outerScroll).toBeLessThanOrEqual(1);expect(placement.listScroll).toBeGreaterThan(0);
+  await menu.locator('[role=listbox]').evaluate(list=>list.scrollTop=100);
+  await expect(menu.getByRole('searchbox')).toBeInViewport();
+  await menu.screenshot({path:'test-results/recipe-selector-scroll-'+branch+'.png'});
   await arrow.click();await expect(menu).toHaveCount(0);await expect(arrow).toHaveAttribute('aria-expanded','false');
   await page.evaluate(()=>{const w=window as any;w.stockWaits.splice(0).forEach((resolve:any)=>resolve());});await expect(menu).toHaveCount(0);
   await arrow.click();await expect(menu).toBeVisible();

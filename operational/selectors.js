@@ -6,10 +6,10 @@ globalThis.AllianceSelectors=(()=>{
     panel.setAttribute('popover','manual');panel.classList.add('alliance-floating');panel.hidden=false;
     const place=()=>{
       if(!anchor.isConnected){close();return;}
-      const r=anchor.getBoundingClientRect(),gap=6,pad=12,vw=document.documentElement.clientWidth,vh=innerHeight;
-      const width=Math.min(Math.max(r.width,280),vw-pad*2),below=vh-r.bottom-pad,above=r.top-pad,up=below<180&&above>below;
+      const r=anchor.getBoundingClientRect(),t=trigger.getBoundingClientRect(),gap=6,pad=12,vw=document.documentElement.clientWidth,vh=innerHeight;
+      const width=Math.min(Math.max(r.width,280),vw-pad*2),below=vh-t.bottom-pad,above=t.top-pad,up=below<180&&above>below;
       panel.style.width=width+'px';panel.style.maxHeight=Math.max(80,Math.min(320,(up?above:below)-gap))+'px';
-      panel.style.left=Math.max(pad,Math.min(r.left,vw-width-pad))+'px';panel.style.top=(up?Math.max(pad,r.top-gap-panel.getBoundingClientRect().height):r.bottom+gap)+'px';
+      panel.style.left=Math.max(pad,Math.min(r.left,vw-width-pad))+'px';panel.style.top=(up?Math.max(pad,t.top-gap-panel.getBoundingClientRect().height):t.bottom+gap)+'px';
     };
     const outside=e=>{if(!panel.contains(e.target)&&!trigger.contains(e.target))close();};
     const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();trigger.focus?.({preventScroll:true});}};
