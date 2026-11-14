@@ -1,6 +1,8 @@
 # Estadísticas de ventas
 
-Coctelería y Cafetería tienen un acceso **Estadísticas** en la cabecera de Ventas. Abre un análisis independiente y **Volver a ventas** recupera el listado y sus filtros. El análisis comienza con este año hasta hoy; permite Hoy, 7 días, 30 días, este mes, este año y fechas específicas. Siempre incluye todos los tipos de venta y medios de pago; no hereda silenciosamente una búsqueda o filtro del listado.
+Coctelería, Cafetería y GCOBARF tienen un acceso **Estadísticas** en la cabecera de Ventas. Abre un análisis independiente y **Volver a ventas** recupera el listado y sus filtros. El análisis comienza con este año hasta hoy; permite Hoy, 7 días, 30 días, este mes, este año y fechas específicas. Siempre incluye todos los tipos de venta y medios de pago; no hereda silenciosamente una búsqueda o filtro del listado.
+
+Los botones Estadísticas, Exportar, Actualizar y Eliminar todo permanecen en una sola fila, con altura uniforme. En pantallas pequeñas la barra permite desplazamiento horizontal sin extender el ancho de la página. En GCOBARF se analizan facturas de venta, no citas o entregas pendientes; los abonos mantienen su tratamiento separado.
 
 ## Cinco vistas
 

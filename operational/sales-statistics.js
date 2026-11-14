@@ -1,6 +1,6 @@
 /* Statistics are a separate read-only view of the existing, authenticated sales report. */
 (()=>{
-  if(!['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug))return;
+  if(!['cafeteria','cocteleria','gcobarf'].includes(window.BRANCH_CONFIG?.slug))return;
   const base=new URL('./',document.currentScript.src),E=AllianceSalesStatisticsEngine;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const moneyFormat=new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0,maximumFractionDigits:2});

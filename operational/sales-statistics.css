@@ -36,3 +36,10 @@
 
 /* Values sit above their bars; the plot and axis share the same scale. */
 .ss-columns{position:relative;background:none}.ss-columns::before{content:"";position:absolute;inset:14px 0 23px;background:repeating-linear-gradient(to top,transparent 0,transparent calc(25% - 1px),#edf1ec calc(25% - 1px),#edf1ec 25%);pointer-events:none}.ss-column{position:relative;z-index:1}.ss-bar-space{margin-top:14px;padding-top:0}.ss-bar-value{position:absolute;bottom:var(--plot-height);left:50%;transform:translateX(-50%);padding-bottom:2px}.ss-axis{padding-top:14px}
+/* Keep all sales actions together; narrow screens scroll the toolbar, never wrap it. */
+.income-section .income-heading{display:flex;align-items:center;justify-content:space-between;gap:20px}.income-section .income-heading>div:first-child{flex:1;min-width:0}.income-section .income-heading-actions{display:flex;align-items:center;flex:0 0 auto;flex-wrap:nowrap;gap:8px;min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:thin;padding:2px 1px 5px}.income-section .income-heading-actions>button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;gap:8px;white-space:nowrap;height:44px;min-height:44px;padding:10px 12px;font-size:14px;line-height:1;box-sizing:border-box}.income-section .income-heading-actions>button svg{width:18px;height:18px;flex:none}
+@media(max-width:1200px){.income-section .income-heading{flex-direction:column;align-items:stretch;gap:14px}.income-section .income-heading-actions{justify-content:flex-end}}
+@media(max-width:650px){.income-section .income-heading-actions{justify-content:flex-start}.income-section .income-heading-actions>button{font-size:13px;padding:10px 11px}}
+.income-section .income-heading-actions>button[hidden]{display:none!important}
+
+.income-section{min-width:0}.income-section .income-heading{min-width:0;max-width:100%}@media(max-width:1200px){.income-section .income-heading-actions{width:100%}}
