@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {randomUUID,randomBytes,pbkdf2Sync} from 'node:crypto';
 import {executeSql,ordsRoot} from './ords-sql.js';
 import {waiterPerformance} from '../packages/shared/waiter-performance.js';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 const business=randomUUID(),first=randomUUID(),second=randomUUID(),owner=randomUUID(),waiter=randomUUID(),chef=randomUUID(),product=randomUUID(),otherProduct=randomUUID(),category=randomUUID(),slug='orders-test-'+randomBytes(6).toString('hex');
 const password=randomBytes(20).toString('hex'),salt=randomBytes(16).toString('hex'),hash='pbkdf2-sha256$600000$'+salt+'$'+pbkdf2Sync(password,Buffer.from(salt,'hex'),600000,32,'sha256').toString('hex');let token='',checks=0;
 function check(v:unknown,message:string){assert.ok(v,message);checks++;}
@@ -30,7 +32,11 @@ try{
  check((await pos('record_sale',{invoice},checkout)).status===200,'Cobro real con propina aceptada');check((await pos('record_sale',{invoice},checkout)).status===200,'Reintento del cobro conserva una sola propina');
  result=await pos('operations_snapshot');const performance=waiterPerformance(result.data.value,[{id:waiter,name:'Mesera Ana'},{id:owner,name:'Responsable Luis'}],30),earned=performance.find(row=>row.id===waiter)!;
  check(earned.amount===48000&&earned.tips===4800&&earned.paid===2,'Ventas y propina reales ligadas a las dos comandas originales');check(performance.find(row=>row.id===owner)?.tips===0,'El cajero no recibe la propina del mesero en su progreso');check(earned.orders.reduce((n,row)=>n+row.collections.length,0)===2,'Una confirmación de cobro por cada comanda sin duplicar');
- console.log(JSON.stringify({oracleOrderChecks:checks}));
+ const sandbox:any={Date,Intl};runInNewContext(readFileSync(new URL('../operational/sales-statistics-engine.js',import.meta.url),'utf8'),sandbox);const analytics=sandbox.AllianceSalesStatisticsEngine,day=analytics.dateKey(new Date()),filters={dateFrom:day,dateTo:day,paymentMethod:'all',saleType:'all'};
+ const report=await pos('get_income_report',filters);check(report.status===200,'Estadísticas consultan el reporte autorizado completo');const summary=analytics.analyse(report.data.value.records,{from:day,to:day});
+ check(summary.totals.net===48000&&summary.totals.cost===12000&&summary.totals.profit===36000&&summary.totals.tips===4800&&summary.totals.orders===1,'Estadísticas reales separan venta neta, costo histórico, ganancia y propina');check(summary.products.length===1&&summary.products[0].quantity===4&&summary.products[0].net===48000,'Estadísticas agrupan el producto de las dos comandas sin duplicar la factura');check(summary.hours.reduce((n:number,h:any)=>n+h.orders,0)===1,'El horario usa el cierre real de la factura');
+ const emptyBranch=await pos('get_income_report',filters,randomUUID(),second);check(emptyBranch.status===200&&analytics.analyse(emptyBranch.data.value.records,{from:day,to:day}).totals.orders===0,'El reporte de Cafetería no mezcla ventas de Coctelería');token=waiterToken;check((await pos('get_income_report',filters)).status===403,'Un mesero sin permiso de Ventas no consulta las estadísticas');token=ownerToken;
+ console.log(JSON.stringify({oracleOrderAndStatisticsChecks:checks}));
 }finally{
  await executeSql(`BEGIN FOR x IN(SELECT id FROM businesses WHERE id='${business}' AND slug='${slug}') LOOP DELETE FROM alliance_raw_movements WHERE business_id=x.id;DELETE FROM alliance_raw_stock WHERE business_id=x.id;DELETE FROM alliance_activity_events WHERE business_id=x.id;DELETE FROM alliance_pos_receipts WHERE business_id=x.id;DELETE FROM alliance_pos_movements WHERE business_id=x.id;DELETE FROM alliance_pos_sales WHERE business_id=x.id;DELETE FROM alliance_pos_stock WHERE business_id=x.id;DELETE FROM alliance_pos_documents WHERE business_id=x.id;DELETE FROM administration_audit WHERE business_id=x.id;DELETE FROM products WHERE business_id=x.id;DELETE FROM product_categories WHERE business_id=x.id;DELETE FROM alliance_api_sessions WHERE business_id=x.id;DELETE FROM user_location_permissions WHERE business_id=x.id;DELETE FROM user_location_roles WHERE business_id=x.id;DELETE FROM locations WHERE business_id=x.id;DELETE FROM users WHERE business_id=x.id;DELETE FROM businesses WHERE id=x.id;END LOOP;COMMIT;END;`);
 }
