@@ -18,3 +18,22 @@
 @media(max-width:600px){.waiter-account{padding:14px;border-radius:20px}}
 .waiter-page .op-sync-notice{position:static;width:auto;max-width:none;margin:0 0 20px;padding:9px 12px;border-radius:12px;box-shadow:none;gap:12px}.waiter-page .op-sync-notice>span{font-size:11px;line-height:1.5}.waiter-page .op-sync-notice>button{font-size:11px;padding:7px 10px;min-height:30px;flex:none}
 .waiter-product .waiter-availability{font-size:11px;font-weight:500;color:#66778b}.waiter-product:disabled{opacity:.6;cursor:wait}.waiter-cart-line [data-line-capacity]{display:block;margin:0 0 12px;font-size:12px;line-height:1.45;color:#61778c}.waiter-cart-line [data-line-capacity].is-error{color:#b73531}.waiter-cart-line [aria-invalid=true]{border-color:#bf423b;background:#fff6f5}
+/* Catalog quantities stay visible beside the product, including on touch screens. */
+.waiter-product-card{display:flex;align-items:center;gap:10px;min-width:0;border:1px solid #e2e6ed;border-radius:18px;padding:12px;background:#fff;transition:border-color .15s,background .15s}
+.waiter-product-card .waiter-product{flex:1;min-width:0;min-height:72px;border:0;padding:6px;box-shadow:none;background:transparent;gap:10px}
+.waiter-product-card .waiter-product:hover{background:transparent}.waiter-product-card:has(.waiter-product:hover:not(:disabled)){border-color:var(--accent)}
+.waiter-product-card.is-selected{border-color:color-mix(in srgb,var(--accent) 40%,#e2e6ed);background:color-mix(in srgb,var(--accent) 3%,white)}
+.waiter-product-control{display:flex;align-items:center;flex:none;overflow:hidden;border:1px solid #e6e2d9;border-radius:12px;background:#fff}
+.waiter-product-control button{display:grid;place-items:center;flex:none;width:44px;height:44px;border:0;padding:0;background:#faf8f3;color:var(--accent);font:600 22px/1 system-ui;cursor:pointer;touch-action:manipulation}
+.waiter-product-control button:hover:not(:disabled){background:#f0e9dc}.waiter-product-control button:active:not(:disabled){background:#e9ddc9}
+.waiter-product-control button:disabled{color:#a8adb3;background:#f4f5f6;cursor:not-allowed}
+.waiter-product-control output{min-width:30px;padding:0 4px;text-align:center;font-size:15px;font-weight:700;color:#344039;font-variant-numeric:tabular-nums}
+.waiter-product-control button:focus-visible,.waiter-product-card .waiter-product:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.waiter-product-card.is-exhausted{background:#f3f4f5;border-color:#e0e3e7}.waiter-product-card.is-exhausted .waiter-product{opacity:1;color:#7d858d;cursor:not-allowed;transform:none}
+.waiter-product-card.is-exhausted .waiter-product small{color:#868d94}.waiter-product-card.is-exhausted .waiter-product-symbol{color:#92999e;background:#e8eaec}
+.waiter-stock-badge{display:inline-flex;padding:4px 8px;border-radius:6px;background:#e3e6e9;color:#626b74;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.waiter-stock-reason{display:block;margin-top:5px;font-size:10px;line-height:1.45}.waiter-product-feedback{margin:0 0 14px;padding:10px 12px;border-radius:10px;background:#f2f5ec;color:#587048;font-size:12px;overflow-wrap:anywhere}
+@media(min-width:901px) and (max-width:1200px){.waiter-product-card{flex-wrap:wrap}.waiter-product-control{margin-left:auto}.waiter-product-card .waiter-product{flex-basis:100%}}
+@media(max-width:900px){.waiter-product-card{flex-direction:column;align-items:stretch;padding:10px;gap:8px}.waiter-product-card .waiter-product{align-items:flex-start;min-height:80px}.waiter-product-control{align-self:flex-end}.waiter-product-card .waiter-product strong{font-size:13px}}
+@media(max-width:600px){.waiter-product-card{padding:9px;gap:7px;border-radius:14px}.waiter-product-card .waiter-product{padding:3px;min-height:100px}.waiter-product-card .waiter-product strong{font-size:12px;line-height:1.4}.waiter-product-card .waiter-product small{font-size:12px}.waiter-product-card .waiter-availability{font-size:10px!important;line-height:1.5}.waiter-product-control{align-self:stretch;justify-content:space-between}.waiter-product-control output{min-width:16px;padding:0 2px}.waiter-product-control button{width:44px;min-height:44px}}
+@media(prefers-reduced-motion:reduce){.waiter-product-card{transition:none}}

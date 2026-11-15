@@ -43,3 +43,15 @@ Oracle publica **20 GB por Autonomous Always Free**, no 50 GB: [restricciones of
 ## Validación
 
 Compilación completa, pruebas generales, navegador móvil y sin conexión, permisos y sesiones simultáneas. La prueba real de operaciones incorpora cantidades con unidad, texto libre, cambios de modalidad, revisiones obsoletas, eliminación idempotente y repetición exacta de respuestas comprimidas con Unicode.
+
+## Disponibilidad en el catálogo del mesero
+
+Coctelería y Cafetería muestran un control − / cantidad / + en cada tarjeta. La cantidad suma las líneas del mismo producto, incluidas las que tienen observaciones. El botón − retira primero la última línea agregada; las observaciones de las líneas restantes se conservan.
+
+La capacidad utiliza las recetas vinculadas, las reservas de mesas abiertas y todos los productos del carrito que comparten insumos. Si no alcanza para otra unidad, la tarjeta se ve gris con “Agotado” y se bloquea agregar; todavía se puede disminuir lo elegido. Al abastecer se habilita cuando alcanza para al menos una unidad adicional.
+
+Con conexión y la vista activa, se consulta el estado de insumos aproximadamente cada cuatro segundos, además de los cambios locales. La actualización continúa mientras se escribe en la búsqueda. Al regresar a la pestaña o recuperar conexión se solicita una actualización. Sin conexión se conserva el último estado descargado y la cola durable existente.
+
+Si una validación detecta faltantes, el mismo modal muestra cada insumo con disponible, necesario y faltante, un listado desplazable y el máximo por producto. No requiere migraciones de base de datos.
+
+Validación específica: `tests/browser/waiter-catalog-stock.spec.ts` cubre los dos negocios, insumos compartidos, cantidades con observaciones, agotamiento y reposición durante una búsqueda, límites de una preparación y tamaños de 320 a 1280 px.
