@@ -34,9 +34,12 @@ globalThis.AllianceOrdersLocal=(state,action,p,user)=>{
       if(line.unitPrice!==item.price)fail('El precio cambió. Actualiza y revisa la comanda antes de enviarla.');
       return {productId:item.id,name:item.name,quantity:line.quantity,unitPrice:item.price,notes:String(line.notes||'')};
     });
+    if(p.customerSelection!==undefined&&p.customerRegistration!==undefined)fail('Elige un cliente existente o registra uno nuevo.');
+    const selectedCustomer=p.customerSelection!==undefined?AllianceOperationsEngine.selectOrderCustomer(state.operations,p.customerSelection):null;
     if(p.customerRegistration!==undefined){if(!p.customerRegistration||typeof p.customerRegistration!=='object'||Array.isArray(p.customerRegistration))fail('Revisa los datos del cliente.');AllianceOperationsEngine.crmProfile(p.customerRegistration,now);}
     globalThis.AllianceMaterialsEngine?.guard(state);
     const request={id:p.id,table_id:p.tableId,request_type:'order',status:'pending',created_at:now,actor_user_id:user.id,actor_name:user.full_name,order:{items,notes:String(p.notes||''),total:items.reduce((n,i)=>n+Math.round(i.quantity*i.unitPrice*100)/100,0)},message:'Comanda enviada por '+user.full_name};
+    if(selectedCustomer)Object.assign(request.order,{customerId:selectedCustomer.id,customerName:selectedCustomer.name});
     if(p.customerRegistration){const customer=AllianceOperationsEngine.registerOrderCustomer(state.operations,p.customerRegistration,user,now,p.id);request.order.customerId=customer.id;request.order.customerName=customer.name;}
     requests.push(request);allianceOrderVersion(state,'service_requests',request.id);return copy(request);
   }

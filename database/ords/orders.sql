@@ -7,7 +7,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_orders AS
   PROCEDURE touch(b VARCHAR2,l VARCHAR2) IS row_value JSON_OBJECT_T;BEGIN row_value:=alliance_pos_store.document(b,l,'op_ordersync','primary');IF row_value IS NULL THEN row_value:=JSON_OBJECT_T('{"revision":0}');END IF;row_value.put('revision',row_value.get_number('revision')+1);alliance_pos_store.put_document(b,l,'op_ordersync','primary',row_value);END;
   FUNCTION run_action(u VARCHAR2,b VARCHAR2,l VARCHAR2,a VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     r JSON_OBJECT_T;tab JSON_OBJECT_T;product JSON_OBJECT_T;line JSON_OBJECT_T;item JSON_OBJECT_T;order_value JSON_OBJECT_T;session_value JSON_OBJECT_T;ticket JSON_OBJECT_T;sender JSON_OBJECT_T;customer_value JSON_OBJECT_T;
-    items JSON_ARRAY_T;lines JSON_ARRAY_T:=JSON_ARRAY_T();ticket_lines JSON_ARRAY_T:=JSON_ARRAY_T();id_value VARCHAR2(80);session_id VARCHAR2(80);table_id_value VARCHAR2(80);line_id VARCHAR2(80);actor_name VARCHAR2(160);stamp VARCHAR2(30):=alliance_pos_store.stamp;
+    items JSON_ARRAY_T;lines JSON_ARRAY_T:=JSON_ARRAY_T();ticket_lines JSON_ARRAY_T:=JSON_ARRAY_T();id_value VARCHAR2(80);session_id VARCHAR2(80);table_id_value VARCHAR2(80);line_id VARCHAR2(80);actor_name VARCHAR2(160);stamp VARCHAR2(30):=alliance_activity.occurred_at;
     context_value JSON_OBJECT_T;perms JSON_ARRAY_T;allowed BOOLEAN:=FALSE;quantity NUMBER;price NUMBER;total NUMBER:=0;n NUMBER;notes VARCHAR2(500);
   BEGIN
     IF a='orders_revision' THEN alliance_security.keys_only(p,'');context_value:=alliance_security.context_for(u);perms:=context_value.get_object('permissions').get_array(l);IF perms IS NOT NULL THEN FOR i IN 0..perms.get_size-1 LOOP IF perms.get_string(i) IN('service.read','kitchen.read') THEN allowed:=TRUE;END IF;END LOOP;END IF;IF NOT allowed THEN alliance_security.fail(403,'FORBIDDEN','No puedes consultar comandas en esta sucursal.');END IF;r:=alliance_pos_store.document(b,l,'op_ordersync','primary');IF r IS NULL THEN r:=JSON_OBJECT_T('{"revision":0}');END IF;RETURN r;END IF;
@@ -21,7 +21,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_orders AS
       alliance_production.reconcile(u,b,l);ticket.put('status','cancelled');alliance_pos_store.put_document(b,l,'op_tickets',id_value,ticket);alliance_pos_store.reconcile_session(u,b,l,session_id);alliance_pos_store.audit(u,b,'ORDER_CANCEL',id_value,NULL,ticket.to_clob);alliance_activity.record_event(u,b,l,'service','ORDER_CANCEL','Retiró la comanda y sus consumos de la cuenta',id_value);RETURN ticket;
     END IF;
     IF a='order_submit' THEN
-      alliance_security.keys_only(p,'id,tableId,items,notes,customerRegistration');id_value:=alliance_security.text_value(p,'id',60,'^[a-zA-Z0-9_-]+$');
+      alliance_security.keys_only(p,'id,tableId,items,notes,customerRegistration,customerSelection');id_value:=alliance_security.text_value(p,'id',60,'^[a-zA-Z0-9_-]+$');
       IF alliance_pos_store.document(b,l,'service_requests',id_value) IS NOT NULL THEN alliance_security.fail(409,'DUPLICATE_ORDER','Esta comanda ya existe.');END IF;
       tab:=alliance_pos_store.document(b,l,'restaurant_tables',p.get_string('tableId'));
       IF tab IS NULL OR NOT tab.get_boolean('is_active') THEN alliance_security.fail(400,'INVALID_TABLE','Elige una mesa disponible en esta sucursal.');END IF;
@@ -36,6 +36,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_orders AS
         item:=JSON_OBJECT_T();item.put('productId',product.get_string('id'));item.put('name',product.get_string('name'));item.put('quantity',quantity);item.put('unitPrice',price);item.put('notes',line.get_string('notes'));lines.append(item);total:=total+ROUND(quantity*price,2);
       END LOOP;
       order_value:=JSON_OBJECT_T();order_value.put('items',lines);order_value.put('notes',p.get_string('notes'));order_value.put('total',total);
+      IF p.has('customerSelection') AND p.has('customerRegistration') THEN alliance_security.fail(400,'CRM_INPUT','Elige un cliente existente o registra uno nuevo.');END IF;
+      IF p.has('customerSelection') THEN customer_value:=p.get_object('customerSelection');IF customer_value IS NULL THEN alliance_security.fail(400,'CRM_INPUT','Selecciona un cliente.');END IF;customer_value:=alliance_customer_crm.select_order(u,b,l,customer_value);order_value.put('customerId',customer_value.get_string('id'));order_value.put('customerName',customer_value.get_string('name'));END IF;
       IF p.has('customerRegistration') THEN
         customer_value:=p.get_object('customerRegistration');IF customer_value IS NULL THEN alliance_security.fail(400,'CRM_INPUT','Revisa los datos del cliente.');END IF;
         customer_value:=alliance_customer_crm.register_order(u,b,l,customer_value,id_value);order_value.put('customerId',customer_value.get_string('id'));order_value.put('customerName',customer_value.get_string('name'));

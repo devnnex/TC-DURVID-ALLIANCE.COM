@@ -28,9 +28,40 @@ globalThis.AllianceOperationsEngine=(()=>{
   }
   function registerOrderCustomer(s,p,actor,at,orderId){
     const profile=crmProfile(p,at),old=s.customers.find(c=>phoneKey(c.phone)===profile.phoneKey);
-    if(old)return {id:old.id,name:profile.name};
+    if(old){if(old.active===false)fail('El cliente está inhabilitado. Pide al encargado revisar su ficha.');return {id:old.id,name:old.name};}
     const id='crm-'+orderId,row={...profile,id,active:true,document:'',allowCredit:false,creditLimit:0,paymentFrequency:'once',paymentDate:'',source:'waiter',sourceOrderId:orderId,revision:1,createdAt:at,createdById:actor.id,createdByName:actor.full_name||actor.name,actorId:actor.id,actorName:actor.full_name||actor.name,at,occurredAt:at,consentAt:at,consentById:actor.id,consentByName:actor.full_name||actor.name};
     s.customers.push(row);return {id,name:profile.name};
+  }
+  function orderCustomerDirectory(s){
+    const rows=new Map((s.orderCustomers||[]).map(c=>[c.id,c]));
+    for(const c of s.customers||[])rows.set(c.id,{id:c.id,name:c.name,active:c.active!==false,phoneLast4:phoneKey(c.phone).slice(-4)});
+    return [...rows.values()].filter(c=>c.active!==false).map(c=>({id:c.id,name:c.name,phoneLast4:c.phoneLast4||''})).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+  }
+  function selectOrderCustomer(s,p){
+    if(!crmEnabled())fail('El CRM está disponible en cafetería y coctelería.');
+    if(!p||typeof p!=='object'||Array.isArray(p)||p.contactConsent!==true)fail('Confirma que el cliente autorizó asociar su ficha.');
+    const customer=orderCustomerDirectory(s).find(c=>c.id===p.id);if(!customer)fail('El cliente ya no está disponible en este negocio. Selecciónalo de nuevo.');
+    return {id:customer.id,name:customer.name};
+  }
+  // A visit is a distinct customer/day in Colombia, independent of rounds or invoices.
+  function crmDailyVisits(data,{type='month',period=colombiaDate(new Date()).slice(0,7)}={}){
+    const model=data.model||data.operations||{},docs=data.docs||{},days=new Map(),sales=data.sales||[],knownSales=new Set(sales.map(s=>s.id));
+    const add=(id,day)=>{if(!id||!validDate(day))return;const set=days.get(id)||new Set();set.add(day);days.set(id,set);};
+    const dayOf=stamp=>{try{return stamp?colombiaDate(stamp):'';}catch{return '';}};
+    const visitedSessions=new Set();
+    const validOrders=new Set((docs.session_items||[]).filter(l=>l.status!=='cancelled').map(l=>l.order_id)),cancelledOrders=new Set((model.tickets||[]).filter(t=>t.status==='cancelled').flatMap(t=>[t.orderId,t.id])),cancelledSessions=new Set((docs.table_sessions||[]).filter(s=>s.status==='cancelled').map(s=>s.id));
+    for(const request of docs.service_requests||[]){
+      if(request.request_type!=='order'||!request.session_id||!request.acknowledged_at||!['acknowledged','resolved'].includes(request.status)||!request.order?.customerId)continue;
+      if(cancelledOrders.has(request.id)||cancelledOrders.has(request.ticket_id)||!validOrders.has(request.id)||cancelledSessions.has(request.session_id))continue;
+      add(request.order.customerId,dayOf(request.created_at));visitedSessions.add(request.order.customerId+':'+request.session_id);
+    }
+    // Paying later (including after midnight) does not create another visit for an attended account.
+    for(const fact of model.crmSaleDays||[])if(!knownSales.has(fact.saleId)&&!visitedSessions.has(fact.customerId+':'+fact.sessionId))add(fact.customerId,fact.day);
+    for(const sale of sales)if(!sale.voided){const ids=new Set([sale.customerId,...(sale.items||[]).map(i=>i.customer_id||i.customerId)]);for(const id of ids)if(!visitedSessions.has(id+':'+sale.sessionId))add(id,dayOf(sale.createdAt));}
+    const prefix=type==='year'?String(period).slice(0,4):String(period).slice(0,7),today=colombiaDate(new Date());
+    const rows=(model.customers||[]).map(customer=>{const all=[...(days.get(customer.id)||[])].filter(d=>d<=today).sort(),visits=all.filter(d=>d.startsWith(prefix));return {customer,visits:visits.length,lastVisit:all.at(-1)||'',days:visits};}).sort((a,b)=>b.visits-a.visits||a.customer.name.localeCompare(b.customer.name,'es'));
+    const total=rows.reduce((n,r)=>n+r.visits,0),maximum=rows[0]?.visits||0;
+    return {rows,total,unique:rows.filter(r=>r.visits>0).length,returning:rows.filter(r=>r.visits>1).length,leaders:rows.filter(r=>r.visits===maximum&&maximum>0),partial:!!data.salesHistoryPartial&&!Array.isArray(model.crmSaleDays)};
   }
   function suggestedPaymentDate(customer,debts,today){
     const pending=debts.filter(d=>d.customerId===customer?.id&&!d.voided&&d.total>d.paid&&d.dueDate>=today).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
@@ -112,5 +143,5 @@ globalThis.AllianceOperationsEngine=(()=>{
     else fail('Operación no disponible.');
     return s;
   }
-  return {empty,apply,convert,expected,move,cash,money,find,collections,validDate,suggestedPaymentDate,crmEnabled,colombiaDate,phoneKey,crmProfile,crmBirthdays,registerOrderCustomer};
+  return {empty,apply,convert,expected,move,cash,money,find,collections,validDate,suggestedPaymentDate,crmEnabled,colombiaDate,phoneKey,crmProfile,crmBirthdays,registerOrderCustomer,orderCustomerDirectory,selectOrderCustomer,crmDailyVisits};
 })();

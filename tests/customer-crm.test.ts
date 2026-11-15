@@ -44,3 +44,33 @@ describe('CRM de clientes y registro autorizado desde comandas',()=>{
     (globalThis as any).BRANCH_CONFIG={slug:'gcobarf'};expect(()=>E.apply(E.empty(),command({}),actor,[],at)).toThrow('cafetería y coctelería');
   });
 });
+
+describe('Clientes existentes y visitas diarias del CRM',()=>{
+  it('elige por ID del negocio, conserva el nombre real y rechaza inactivos, IDs ajenos y datos incompatibles',()=>{
+    const s=state();s.operations.customers=[{id:'existing',name:'María registrada',phone:'3001234567',active:true,birthDate:'1990-01-01',allowCredit:true,creditLimit:90000},{id:'inactive',name:'Inactiva',active:false}];const original=structuredClone(s.operations.customers);
+    const chosen=orders(s,'order_submit',order({customerSelection:{id:'existing',contactConsent:true}}),actor);expect(chosen.order).toMatchObject({customerId:'existing',customerName:'María registrada'});expect(s.operations.customers).toEqual(original);expect(JSON.stringify(chosen)).not.toContain('creditLimit');
+    for(const selection of [{id:'other-branch',contactConsent:true},{id:'inactive',contactConsent:true},{id:'existing',contactConsent:false},null])expect(()=>orders(s,'order_submit',order({id:'new-order',customerSelection:selection}),actor)).toThrow();
+    expect(()=>orders(s,'order_submit',order({id:'both',customerSelection:{id:'existing',contactConsent:true},customerRegistration:profile}),actor)).toThrow('existente');
+    const duplicate=orders(s,'order_submit',order({id:'duplicate-phone',customerRegistration:{...profile,name:'Nombre escrito distinto'}}),actor);expect(duplicate.order.customerName).toBe('María registrada');expect(s.operations.customers).toEqual(original);
+  });
+  it('el directorio limitado permite asociar sin descargar cumpleaños ni cartera',()=>{
+    const s=state();s.operations.orderCustomers=[{id:'one',name:'Ana',phoneLast4:'4567'},{id:'blocked',name:'Bloqueada',active:false,phoneLast4:'9876'}];expect(E.orderCustomerDirectory(s.operations)).toEqual([{id:'one',name:'Ana',phoneLast4:'4567'}]);const request=orders(s,'order_submit',order({customerSelection:{id:'one',contactConsent:true}}),actor);expect(request.order.customerId).toBe('one');expect(s.operations.customers).toEqual([]);
+  });
+  const visitState=()=>({model:{...E.empty(),customers:[{id:'a',name:'Ana'},{id:'b',name:'Beatriz'}]},docs:{service_requests:[],session_items:[],table_sessions:[]},sales:[]} as any);
+  function accepted(s:any,id:string,customerId:string,stamp:string,session='session-'+id){s.docs.service_requests.push({id,request_type:'order',status:'acknowledged',created_at:stamp,acknowledged_at:stamp,session_id:session,order:{customerId}});s.docs.session_items.push({id:'line-'+id,order_id:id,session_id:session,status:'served'});}
+  it('cuenta una visita diaria aunque haya varias rondas, mesas y facturas; usa el calendario de Colombia',()=>{
+    const s=visitState();accepted(s,'one','a','2026-11-01T04:59:00Z');accepted(s,'two','a','2026-11-01T05:00:00Z');accepted(s,'three','a','2026-11-01T23:00:00Z','another-table');accepted(s,'four','a','2026-11-02T05:00:00Z');s.sales=[{id:'sale',customerId:'a',createdAt:'2026-11-01T17:00:00Z',items:[]},{id:'second',customerId:'a',createdAt:'2026-11-01T18:00:00Z',items:[]}];const report=E.crmDailyVisits(s,{type:'month',period:'2026-11'});expect(report.rows[0]).toMatchObject({visits:2,days:['2026-11-01','2026-11-02']});expect(report.total).toBe(2);expect(E.crmDailyVisits(s,{type:'month',period:'2026-10'}).total).toBe(1);expect(E.crmDailyVisits(s,{type:'year',period:'2026'}).total).toBe(3);
+  });
+  it('excluye pendientes, rechazos, cancelaciones y facturas anuladas; reconoce varios clientes por cuenta',()=>{
+    const s=visitState();accepted(s,'one','a','2026-11-01T16:00:00Z','same');accepted(s,'two','b','2026-11-01T16:00:00Z','same');accepted(s,'cancelled','a','2026-11-02T16:00:00Z');s.docs.session_items.at(-1).status='cancelled';accepted(s,'rejected','a','2026-11-03T16:00:00Z');s.docs.service_requests.at(-1).acknowledged_at=null;accepted(s,'pending','a','2026-11-04T16:00:00Z');s.docs.service_requests.at(-1).status='pending';s.sales=[{id:'void',customerId:'a',voided:true,createdAt:'2026-11-05T16:00:00Z',items:[]}];const r=E.crmDailyVisits(s,{type:'month',period:'2026-11'});expect(r.total).toBe(2);expect(r.leaders.map((r:any)=>r.customer.id)).toEqual(['a','b']);expect(r.returning).toBe(0);
+  });
+  it('incluye ventas antiguas fuera de la descarga reciente, admite rectificaciones locales y no cuenta abonos como visitas',()=>{
+    const s=visitState();s.salesHistoryPartial=true;s.model.crmSaleDays=[{saleId:'old',customerId:'a',day:'2026-01-01'},{saleId:'new',customerId:'b',day:'2026-02-01'}];s.sales=[{id:'new',customerId:'b',voided:true,createdAt:'2026-02-01T15:00:00Z',items:[]}];s.model.customerPayments=[{id:'payment',customerId:'a',at:'2026-11-02T15:00:00Z'}];const r=E.crmDailyVisits(s,{type:'year',period:'2026'});expect(r.total).toBe(1);expect(r.leaders[0].customer.id).toBe('a');expect(r.partial).toBe(false);delete s.model.crmSaleDays;expect(E.crmDailyVisits(s,{type:'year',period:'2026'}).partial).toBe(true);
+  });
+});
+
+it('el cobro de una cuenta después de medianoche no crea una visita adicional',()=>{
+  const s:any={model:{...E.empty(),customers:[{id:'client',name:'Ana'}],crmSaleDays:[{saleId:'historical-sale',sessionId:'account',customerId:'client',day:'2026-11-02'}]},docs:{service_requests:[{id:'order',request_type:'order',status:'resolved',session_id:'account',created_at:'2026-11-02T04:55:00Z',acknowledged_at:'2026-11-02T04:56:00Z',order:{customerId:'client'}}],session_items:[{id:'line',order_id:'order',status:'served'}],table_sessions:[]},sales:[]};
+  expect(E.crmDailyVisits(s,{type:'month',period:'2026-11'}).rows[0].days).toEqual(['2026-11-01']);
+  s.sales=[{id:'historical-sale',sessionId:'account',customerId:'client',createdAt:'2026-11-02T05:05:00Z',items:[]}];expect(E.crmDailyVisits(s,{type:'month',period:'2026-11'}).total).toBe(1);
+});

@@ -55,3 +55,15 @@ Con conexión y la vista activa, se consulta el estado de insumos aproximadament
 Si una validación detecta faltantes, el mismo modal muestra cada insumo con disponible, necesario y faltante, un listado desplazable y el máximo por producto. No requiere migraciones de base de datos.
 
 Validación específica: `tests/browser/waiter-catalog-stock.spec.ts` cubre los dos negocios, insumos compartidos, cantidades con observaciones, agotamiento y reposición durante una búsqueda, límites de una preparación y tamaños de 320 a 1280 px.
+
+## Clientes que regresan y visitas por día
+
+En la comanda de Coctelería y Cafetería se puede elegir un cliente existente o registrar uno nuevo. El directorio del mesero está limitado al negocio actual: muestra nombre y últimos cuatro dígitos del teléfono, sin descargar cumpleaños, cupos ni saldos. La selección guarda el ID de la ficha, se conserva en el borrador y funciona con la cola sin conexión. El servidor comprueba autorización, negocio y estado activo al sincronizar; elegir un cliente no modifica sus datos ni habilita crédito. Si un registro nuevo coincide con un teléfono existente, conserva el nombre y la identidad de la ficha original.
+
+El CRM incluye un ranking con filtro de mes o año, visitas del período, clientes distintos y clientes que regresaron. Se cuenta **como máximo una visita por cliente por día de Colombia**, de acuerdo con la preferencia indicada. Una comanda necesita estar aceptada y conservar consumos activos; pendientes, rechazadas y canceladas no suman. Varias rondas, mesas o facturas del día se deduplican y los empates se muestran expresamente.
+
+Las compras vinculadas también pueden acreditar una visita. Cuando una factura corresponde a una cuenta que ya tiene una comanda de ese cliente, conserva la fecha de atención: cobrar después de medianoche no crea una visita adicional. Los abonos no generan visitas. Las ventas anuladas no acreditan visitas por sí solas; una atención válida registrada por comanda conserva su evidencia de visita.
+
+Oracle entrega hechos de fecha/cliente de todas las ventas vigentes, separados de los detalles recientes de facturas. Así, el año no queda limitado por las 2.000 facturas de la descarga ni por el corte del historial de ingresos. Los registros anteriores sin cliente identificable no se atribuyen a una persona por nombre o suposición. Los equipos sin conexión muestran lo sincronizado y los cambios locales; una descarga antigua sin hechos completos indica historial parcial.
+
+Se actualizan los paquetes `alliance_operations`, `alliance_customer_crm` y `alliance_orders`, sin cambios de tablas. El instalador ORDS incorpora los cambios. `npm run ords:test:crm` valida en un negocio temporal aislado la privacidad del directorio, permisos, clientes de otro negocio, clientes inactivos, reintentos y visitas históricas. Las pruebas locales cubren medianoche de Colombia, varios clientes por cuenta y no duplicar rondas ni visitas.

@@ -897,6 +897,25 @@ END;!';
     FOR i IN 0..names.get_size-1 LOOP key_value:=names.get_string(i);arr:=JSON_ARRAY_T();
       IF (key_value IN('productions','preparations','recipeSupplies','deliveryHolds') AND (stock OR INSTR(p,',products.read,')>0 OR INSTR(p,',service.write,')>0)) OR (key_value IN('suppliers','purchases') AND sup) OR (key_value='recipes' AND (sup OR finance OR INSTR(p,',service.read,')>0 OR (macro_enabled=1 AND stock))) OR (key_value IN('customers','debts') AND INSTR(p,',customers.read,')>0) OR (key_value='customerPayments' AND INSTR(p,',sales.read,')>0) OR (key_value='settlements' AND (sup OR INSTR(p,',customers.read,')>0)) OR (key_value IN('cashSessions','cashMovements','cashReviews') AND INSTR(p,',cash.read,')>0) OR (key_value='tickets' AND INSTR(p,',kitchen.read,')>0) THEN arr:=alliance_pos_store.list_documents(b,l,'op_'||LOWER(key_value));END IF;IF key_value='customers' THEN FOR j IN 0..arr.get_size-1 LOOP o:=TREAT(arr.get(j) AS JSON_OBJECT_T);customer_value:=o.get_string('id');SELECT COUNT(*),NVL(SUM(total_minor),0),MAX(TO_CHAR(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"')) INTO visits,spent,last_visit FROM alliance_pos_sales WHERE business_id=b AND location_id=l AND voided=0 AND JSON_VALUE(invoice_json,'$.customerId' RETURNING VARCHAR2(80))=customer_value;o.put('visits',visits);o.put('totalSpent',spent/100);o.put('lastVisit',last_visit);arr.put(j,o,TRUE);END LOOP;END IF;model.put(key_value,arr);
     END LOOP;
+    -- Waiters receive a scoped picker, never credit balances or birthdays.
+    arr:=JSON_ARRAY_T();SELECT COUNT(*) INTO visits FROM locations WHERE business_id=b AND id=l AND slug IN('cafeteria','cocteleria');
+    IF visits=1 AND INSTR(p,',service.write,')>0 THEN
+      FOR c IN(SELECT id,JSON_VALUE(data_json,'$.name' RETURNING VARCHAR2(160)) customer_name,REGEXP_REPLACE(JSON_VALUE(data_json,'$.phone' RETURNING VARCHAR2(40)),'[^0-9]','') phone_digits FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_customers' AND NVL(JSON_VALUE(data_json,'$.active'),'true')<>'false' ORDER BY JSON_VALUE(data_json,'$.name')) LOOP
+        o:=JSON_OBJECT_T();o.put('id',c.id);o.put('name',c.customer_name);o.put('phoneLast4',SUBSTR(c.phone_digits,-4));arr.append(o);
+      END LOOP;
+    END IF;model.put('orderCustomers',arr);
+    -- Complete sale/day facts bypass the recent-invoice download cap and history cutoff.
+    IF visits=1 AND INSTR(p,',customers.read,')>0 THEN
+      arr:=JSON_ARRAY_T();
+      FOR c IN(
+        SELECT sale_id,customer_id,visit_day,session_id FROM (
+          SELECT sale.id sale_id,JSON_VALUE(sale.invoice_json,'$.customerId' RETURNING VARCHAR2(80)) customer_id,TO_CHAR(COALESCE(FROM_TZ(TO_TIMESTAMP(JSON_VALUE(sale.invoice_json,'$.createdAt' RETURNING VARCHAR2(30)),'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'),'UTC'),sale.created_at) AT TIME ZONE 'America/Bogota','YYYY-MM-DD') visit_day,sale.session_id FROM alliance_pos_sales sale WHERE sale.business_id=b AND sale.location_id=l AND sale.voided=0
+          UNION
+          SELECT sale.id,COALESCE(item.customer_id,item.customer_camel),TO_CHAR(COALESCE(FROM_TZ(TO_TIMESTAMP(JSON_VALUE(sale.invoice_json,'$.createdAt' RETURNING VARCHAR2(30)),'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'),'UTC'),sale.created_at) AT TIME ZONE 'America/Bogota','YYYY-MM-DD'),sale.session_id FROM alliance_pos_sales sale,JSON_TABLE(sale.invoice_json,'$.items[*]' COLUMNS(customer_id VARCHAR2(80) PATH '$.customer_id',customer_camel VARCHAR2(80) PATH '$.customerId')) item WHERE sale.business_id=b AND sale.location_id=l AND sale.voided=0
+        ) WHERE customer_id IS NOT NULL
+      ) LOOP o:=JSON_OBJECT_T();o.put('saleId',c.sale_id);o.put('sessionId',c.session_id);o.put('customerId',c.customer_id);o.put('day',c.visit_day);arr.append(o);END LOOP;
+      model.put('crmSaleDays',arr);
+    END IF;
     arr:=JSON_ARRAY_T();IF sup OR finance OR (macro_enabled=1 AND (INSTR(p,',inventory.read,')>0 OR INSTR(p,',service.write,')>0)) THEN FOR x IN(SELECT id FROM alliance_raw_stock WHERE business_id=b AND location_id=l ORDER BY name) LOOP o:=raw_item(b,l,x.id);IF NOT stock AND NOT sup THEN o.put('unitCost',0);END IF;arr.append(o);END LOOP;END IF;model.put('ingredients',arr);
     arr:=JSON_ARRAY_T();IF sup THEN FOR x IN(SELECT m.*,s.name,s.unit_id,v.full_name FROM alliance_raw_movements m JOIN alliance_raw_stock s ON s.business_id=m.business_id AND s.location_id=m.location_id AND s.id=m.ingredient_id JOIN users v ON v.business_id=m.business_id AND v.id=m.actor_user_id WHERE m.business_id=b AND m.location_id=l ORDER BY m.created_at DESC FETCH FIRST 1000 ROWS ONLY) LOOP o:=JSON_OBJECT_T();o.put('id',x.id);o.put('ingredientId',x.ingredient_id);o.put('name',x.name);o.put('unit',x.unit_id);o.put('delta',x.delta);o.put('before',x.stock_before);o.put('after',x.stock_after);o.put('unitCost',x.unit_cost);o.put('kind',x.kind);o.put('reference',x.reference);o.put('actorId',x.actor_user_id);o.put('actorName',x.full_name);o.put('at',TO_CHAR(x.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));arr.append(o);END LOOP;END IF;model.put('materialMovements',arr);
     arr:=JSON_ARRAY_T();SELECT COUNT(*) INTO visits FROM locations WHERE business_id=b AND id=l AND slug='gcobarf';IF visits=1 AND stock THEN arr:=alliance_pos_store.list_documents(b,l,'op_materialhistory');END IF;model.put('materialHistory',arr);
@@ -1007,6 +1026,7 @@ END;!';
   EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE alliance_customer_crm AUTHID DEFINER AS
   FUNCTION phone_key(v VARCHAR2) RETURN VARCHAR2;
   FUNCTION profile(b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T;
+  FUNCTION select_order(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T;
   FUNCTION register_order(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T,order_id VARCHAR2) RETURN JSON_OBJECT_T;
 END;!';
   EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE BODY alliance_customer_crm AS
@@ -1023,6 +1043,17 @@ END;!';
     IF alliance_security.flag(p,'contactConsent')<>1 THEN alliance_security.fail(400,'CRM_CONSENT','Confirma que el cliente autorizó su registro.');END IF;
     o.put('name',name_value);o.put('phone',phone_value);o.put('phoneKey',phone_key(phone_value));o.put('birthDate',birth_value);o.put('contactConsent',TRUE);RETURN o;
   END;
+  FUNCTION select_order(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
+    o JSON_OBJECT_T;r JSON_OBJECT_T:=JSON_OBJECT_T();id_value VARCHAR2(80);n NUMBER;
+  BEGIN
+    alliance_security.require_location(u,b,l,'service.write');
+    SELECT COUNT(*) INTO n FROM locations WHERE business_id=b AND id=l AND slug IN('cocteleria','cafeteria');IF n<>1 THEN alliance_security.fail(403,'CRM_BRANCH','El CRM está disponible en cafetería y coctelería.');END IF;
+    alliance_security.keys_only(p,'id,contactConsent');IF alliance_security.flag(p,'contactConsent')<>1 THEN alliance_security.fail(400,'CRM_CONSENT','Confirma que el cliente autorizó asociar su ficha.');END IF;
+    id_value:=alliance_security.text_value(p,'id',80);o:=alliance_operations.get_row(b,l,'customers',id_value);
+    IF o IS NULL THEN alliance_security.fail(409,'CRM_CUSTOMER_MISSING','El cliente ya no está disponible en este negocio. Selecciónalo de nuevo.');END IF;
+    IF o.has('active') AND NOT o.get_boolean('active') THEN alliance_security.fail(409,'CRM_CUSTOMER_INACTIVE','El cliente está inhabilitado. Pide al encargado revisar su ficha.');END IF;
+    r.put('id',id_value);r.put('name',o.get_string('name'));RETURN r;
+  END;
   FUNCTION register_order(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T,order_id VARCHAR2) RETURN JSON_OBJECT_T IS
     o JSON_OBJECT_T;result_value JSON_OBJECT_T:=JSON_OBJECT_T();customer_id VARCHAR2(80);key_value VARCHAR2(80);actor_name VARCHAR2(160);at_value VARCHAR2(30):=alliance_activity.occurred_at;
   BEGIN
@@ -1033,8 +1064,8 @@ END;!';
       o.put('id',customer_id);o.put('active',TRUE);o.put('document','');o.put('allowCredit',FALSE);o.put('creditLimit',0);o.put('paymentFrequency','once');o.put('paymentDate','');o.put('source','waiter');o.put('sourceOrderId',order_id);o.put('revision',1);o.put('consentAt',at_value);o.put('consentById',u);o.put('consentByName',actor_name);
       alliance_operations.put_row(u,b,l,'customers',customer_id,o);alliance_pos_store.audit(u,b,'CRM_ENROLL_FROM_ORDER',customer_id,NULL,o.to_clob);alliance_activity.record_event(u,b,l,'customers','CRM_ENROLL_FROM_ORDER','Registró un cliente autorizado desde su comanda',customer_id);
     END IF;
-    -- Return only this order's association; a waiter cannot inspect the CRM record.
-    result_value.put('id',customer_id);result_value.put('name',p.get_string('name'));RETURN result_value;
+    o:=alliance_operations.get_row(b,l,'customers',customer_id);IF o.has('active') AND NOT o.get_boolean('active') THEN alliance_security.fail(409,'CRM_CUSTOMER_INACTIVE','El cliente está inhabilitado. Pide al encargado revisar su ficha.');END IF;
+    result_value.put('id',customer_id);result_value.put('name',o.get_string('name'));RETURN result_value;
   END;
 END;!';
   EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE alliance_orders AUTHID DEFINER AS
@@ -1045,7 +1076,7 @@ END;!';
   PROCEDURE touch(b VARCHAR2,l VARCHAR2) IS row_value JSON_OBJECT_T;BEGIN row_value:=alliance_pos_store.document(b,l,'op_ordersync','primary');IF row_value IS NULL THEN row_value:=JSON_OBJECT_T('{"revision":0}');END IF;row_value.put('revision',row_value.get_number('revision')+1);alliance_pos_store.put_document(b,l,'op_ordersync','primary',row_value);END;
   FUNCTION run_action(u VARCHAR2,b VARCHAR2,l VARCHAR2,a VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     r JSON_OBJECT_T;tab JSON_OBJECT_T;product JSON_OBJECT_T;line JSON_OBJECT_T;item JSON_OBJECT_T;order_value JSON_OBJECT_T;session_value JSON_OBJECT_T;ticket JSON_OBJECT_T;sender JSON_OBJECT_T;customer_value JSON_OBJECT_T;
-    items JSON_ARRAY_T;lines JSON_ARRAY_T:=JSON_ARRAY_T();ticket_lines JSON_ARRAY_T:=JSON_ARRAY_T();id_value VARCHAR2(80);session_id VARCHAR2(80);table_id_value VARCHAR2(80);line_id VARCHAR2(80);actor_name VARCHAR2(160);stamp VARCHAR2(30):=alliance_pos_store.stamp;
+    items JSON_ARRAY_T;lines JSON_ARRAY_T:=JSON_ARRAY_T();ticket_lines JSON_ARRAY_T:=JSON_ARRAY_T();id_value VARCHAR2(80);session_id VARCHAR2(80);table_id_value VARCHAR2(80);line_id VARCHAR2(80);actor_name VARCHAR2(160);stamp VARCHAR2(30):=alliance_activity.occurred_at;
     context_value JSON_OBJECT_T;perms JSON_ARRAY_T;allowed BOOLEAN:=FALSE;quantity NUMBER;price NUMBER;total NUMBER:=0;n NUMBER;notes VARCHAR2(500);
   BEGIN
     IF a='orders_revision' THEN alliance_security.keys_only(p,'');context_value:=alliance_security.context_for(u);perms:=context_value.get_object('permissions').get_array(l);IF perms IS NOT NULL THEN FOR i IN 0..perms.get_size-1 LOOP IF perms.get_string(i) IN('service.read','kitchen.read') THEN allowed:=TRUE;END IF;END LOOP;END IF;IF NOT allowed THEN alliance_security.fail(403,'FORBIDDEN','No puedes consultar comandas en esta sucursal.');END IF;r:=alliance_pos_store.document(b,l,'op_ordersync','primary');IF r IS NULL THEN r:=JSON_OBJECT_T('{"revision":0}');END IF;RETURN r;END IF;
@@ -1059,7 +1090,7 @@ END;!';
       alliance_production.reconcile(u,b,l);ticket.put('status','cancelled');alliance_pos_store.put_document(b,l,'op_tickets',id_value,ticket);alliance_pos_store.reconcile_session(u,b,l,session_id);alliance_pos_store.audit(u,b,'ORDER_CANCEL',id_value,NULL,ticket.to_clob);alliance_activity.record_event(u,b,l,'service','ORDER_CANCEL','Retiró la comanda y sus consumos de la cuenta',id_value);RETURN ticket;
     END IF;
     IF a='order_submit' THEN
-      alliance_security.keys_only(p,'id,tableId,items,notes,customerRegistration');id_value:=alliance_security.text_value(p,'id',60,'^[a-zA-Z0-9_-]+$');
+      alliance_security.keys_only(p,'id,tableId,items,notes,customerRegistration,customerSelection');id_value:=alliance_security.text_value(p,'id',60,'^[a-zA-Z0-9_-]+$');
       IF alliance_pos_store.document(b,l,'service_requests',id_value) IS NOT NULL THEN alliance_security.fail(409,'DUPLICATE_ORDER','Esta comanda ya existe.');END IF;
       tab:=alliance_pos_store.document(b,l,'restaurant_tables',p.get_string('tableId'));
       IF tab IS NULL OR NOT tab.get_boolean('is_active') THEN alliance_security.fail(400,'INVALID_TABLE','Elige una mesa disponible en esta sucursal.');END IF;
@@ -1074,6 +1105,8 @@ END;!';
         item:=JSON_OBJECT_T();item.put('productId',product.get_string('id'));item.put('name',product.get_string('name'));item.put('quantity',quantity);item.put('unitPrice',price);item.put('notes',line.get_string('notes'));lines.append(item);total:=total+ROUND(quantity*price,2);
       END LOOP;
       order_value:=JSON_OBJECT_T();order_value.put('items',lines);order_value.put('notes',p.get_string('notes'));order_value.put('total',total);
+      IF p.has('customerSelection') AND p.has('customerRegistration') THEN alliance_security.fail(400,'CRM_INPUT','Elige un cliente existente o registra uno nuevo.');END IF;
+      IF p.has('customerSelection') THEN customer_value:=p.get_object('customerSelection');IF customer_value IS NULL THEN alliance_security.fail(400,'CRM_INPUT','Selecciona un cliente.');END IF;customer_value:=alliance_customer_crm.select_order(u,b,l,customer_value);order_value.put('customerId',customer_value.get_string('id'));order_value.put('customerName',customer_value.get_string('name'));END IF;
       IF p.has('customerRegistration') THEN
         customer_value:=p.get_object('customerRegistration');IF customer_value IS NULL THEN alliance_security.fail(400,'CRM_INPUT','Revisa los datos del cliente.');END IF;
         customer_value:=alliance_customer_crm.register_order(u,b,l,customer_value,id_value);order_value.put('customerId',customer_value.get_string('id'));order_value.put('customerName',customer_value.get_string('name'));

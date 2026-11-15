@@ -1,6 +1,7 @@
 CREATE OR REPLACE PACKAGE alliance_customer_crm AUTHID DEFINER AS
   FUNCTION phone_key(v VARCHAR2) RETURN VARCHAR2;
   FUNCTION profile(b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T;
+  FUNCTION select_order(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T;
   FUNCTION register_order(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T,order_id VARCHAR2) RETURN JSON_OBJECT_T;
 END;
 /
@@ -18,6 +19,17 @@ CREATE OR REPLACE PACKAGE BODY alliance_customer_crm AS
     IF alliance_security.flag(p,'contactConsent')<>1 THEN alliance_security.fail(400,'CRM_CONSENT','Confirma que el cliente autorizó su registro.');END IF;
     o.put('name',name_value);o.put('phone',phone_value);o.put('phoneKey',phone_key(phone_value));o.put('birthDate',birth_value);o.put('contactConsent',TRUE);RETURN o;
   END;
+  FUNCTION select_order(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
+    o JSON_OBJECT_T;r JSON_OBJECT_T:=JSON_OBJECT_T();id_value VARCHAR2(80);n NUMBER;
+  BEGIN
+    alliance_security.require_location(u,b,l,'service.write');
+    SELECT COUNT(*) INTO n FROM locations WHERE business_id=b AND id=l AND slug IN('cocteleria','cafeteria');IF n<>1 THEN alliance_security.fail(403,'CRM_BRANCH','El CRM está disponible en cafetería y coctelería.');END IF;
+    alliance_security.keys_only(p,'id,contactConsent');IF alliance_security.flag(p,'contactConsent')<>1 THEN alliance_security.fail(400,'CRM_CONSENT','Confirma que el cliente autorizó asociar su ficha.');END IF;
+    id_value:=alliance_security.text_value(p,'id',80);o:=alliance_operations.get_row(b,l,'customers',id_value);
+    IF o IS NULL THEN alliance_security.fail(409,'CRM_CUSTOMER_MISSING','El cliente ya no está disponible en este negocio. Selecciónalo de nuevo.');END IF;
+    IF o.has('active') AND NOT o.get_boolean('active') THEN alliance_security.fail(409,'CRM_CUSTOMER_INACTIVE','El cliente está inhabilitado. Pide al encargado revisar su ficha.');END IF;
+    r.put('id',id_value);r.put('name',o.get_string('name'));RETURN r;
+  END;
   FUNCTION register_order(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T,order_id VARCHAR2) RETURN JSON_OBJECT_T IS
     o JSON_OBJECT_T;result_value JSON_OBJECT_T:=JSON_OBJECT_T();customer_id VARCHAR2(80);key_value VARCHAR2(80);actor_name VARCHAR2(160);at_value VARCHAR2(30):=alliance_activity.occurred_at;
   BEGIN
@@ -28,8 +40,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_customer_crm AS
       o.put('id',customer_id);o.put('active',TRUE);o.put('document','');o.put('allowCredit',FALSE);o.put('creditLimit',0);o.put('paymentFrequency','once');o.put('paymentDate','');o.put('source','waiter');o.put('sourceOrderId',order_id);o.put('revision',1);o.put('consentAt',at_value);o.put('consentById',u);o.put('consentByName',actor_name);
       alliance_operations.put_row(u,b,l,'customers',customer_id,o);alliance_pos_store.audit(u,b,'CRM_ENROLL_FROM_ORDER',customer_id,NULL,o.to_clob);alliance_activity.record_event(u,b,l,'customers','CRM_ENROLL_FROM_ORDER','Registró un cliente autorizado desde su comanda',customer_id);
     END IF;
-    -- Return only this order's association; a waiter cannot inspect the CRM record.
-    result_value.put('id',customer_id);result_value.put('name',p.get_string('name'));RETURN result_value;
+    o:=alliance_operations.get_row(b,l,'customers',customer_id);IF o.has('active') AND NOT o.get_boolean('active') THEN alliance_security.fail(409,'CRM_CUSTOMER_INACTIVE','El cliente está inhabilitado. Pide al encargado revisar su ficha.');END IF;
+    result_value.put('id',customer_id);result_value.put('name',o.get_string('name'));RETURN result_value;
   END;
 END;
 /
