@@ -6708,41 +6708,20 @@ const App = (() => {
     const receiptTotal = invoice ? Number(totals.total || baseTotal + chargedTip) : baseTotal + suggestedTip;
     const items = (invoice?.items || session.session_items || []).filter((item) => item.status !== "cancelled");
     const isPaid = Boolean(invoice);
-    const receiptNumber = invoice?.number || `FACT-${sessionReference(session)}`;
+    const receiptNumber = invoice?.number || `PRE-${sessionReference(session)}`;
     const issuedAt = new Date(invoice?.createdAt || Date.now());
     const payments = invoice?.payments || [];
-    return `<!doctype html>
-      <html lang="es"><head><meta charset="utf-8"><title>${isPaid ? "Factura" : "Pre-cuenta"} ${escapeHTML(receiptNumber)}</title>
-      <style>
-        @page { size: 80mm auto; margin: 3mm; }
-        * { box-sizing: border-box; }
-        body { width: 72mm; margin: 0 auto; color: #000; background: #fff; font: 12px/1.35 "Courier New", monospace; }
-        .logo { margin: 2mm 0 0; text-align: center; font: 900 22px/1 Arial, sans-serif; letter-spacing: .7px; }
-        .subtitle, .center { text-align: center; }
-        .subtitle { margin: 1mm 0 3mm; font-weight: 700; }
-        .rule { margin: 2.5mm 0; border-top: 1px dashed #000; }
-        .meta, .totals { display: grid; grid-template-columns: 1fr auto; gap: 1mm 3mm; }
-        .items { display: grid; gap: 2mm; }
-        .item { display: grid; grid-template-columns: 1fr auto; gap: 2mm; }
-        .item small { display: block; }
-        .total { margin-top: 1.5mm; font-size: 16px; font-weight: 900; }
-        .paid { padding: 1.5mm; border: 2px solid #000; text-align: center; font-weight: 900; }
-        .footer { margin-top: 3mm; text-align: center; }
-        .devnex-credit { display: grid; justify-items: center; gap: 1mm; margin-top: 2.5mm; padding-top: 2.5mm; border-top: 1px dashed #000; text-align: center; font-size: 10px; }
-        .devnex-contact { display: inline-flex; align-items: center; gap: 1mm; }
-        .devnex-contact svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
-        @media screen { body { padding: 8mm 4mm; box-shadow: 0 0 22px #bbb; } }
-      </style></head><body>
+    return AlliancePrint.document({title: (isPaid ? 'Factura ' : 'Prefactura ')+receiptNumber,body:`
         <div class="logo">${escapeHTML(businessName)}</div>
-        <div class="subtitle">${invoice?.recordType==='collection'||session.collection?(invoice?'RECIBO DE PAGO DE CARTERA':'PRECUENTA DE CARTERA'):'FACTURA DE VENTA'}</div>
+        <div class="subtitle">${invoice?.recordType==='collection'||session.collection?(invoice?'RECIBO DE PAGO DE CARTERA':'PRECUENTA DE CARTERA'):isPaid?'FACTURA DE VENTA':'PREFACTURA'}</div>
         <div class="rule"></div>
         <div class="meta">
           <span>Documento:</span><strong>${escapeHTML(receiptNumber)}</strong>
           <span>Origen:</span><strong>${escapeHTML(sessionLabel(session))}</strong>
           <span>Fecha:</span><strong>${issuedAt.toLocaleDateString("es-CO",{timeZone:"America/Bogota",dateStyle:"medium"})}</strong>
           <span>Hora:</span><strong>${issuedAt.toLocaleTimeString("es-CO", { timeZone:"America/Bogota", hour: "2-digit", minute: "2-digit" })}</strong>
-          <span>Responsable:</span><strong>${escapeHTML(session.payer_name || "Consumidor final")}</strong>
-          <span>Mesero:</span><strong>${escapeHTML(session.assigned_waiter?.full_name || state.currentUser?.full_name || "Equipo")}</strong>
+          <span>Cliente:</span><strong>${escapeHTML(invoice?.payerName || session.payer_name || "Consumidor final")}</strong>
+          <span>${isPaid ? "Atendió:" : "Mesero:"}</span><strong>${escapeHTML(invoice?.waiterName || session.assigned_waiter?.full_name || state.currentUser?.full_name || "Equipo")}</strong>
         </div>
         <div class="rule"></div>
         <div class="items">
@@ -6761,22 +6740,15 @@ const App = (() => {
         ${suggestedTip ? `<p class="center"><strong>La propina es voluntaria.</strong><br>El cliente puede pagar el consumo sin propina: ${money(baseTotal)}.</p>` : ""}
         ${isPaid ? `<div class="rule"></div><div class="paid">${(invoice?.payments||[]).some(p=>p.method==="credit")?"SALDO PENDIENTE POR PAGAR":"PAGADO"}</div><div class="meta" style="margin-top:2mm">${payments.map((payment) => `<span>${escapeHTML(paymentMethodLabel(payment.method))}</span><strong>${money(payment.amount)}</strong>`).join("")}${invoice.paymentMethod === "cash" && Number(invoice.cashReceived || 0) ? `<span>Recibido</span><strong>${money(invoice.cashReceived)}</strong><span>Cambio</span><strong>${money(invoice.changeDue)}</strong>` : ""}${invoice.reference ? `<span>Referencia</span><strong>${escapeHTML(invoice.reference)}</strong>` : ""}</div>` : ""}
         <div class="rule"></div>
-        <div class="footer">Gracias por su compra<br><strong>${escapeHTML(businessName)}</strong></div>
+        ${!isPaid ? '<p class="center"><strong>CUENTA POR PAGAR</strong><br>No es un comprobante de pago.</p>' : ""}<div class="footer">Gracias por su compra<br><strong>${escapeHTML(businessName)}</strong></div>
         ${isPaid ? `<div class="devnex-credit"><strong>Devnex Soluciones Tecnologicas - Devnex.tech</strong><span class="devnex-contact"><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"></circle></svg>3246394689</span></div>` : ""}
-        <script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script>
-      </body></html>`;
+      `});
   };
 
   const printThermalReceipt = (session, invoice = null, receiptWindow = null) => {
-    const popup = receiptWindow || window.open("", "_blank", "width=420,height=720");
-    if (!popup) {
-      toast("El navegador bloqueo la ventana de impresion. Habilita ventanas emergentes e intenta de nuevo.", "error", "receipt-popup-blocked");
-      return false;
-    }
-    popup.document.open();
-    popup.document.write(thermalReceiptHtml(session, invoice));
-    popup.document.close();
-    return true;
+    const printed=AlliancePrint.print(thermalReceiptHtml(session,invoice),receiptWindow);
+    if(!printed)toast('No se pudo abrir la impresión. Permite ventanas emergentes y vuelve a intentarlo. El pago guardado no se repite.','error','receipt-popup-blocked');
+    return printed;
   };
 
   const updateMixedPayment = (changedField = "mixed_amount_one") => {
@@ -7039,6 +7011,7 @@ const App = (() => {
       baseTotal,
       cashReceived: storedInvoice?.cashReceived ?? null,
       changeDue: storedInvoice?.changeDue ?? 0,
+      recordType: record.recordType,
       totals: { subtotal, discount, tax, serviceFee, total },
       items
     };
@@ -7080,8 +7053,8 @@ const App = (() => {
     if(state.paymentProcessing||!customerCollection)return;if(!updateCustomerCollectionAmount(form,true))return;const payment=paymentFromForm(form);if(!payment||payment.payments.some(p=>!['cash','transfer','breb','card'].includes(p.method))){toast('Revisa los medios y valores del pago.','error');return;}if(payment.method==='cash'&&currencyInputNumber(form.cash_received)<state.activePaymentTotal){toast('El dinero recibido no alcanza.','error');return;}
     const session=state.sessions.find(s=>s.id===form.session_id.value)||customerCollectionSession,payload={...customerCollection,id:customerCollection.id,reference:form.payment_reference.value.trim(),number:'AB-'+localDateKey().replaceAll('-','')+'-'+customerCollection.id.slice(-8).toUpperCase(),createdAt:new Date().toISOString(),payments:payment.payments,cashReceived:payment.method==='cash'?currencyInputNumber(form.cash_received):null,changeDue:payment.method==='cash'?currencyInputNumber(form.cash_received)-state.activePaymentTotal:0};delete payload.name;delete payload.availableAllocations;
     const signature=JSON.stringify({customerId:payload.customerId,allocations:payload.allocations,payments:payload.payments,reference:payload.reference});try{const pending=JSON.parse(BranchStorage.getItem('pending-customer-payment')||'null');if(pending?.signature===signature)Object.assign(payload,pending.payload);}catch{}
-    const popup=submitter?.value==='print'?window.open('','_blank','width=420,height=720'):null;state.paymentProcessing=true;form.querySelectorAll('button').forEach(b=>b.disabled=true);
-    try{BranchStorage.setItem('pending-customer-payment',JSON.stringify({signature,payload}));const receipt=await OracleDb.remote('customer_payment',payload,payload.id);BranchStorage.removeItem('pending-customer-payment');const invoice={...receipt,table:receipt.customerName,payerName:receipt.customerName,waiterName:receipt.actorName,paymentMethod:payment.method,totals:{subtotal:receipt.total,total:receipt.total,discount:0,tax:0,serviceFee:0,tip:0},items:session.session_items};state.sessions=state.sessions.filter(s=>s.id!==session.id);customerCollection=null;customerCollectionSession=null;delete form.dataset.collection;$('#paymentDialog').close();state.incomeReport=null;void window.OperationsPanel?.load(true);if(popup)printThermalReceipt(session,invoice,popup);else openReceiptResult(session,invoice);toast('Pago de cartera registrado.','ok');}
+    const popup=submitter?.value==='print'?AlliancePrint.reserve():null;state.paymentProcessing=true;form.querySelectorAll('button').forEach(b=>b.disabled=true);
+    try{BranchStorage.setItem('pending-customer-payment',JSON.stringify({signature,payload}));const receipt=await OracleDb.remote('customer_payment',payload,payload.id);BranchStorage.removeItem('pending-customer-payment');const invoice={...receipt,table:receipt.customerName,payerName:receipt.customerName,waiterName:receipt.actorName,paymentMethod:payment.method,totals:{subtotal:receipt.total,total:receipt.total,discount:0,tax:0,serviceFee:0,tip:0},items:session.session_items};state.sessions=state.sessions.filter(s=>s.id!==session.id);customerCollection=null;customerCollectionSession=null;delete form.dataset.collection;$('#paymentDialog').close();state.incomeReport=null;void window.OperationsPanel?.load(true);state.lastPaidReceipt={session,invoice};if(!popup||!printThermalReceipt(session,invoice,popup))openReceiptResult(session,invoice);toast('Pago de cartera registrado.','ok');}
     catch(error){popup?.close();toast(error.message,'error');}finally{state.paymentProcessing=false;form.querySelectorAll('button').forEach(b=>b.disabled=false);}
   };
   const processPayment = async (form, submitter) => {
@@ -7112,7 +7085,7 @@ const App = (() => {
       return;
     }
     const shouldPrint = submitter?.value === "print";
-    const receiptWindow = shouldPrint ? window.open("", "_blank", "width=420,height=720") : null;
+    const receiptWindow = shouldPrint ? AlliancePrint.reserve() : null;
     const buttons = $$('button[type="submit"]', form);
     buttons.forEach((button) => { button.disabled = true; });
     state.paymentProcessing = true;
@@ -7184,7 +7157,8 @@ const App = (() => {
     $("#paymentDialog")?.close();
     renderInventory();
     renderTips();
-    if (shouldPrint) printThermalReceipt(session, invoice, receiptWindow);
+    state.lastPaidReceipt={session,invoice};
+    if (shouldPrint && !printThermalReceipt(session, invoice, receiptWindow)) openReceiptResult(session,invoice);
     toast(`Pago registrado por ${paymentMethodLabel(payment.method)}. Factura ${invoice.number}.`, "ok", `paid:${session.id}`);
     state.paymentProcessing = false;
   };
