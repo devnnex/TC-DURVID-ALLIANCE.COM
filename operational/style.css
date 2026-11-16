@@ -5452,3 +5452,6 @@ input,select,textarea{max-width:100%;min-width:0}
 .movement-breakdown-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:8px;margin-top:12px}
 .movement-breakdown-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:10px 12px;font-size:12px;min-width:0}
 .movement-breakdown-list strong{overflow-wrap:anywhere}.movement-breakdown-list span{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted)}
+
+/* Touch controls respond without waiting for a double tap; panning and pinch zoom remain available. */
+:where(button,a[href],summary,[role="button"],input[type="button"],input[type="submit"],input[type="reset"],input[type="checkbox"],input[type="radio"]){touch-action:manipulation}

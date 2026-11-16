@@ -124,3 +124,6 @@ html,body{min-height:100%;height:auto;overflow-x:clip;overflow-y:auto}
 .portal-assigned .card-index,.portal-assigned .card-bottom{font-size:10px}
 .portal-assigned .card-subtitle{font-size:16px}
 .portal-assigned .card-branch-name{font-family:'DM Serif Display',Georgia,serif;font-size:36px;line-height:1.2;overflow-wrap:anywhere}
+
+/* Touch controls respond without waiting for a double tap; panning and pinch zoom remain available. */
+:where(button,a[href],summary,[role="button"],input[type="button"],input[type="submit"],input[type="reset"],input[type="checkbox"],input[type="radio"]){touch-action:manipulation}

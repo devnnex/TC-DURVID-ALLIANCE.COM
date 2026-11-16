@@ -1,4 +1,20 @@
-# Rendimiento de acceso y navegación · 21 de octubre de 2026
+# Rendimiento de acceso y navegación
+
+## Actualización · 16 de noviembre de 2026
+
+Los textos secundarios de Estadísticas usan un gris compartido más oscuro (#536258), incluidos ejes, leyendas, notas, tarjetas y diálogos. El contraste se comprueba en navegador sobre las superficies claras de las cinco vistas; las pruebas exigen al menos 4,5:1. Se conserva la distribución y el contenido.
+
+Cambiar de vista actualiza el contenido y la selección en el mismo evento del clic: se retiró la espera artificial de 140 ms y el escalonamiento que ocultaba tarjetas. La transición de entrada dura 120 ms y solo mueve dos píxeles; el contenido aparece desde el primer momento. Se mantiene la preferencia de movimiento reducido.
+
+Los botones, enlaces, desplegables de detalles y controles de selección del portal y las páginas operativas comparten touch-action: manipulation, evitando la espera del doble toque sin impedir desplazamiento o zoom con dos dedos ([referencia de MDN](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/touch-action)). Centro operativo ya utiliza esta política en sus botones y enlaces.
+
+En el alojamiento publicado, los scripts y estilos cuyo parámetro v coincide con la versión instalada se sirven desde la caché. Las páginas siguen consultando la red para detectar entregas nuevas; las versiones diferentes se descargan y se guardan con claves separadas. Una prueba de actualización verifica que una versión futura no reciba código de la anterior ni sobrescriba sus archivos. La API y los datos de cuenta conservan su exclusión de la caché pública.
+
+La regresión de navegación cubre los cuatro negocios con respuestas API retenidas: la mediana de las transiciones debe ser menor de 100 ms y cada transición menor de 300 ms, sin esperar a Oracle. Los cambios entre vistas de Estadísticas deben completar su actualización local en menos de 100 ms. Son límites de prueba en el equipo utilizado, no tiempos garantizados para cualquier dispositivo o conexión. El acceso nuevo y las confirmaciones mantienen las validaciones del servidor; no se omiten controles de seguridad ni se añaden consultas periódicas.
+
+Validación: compilación completa, 384 pruebas automatizadas y 37 escenarios de navegador (Estadísticas en escritorio/móvil, navegación, caché PWA, inicio y cierre de sesión). Acceso real con negocio temporal: 27 comprobaciones aprobadas; muestra de Chrome: login 1694 ms, recarga 594 ms y salida 301 ms. El negocio temporal se elimina al finalizar.
+
+## Historial · 21 de octubre de 2026
 
 Cambios compartidos por las cuatro sucursales, el acceso del mesero y Centro operativo. No cambian el diseño, las fórmulas, los permisos ni los contratos de sincronización.
 

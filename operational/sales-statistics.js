@@ -10,7 +10,7 @@
   const views=[['summary','Resumen'],['products','Productos'],['months','Meses'],['profit','Rentabilidad'],['hours','Horarios']];
   const mobileDetails=[['Ventas por mes','Productos','Mejor mes','Categorías','Actividad de cobro'],['Productos','Categorías','Concentración','Margen menor'],['Ventas por mes','Mes seleccionado','Promedio diario','Mejor promedio'],['Ganancia','Importes separados'],['Horarios','Días de la semana']];
   const icon=name=>'<i data-lucide="'+name+'" aria-hidden="true"></i>',button=(action,label,extra='')=>'<button type="button" data-ss-action="'+action+'" '+extra+'>'+label+'</button>';
-  let root,income,opener,stage,kpis,footer,notice,dialog,opened=false,selection=E.preset('year'),view=0,mobilePanel=0,result=null,loading=false,requestId=0,animation=0,worker=null,workerReject=null,reloadTimer,signature='',productMetric='net',productPage=0,monthMetric='net',monthPage=null,hourPage=0,selectedMonth='';
+  let root,income,opener,stage,kpis,footer,notice,dialog,opened=false,selection=E.preset('year'),view=0,mobilePanel=0,result=null,loading=false,requestId=0,worker=null,workerReject=null,reloadTimer,signature='',productMetric='net',productPage=0,monthMetric='net',monthPage=null,hourPage=0,selectedMonth='';
   const small=()=>window.matchMedia('(max-width: 700px)').matches,reduceMotion=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let activeIdentity='',activePreset='year',reportRevision='',loadError='';
   const identity=()=>{const i=OracleDb.identity?.();return JSON.stringify([i?.endpoint,i?.context?.user?.business_id,i?.location,OracleDb.user()?.id]);};
@@ -90,9 +90,8 @@
     window.lucide?.createIcons();fit();
   }
   function changeView(next){
-    if(next<0||next>=views.length)return;view=next;mobilePanel=0;const token=++animation;stage.classList.remove('is-entering');
-    if(reduceMotion()){stage.classList.remove('is-leaving');paint();return;}
-    stage.classList.add('is-leaving');setTimeout(()=>{if(token!==animation||!opened)return;stage.classList.remove('is-leaving');paint();},140);
+    if(next<0||next>=views.length)return;
+    view=next;mobilePanel=0;stage.classList.remove('is-entering');paint();
   }
   async function readReport(period){
     let cursor,revision,partial=false;const records=[],seen=new Set();
@@ -142,7 +141,7 @@
     dialog.querySelector('[data-ss-action=sync-state]')?.addEventListener('click',()=>{dialog.close();document.querySelector('#operationalSyncNotice button')?.click();});document.body.append(dialog);dialog.showModal();
   }
   function open(){if(!allowed())return;activeIdentity=identity();opened=true;view=0;mobilePanel=0;result=null;root.hidden=false;income.classList.add('is-statistics');document.body.classList.add('sales-statistics-open');window.scrollTo({top:0,behavior:'instant'});root.querySelector('[data-ss-action=range]').textContent=date(selection.from)+' – '+date(selection.to);fit();void load();root.querySelector('h2').focus({preventScroll:true});}
-  function close(){if(!opened)return;opened=false;++requestId;++animation;stopWorker();clearTimeout(reloadTimer);dialog?.close();dialog?.remove();root.hidden=true;root.classList.remove('is-entering');income.classList.remove('is-statistics');document.body.classList.remove('sales-statistics-open');result=null;stage.replaceChildren();kpis.replaceChildren();opener.focus({preventScroll:true});}
+  function close(){if(!opened)return;opened=false;++requestId;stopWorker();clearTimeout(reloadTimer);dialog?.close();dialog?.remove();root.hidden=true;root.classList.remove('is-entering');income.classList.remove('is-statistics');document.body.classList.remove('sales-statistics-open');result=null;stage.replaceChildren();kpis.replaceChildren();opener.focus({preventScroll:true});}
   function mount(){
     income=document.querySelector('#income');if(!income)return;
     opener=document.createElement('button');opener.type='button';opener.id='openSalesStatistics';opener.className='ghost ss-open';opener.innerHTML=icon('chart-no-axes-combined')+' Estadísticas';income.querySelector('.income-heading-actions').prepend(opener);opener.onclick=open;

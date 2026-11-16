@@ -33,3 +33,8 @@ Cuando el navegador lo permite, un trabajador calcula los agregados fuera del hi
 El análisis usa el respaldo local durante una desconexión e identifica datos parciales y cambios pendientes. Las ventas locales se vuelven a calcular cuando cambia el respaldo; al reconectar se consulta el reporte disponible sin duplicar facturas. Con la vista abierta se comprueba cada 30 segundos una revisión breve del servidor y solo se vuelve a analizar si cambió. También se actualiza al volver a la ventana. Los archivos de interfaz y del trabajador se incluyen en el caché público de la aplicación; las respuestas privadas no se guardan en ese caché.
 
 Validación: pruebas de fórmulas y centavos, fechas, costos ausentes, créditos y abonos; pruebas de navegador con 501 facturas, cinco vistas, pantallas pequeñas, funcionamiento sin internet y revocación de permisos; y comprobación del motor contra facturas y permisos de Oracle real mediante el negocio temporal aislado de `scripts/test-orders-live.ts`.
+
+
+## Legibilidad y respuesta · 16 de noviembre de 2026
+
+Las etiquetas, notas y leyendas usan un gris más visible compartido con los diálogos del reporte. Cambiar entre Resumen, Productos, Meses, Rentabilidad y Horarios responde en el mismo evento del clic, sin esperar una animación de salida ni consultar otra vez los datos. Las pruebas comprueban el contraste del texto secundario y la respuesta local de las cinco vistas, además del comportamiento en móvil y con movimiento reducido. Se conserva el alcance actual de negocios y permisos del módulo.
