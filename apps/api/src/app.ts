@@ -12,9 +12,13 @@ import { locationInput, userInput, profileInput } from '../../../packages/shared
 import { checkPassword, digest, hashPassword, token } from './password.js';
 import { allowedWebOrigins } from './web-origins.js';
 import { registerSite } from './site.js';
+const dummyPasswordHash=hashPassword(token());
 export type AppConfig = { secret:string;origin:string;production:boolean;setupToken:string;provider:string;cookieSameSite?:'strict'|'none';siteDir?:string;publicApiUrl?:string };
 export async function createApp(repo: Repository, cfg: AppConfig) {
-  const app=Fastify({logger:{level:'info',redact:['req.headers.authorization','req.headers.cookie','req.headers.x-setup-token','password','refresh_hash']},bodyLimit:1024*1024});
+  const app=Fastify({logger:{level:'info',redact:['req.headers.authorization','req.headers.cookie','req.headers.x-setup-token','password','refresh_hash','req.body.password','req.body.refresh_token','req.body.access_token','req.body.setup_token','req.body.proof']},bodyLimit:1024*1024});
+  app.addHook('onSend',async(request,reply,payload)=>{
+    if(request.url.startsWith('/api/v1/')){reply.header('Cache-Control','no-store');reply.header('Pragma','no-cache');reply.header('X-Content-Type-Options','nosniff');reply.header('Referrer-Policy','no-referrer');reply.header('X-Frame-Options','DENY');}return payload;
+  });
   await app.register(cookie);
   const origins=allowedWebOrigins(cfg.origin,cfg.production);
   if(cfg.publicApiUrl){const url=new URL(cfg.publicApiUrl);if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname.replace(/\/$/,'')!=='/api/v1')throw new Error('PUBLIC_API_URL debe ser la URL HTTPS pública de la API, terminada en /api/v1.');origins.push(url.origin);}
@@ -26,7 +30,7 @@ export async function createApp(repo: Repository, cfg: AppConfig) {
     if(origin&&!origins.includes(origin))throw new DomainError('FORBIDDEN','Este origen no está autorizado para acceder al sistema.',403);
     if(cfg.cookieSameSite==='none'&&request.url.split('?')[0]==='/api/v1/auth/refresh'&&!origin)throw new DomainError('FORBIDDEN','La renovación de sesión requiere un origen autorizado.',403);
   });
-  await app.register(jwt,{secret:cfg.secret,sign:{iss:'tc-alliance',aud:'tc-alliance-web',expiresIn:'15m'},verify:{allowedIss:'tc-alliance',allowedAud:'tc-alliance-web'}});
+  await app.register(jwt,{secret:cfg.secret,sign:{algorithm:'HS256',iss:'tc-alliance',aud:'tc-alliance-web',expiresIn:'15m'},verify:{algorithms:['HS256'],allowedIss:'tc-alliance',allowedAud:'tc-alliance-web'}});
   await app.register(rateLimit,{max:120,timeWindow:'1 minute'});
   app.setErrorHandler((error,request,reply)=>{
     const err=error as Error & {statusCode?:number};
@@ -39,7 +43,10 @@ export async function createApp(repo: Repository, cfg: AppConfig) {
   if(cfg.cookieSameSite==='none'&&!cfg.production)throw new Error('La cookie entre sitios requiere HTTPS en producción.');
   const refreshCookie={httpOnly:true,secure:cfg.production,sameSite:cfg.cookieSameSite||'strict',path:'/api/v1/auth',maxAge:60*60*24*7};
   async function authenticate(request: any) {
-    const claims=await request.jwtVerify() as {sub:string;sid:string};
+    const authorization=request.headers.authorization;
+    if(typeof authorization!=='string'||authorization.length>8192||!/^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/i.test(authorization))throw new DomainError('UNAUTHORIZED','Inicia sesión para continuar.',401);
+    let claims:{sub:string;sid:string};try{claims=await request.jwtVerify();}catch{throw new DomainError('UNAUTHORIZED','Inicia sesión para continuar.',401);}
+    if(!uuid.safeParse(claims.sub).success||!uuid.safeParse(claims.sid).success)throw new DomainError('UNAUTHORIZED','Inicia sesión para continuar.',401);
     const s=await repo.getSession(claims.sid);
     if(!s||s.revoked||s.user_id!==claims.sub||s.expires_at<=Date.now())throw new DomainError('UNAUTHORIZED','Tu sesión terminó.',401);
     return {session:s,context:await repo.context(s.user_id)};
@@ -66,7 +73,7 @@ export async function createApp(repo: Repository, cfg: AppConfig) {
   });
   app.post('/api/v1/auth/login',{config:{rateLimit:{max:10,timeWindow:'1 minute'}}},async(request,reply)=>{
     const body=z.object({business_slug:z.string().min(1).max(80),username:z.string().trim().min(1).max(320),password:z.string().min(1).max(128),branch:z.string().min(1).max(80).optional()}).strict().parse(request.body);
-    const user=await repo.findUser(body.business_slug,body.username,body.branch||String(request.headers['x-location-id']||'')||undefined);const valid=await checkPassword(body.password,user?.password_hash||await hashPassword(token()));
+    const user=await repo.findUser(body.business_slug,body.username,body.branch||String(request.headers['x-location-id']||'')||undefined);const valid=await checkPassword(body.password,user?.password_hash||await dummyPasswordHash);
     if(!user||!valid)throw new DomainError('UNAUTHORIZED','Usuario o contraseña incorrectos.',401);
     const refresh=token(),sid=randomUUID(),loginAt=Date.now();await repo.saveSession({id:sid,user_id:user.id,business_id:user.business_id,refresh_hash:digest(refresh),expires_at:loginAt+7*86400000,revoked:false});
     reply.setCookie('alliance_refresh',refresh,refreshCookie);

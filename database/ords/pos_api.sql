@@ -43,9 +43,44 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     a:=alliance_pos_store.list_documents(p_business,p_location,'table_sessions');FOR i IN 0..a.get_size-1 LOOP o:=TREAT(a.get(i) AS JSON_OBJECT_T);IF o.get_string('status')='open' THEN filtered.append(o);END IF;END LOOP;r.put('sessions',filtered);
     a:=alliance_pos_store.list_documents(p_business,p_location,'service_requests');filtered:=JSON_ARRAY_T();FOR i IN 0..a.get_size-1 LOOP o:=TREAT(a.get(i) AS JSON_OBJECT_T);IF o.get_string('status') IN('pending','acknowledged') THEN filtered.append(o);END IF;END LOOP;r.put('requests',filtered);RETURN r;
   END;
+  -- Receipt retries must respect the current grants, not the grants at the first write.
+  PROCEDURE authorize_write(u VARCHAR2,b VARCHAR2,l VARCHAR2,a VARCHAR2,p JSON_OBJECT_T,ctx JSON_OBJECT_T) IS
+    permissions_value JSON_ARRAY_T:=ctx.get_object('permissions').get_array(l);command_value VARCHAR2(40);entity_value VARCHAR2(32);operation_value VARCHAR2(12);body JSON_OBJECT_T;needed VARCHAR2(80);roles_value JSON_ARRAY_T;patches JSON_ARRAY_T;is_boss BOOLEAN:=FALSE;
+    FUNCTION has(code VARCHAR2) RETURN BOOLEAN IS BEGIN FOR i IN 0..permissions_value.get_size-1 LOOP IF permissions_value.get_string(i)=code THEN RETURN TRUE;END IF;END LOOP;RETURN FALSE;END;
+    PROCEDURE need(code VARCHAR2) IS BEGIN IF NOT has(code) THEN alliance_security.fail(403,'FORBIDDEN','Tu usuario no tiene permiso para esta operación.');END IF;END;
+    PROCEDURE boss IS BEGIN IF NOT is_boss THEN alliance_security.fail(403,'FORBIDDEN','Esta operación requiere al jefe del negocio.');END IF;END;
+    PROCEDURE guard_patch(row_value JSON_OBJECT_T) IS
+    BEGIN
+      IF row_value IS NULL THEN RETURN;END IF;
+      IF entity_value='table_sessions' THEN
+        IF row_value.has('discount') OR row_value.has('tax') OR row_value.has('service_fee') OR row_value.has('discount_amount') OR row_value.has('tax_amount') OR row_value.has('service_fee_amount') OR row_value.has('subtotal') OR row_value.has('total') OR row_value.has('payment_method') OR row_value.has('paid_at') OR row_value.get_string('status') IN('paid','closed','cancelled') THEN need('sales.write');END IF;
+        IF row_value.get_string('status')='cancelled' THEN boss;END IF;
+        IF row_value.has('delivery_date') OR row_value.has('delivery_time') OR row_value.has('customer_id') THEN need('customers.read');END IF;
+      ELSIF entity_value='session_items' AND row_value.get_string('status')='cancelled' THEN boss;END IF;
+    END;
+  BEGIN
+    is_boss:=ctx.get_boolean('is_owner');roles_value:=ctx.get_object('roles').get_array(l);IF roles_value IS NOT NULL THEN FOR i IN 0..roles_value.get_size-1 LOOP IF roles_value.get_string(i)='BOSS' THEN is_boss:=TRUE;END IF;END LOOP;END IF;
+    IF a='query' THEN
+      entity_value:=p.get_string('table');operation_value:=p.get_string('op');needed:=CASE entity_value WHEN 'business_settings' THEN 'brand.manage' WHEN 'restaurant_tables' THEN 'tables.manage' WHEN 'menu_categories' THEN 'products.write' WHEN 'menu_items' THEN 'products.write' ELSE 'service.write' END;need(needed);IF operation_value='delete' THEN boss;ELSIF p.has('values') THEN IF p.get('values').is_array THEN patches:=p.get_array('values');FOR i IN 0..patches.get_size-1 LOOP guard_patch(TREAT(patches.get(i) AS JSON_OBJECT_T));END LOOP;ELSE guard_patch(p.get_object('values'));END IF;END IF;
+    ELSIF a='operations_apply' THEN
+      command_value:=p.get_string('command');body:=p.get_object('payload');
+      IF command_value LIKE 'materials_%' THEN need('inventory.write');IF command_value='materials_link' THEN need('products.write');END IF;IF command_value='materials_delete' THEN boss;END IF;
+      ELSIF command_value LIKE 'cash_%' THEN need('cash.write');
+      ELSIF command_value LIKE 'ticket_%' THEN IF command_value='ticket_send' OR body.get_string('status')='delivered' THEN need('service.write');ELSE need('kitchen.write');END IF;
+      ELSIF command_value LIKE 'customer_%' OR command_value LIKE 'debt_%' THEN IF command_value='debt_pay' THEN need('sales.write');ELSE need('customers.write');END IF;
+      ELSE IF command_value='purchase_pay' THEN need('cash.write');ELSE need('supplies.write');END IF;IF command_value='policy_save' THEN boss;END IF;END IF;
+    ELSIF a IN('record_sale','edit_sale','delete_sale','clear_income') THEN need('sales.write');IF a<>'record_sale' THEN boss;END IF;
+    ELSIF a='customer_payment' THEN need('sales.write');need('customers.read');
+    ELSIF a IN('upsert_inventory','sync_inventory','adjust_inventory','set_inventory_stock','delete_inventory','update_inventory_movement_cost','clear_inventory','clear_inventory_movements') THEN need('inventory.write');IF a IN('delete_inventory','clear_inventory','clear_inventory_movements','update_inventory_movement_cost') THEN boss;END IF;
+    ELSIF a IN('costing_save','costing_approve','costing_product_delete') THEN need('inventory.read');need('products.write');
+    ELSIF a IN('order_accept','order_reject','order_cancel') THEN IF NOT has('service.write') AND NOT has('kitchen.write') THEN alliance_security.fail(403,'FORBIDDEN','Tu usuario no puede atender comandas.');END IF;IF a='order_cancel' THEN boss;END IF;
+    ELSIF a IN('order_submit','createServiceRequest','createServiceRequestsBatch','acknowledgeServiceRequests','resolveBill') THEN need('service.write');
+    ELSIF a IN('sendChatMessage','closeChatSession','broadcast') THEN need('service.read');need('service.write');
+    END IF;
+  END;
   FUNCTION dispatch(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     action_value VARCHAR2(50):=p_body.get_string('action');payload JSON_OBJECT_T:=p_body.get_object('payload');r JSON_OBJECT_T:=JSON_OBJECT_T();q JSON_OBJECT_T;value_json JSON_OBJECT_T;arr JSON_ARRAY_T;out_json JSON_ARRAY_T;row_json JSON_OBJECT_T;filters JSON_ARRAY_T;f JSON_OBJECT_T;
-    job_id VARCHAR2(160):=p_body.get_string('operation_id');digest VARCHAR2(64);saved_hash VARCHAR2(64);saved_user VARCHAR2(36);saved_value CLOB;save_value CLOB;saved_compressed BLOB;compressed_value BLOB;id_value VARCHAR2(80);table_value VARCHAR2(80);code_value VARCHAR2(64);n NUMBER;permission_value VARCHAR2(32767);is_write BOOLEAN:=FALSE;
+    job_id VARCHAR2(160):=p_body.get_string('operation_id');digest VARCHAR2(64);saved_hash VARCHAR2(64);saved_user VARCHAR2(36);saved_value CLOB;save_value CLOB;saved_compressed BLOB;compressed_value BLOB;grants_hash VARCHAR2(64);cached_result JSON_OBJECT_T;cached_value JSON_OBJECT_T;id_value VARCHAR2(80);table_value VARCHAR2(80);code_value VARCHAR2(64);n NUMBER;permission_value VARCHAR2(32767);is_write BOOLEAN:=FALSE;
   BEGIN
     alliance_security.keys_only(p_body,'action,payload,operation_id,device_id,client_created_at');IF payload IS NULL THEN payload:=JSON_OBJECT_T();END IF;
     alliance_activity.client_context(p_body.get_string('device_id'),p_body.get_string('client_created_at'));
@@ -57,12 +92,15 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     is_write:=action_value NOT IN('getAdminSnapshot','query','get_inventory','get_inventory_movements','get_income_report','status','remote_bootstrap','listChatMessages','getClientSnapshot','getEvents','costing_load','costing_product_load','operations_snapshot','operations_device','orders_revision','customer_history');
     IF action_value='query' THEN is_write:=payload.get_string('op')<>'select';END IF;
     IF is_write THEN
+      grants_hash:=alliance_security.hash_text(q.get_array(p_location).to_string);
+      authorize_write(p_user,p_business,p_location,action_value,payload,value_json);
       alliance_pos_store.lock_scope(p_business,p_location);
       IF job_id IS NOT NULL THEN
         IF LENGTH(job_id)>160 THEN alliance_security.fail(400,'INVALID_INPUT','Operacion invalida.');END IF;
         save_value:=p_body.to_clob;digest:=LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(save_value,DBMS_CRYPTO.HASH_SH256)));
         BEGIN SELECT fingerprint,actor_user_id,result_json,result_compressed INTO saved_hash,saved_user,saved_value,saved_compressed FROM alliance_pos_receipts WHERE business_id=p_business AND location_id=p_location AND id=job_id;
-          IF saved_hash<>digest OR saved_user<>p_user THEN alliance_security.fail(409,'IDEMPOTENCY_REUSE','La operacion ya se uso con otros datos.');END IF;RETURN JSON_OBJECT_T(alliance_receipt_storage.expand_result(saved_value,saved_compressed));
+          IF saved_hash<>digest OR saved_user<>p_user THEN alliance_security.fail(409,'IDEMPOTENCY_REUSE','La operacion ya se uso con otros datos.');END IF;cached_result:=JSON_OBJECT_T(alliance_receipt_storage.expand_result(saved_value,saved_compressed));
+          IF action_value='operations_apply' AND NVL(cached_result.get_string('_grants'),'-')<>grants_hash THEN cached_value:=cached_result.get_object('value');IF cached_value IS NOT NULL AND cached_value.has('model') AND cached_value.has('docs') THEN cached_result.put('value',alliance_operations.snapshot(p_user,p_business,p_location));END IF;END IF;cached_result.remove('_grants');RETURN cached_result;
         EXCEPTION WHEN NO_DATA_FOUND THEN NULL;END;
       END IF;
     END IF;
@@ -111,7 +149,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     ELSE alliance_security.fail(404,'NOT_FOUND','Accion no disponible.');END IF;
     IF is_write AND action_value<>'operations_apply' THEN alliance_activity.pos_event(p_user,p_business,p_location,action_value,payload);END IF;
     IF is_write THEN alliance_pos_store.put_document(p_business,p_location,'op_reportsync','primary',JSON_OBJECT_T('{}'));END IF;
-    IF is_write AND job_id IS NOT NULL THEN save_value:=r.to_clob;compressed_value:=alliance_receipt_storage.compress_result(save_value);IF compressed_value IS NOT NULL THEN save_value:='{"codec":"gzip-v1"}';END IF;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json,result_compressed)VALUES(p_business,p_location,job_id,p_user,digest,save_value,compressed_value);IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;END IF;RETURN r;
+    IF is_write AND job_id IS NOT NULL THEN cached_result:=JSON_OBJECT_T(r.to_clob);cached_result.put('_grants',grants_hash);save_value:=cached_result.to_clob;compressed_value:=alliance_receipt_storage.compress_result(save_value);IF compressed_value IS NOT NULL THEN save_value:='{"codec":"gzip-v1"}';END IF;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json,result_compressed)VALUES(p_business,p_location,job_id,p_user,digest,save_value,compressed_value);IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;END IF;RETURN r;
   END;
   FUNCTION public_dispatch(p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     r JSON_OBJECT_T:=JSON_OBJECT_T();payload JSON_OBJECT_T:=p_body.get_object('payload');action_value VARCHAR2(50):=p_body.get_string('action');business_value VARCHAR2(36);location_value VARCHAR2(36);table_id_value VARCHAR2(80);table_json CLOB;table_object JSON_OBJECT_T;arr JSON_ARRAY_T;out_json JSON_ARRAY_T;row_json JSON_OBJECT_T;session_object JSON_OBJECT_T;id_value VARCHAR2(80);body_value VARCHAR2(600);business_slug_value VARCHAR2(80);branch_slug_value VARCHAR2(80);table_code_value VARCHAR2(64);request_object JSON_OBJECT_T;entry JSON_OBJECT_T;product_object JSON_OBJECT_T;duplicate BOOLEAN;

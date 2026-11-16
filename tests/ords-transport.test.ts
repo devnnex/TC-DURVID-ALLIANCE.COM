@@ -42,3 +42,9 @@ describe('Cliente Oracle ORDS',()=>{
     expect(await checkPassword(password,encoded)).toBe(true);expect(await checkPassword('incorrect-password',encoded)).toBe(false);
   });
 });
+
+it('no adjunta el token de renovación a consultas ni pruebas de login',async()=>{
+  setup();values.set('alliance-ords-refresh','refresh-secret');const calls:RequestInit[]=[];vi.stubGlobal('fetch',async(_url:string,options:RequestInit)=>{calls.push(options);return new Response(JSON.stringify({status:200,data:{ok:true}}));});
+  await fetchOrds(base,'/api/v1/context',{});expect(JSON.parse(String(calls[0].body))).not.toHaveProperty('refresh_token');
+  await fetchOrds(base,'/api/v1/auth/refresh',{method:'POST'});expect(JSON.parse(String(calls[1].body)).refresh_token).toBe('refresh-secret');
+});

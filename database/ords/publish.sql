@@ -7,7 +7,7 @@ BEGIN
     BEGIN
       response_value:=alliance_api.dispatch(payload);
       OWA_UTIL.mime_header('application/json',FALSE);
-      HTP.p('Cache-Control: no-store');OWA_UTIL.http_header_close;
+      HTP.p('Cache-Control: no-store');HTP.p('Pragma: no-cache');HTP.p('Referrer-Policy: no-referrer');HTP.p('X-Frame-Options: DENY');OWA_UTIL.http_header_close;
       WHILE offset_value<=DBMS_LOB.GETLENGTH(response_value) LOOP
         HTP.prn(DBMS_LOB.SUBSTR(response_value,8000,offset_value));offset_value:=offset_value+8000;
       END LOOP;
@@ -25,7 +25,7 @@ BEGIN
     DECLARE payload CLOB:=:body_text;response_value CLOB;offset_value NUMBER:=1;
     BEGIN
       response_value:=alliance_api.dispatch(payload);OWA_UTIL.mime_header('application/json',FALSE);
-      HTP.p('Cache-Control: no-store');OWA_UTIL.http_header_close;
+      HTP.p('Cache-Control: no-store');HTP.p('Pragma: no-cache');HTP.p('Referrer-Policy: no-referrer');HTP.p('X-Frame-Options: DENY');OWA_UTIL.http_header_close;
       WHILE offset_value<=DBMS_LOB.GETLENGTH(response_value) LOOP HTP.prn(DBMS_LOB.SUBSTR(response_value,8000,offset_value));offset_value:=offset_value+8000;END LOOP;
     END;~');
   ORDS.SET_MODULE_ORIGINS_ALLOWED(p_module_name=>'alliance.file',p_origins_allowed=>'null');

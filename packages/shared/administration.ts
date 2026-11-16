@@ -49,7 +49,7 @@ export const defaultLocations = [
 export const locationInput = z.object({slug:z.string().regex(/^[a-z0-9-]{3,80}$/),name:z.string().trim().min(1).max(160),color:z.string().regex(/^#[0-9a-fA-F]{6}$/),active:z.boolean()}).strict();
 export type LocationInput = z.infer<typeof locationInput>;
 export const editableRole = z.enum(['BOSS','WORKER','ADMIN','MANAGER','CASHIER','WAITER','KITCHEN','INVENTORY_MANAGER','ACCOUNTING']);
-export const accessInput = z.object({location_id:uuid,roles:z.array(editableRole).min(1).max(7),overrides:z.record(z.enum(['ALLOW','DENY'])).refine(v=>Object.keys(v).every(k=>permissionCodes.includes(k as any)), 'Permiso desconocido.')}).strict();
+export const accessInput = z.object({location_id:uuid,roles:z.array(editableRole).min(1).max(7),overrides:z.record(z.string(),z.enum(['ALLOW','DENY'])).refine(v=>Object.keys(v).every(k=>permissionCodes.includes(k as any)), 'Permiso desconocido.')}).strict();
 export const userInput = z.object({name:z.string().trim().min(1).max(160),username:z.string().trim().min(1).max(320),active:z.boolean(),password:z.string().min(4).max(12).optional(),access:z.array(accessInput).max(100)}).strict().superRefine((v,c)=>{
   if(new Set(v.access.map(a=>a.location_id)).size!==v.access.length)c.addIssue({code:'custom',path:['access'],message:'Cada sucursal debe aparecer una sola vez.'});
   for(const a of v.access){const p=effectivePermissions(a.roles,a.overrides);if(p.includes('products.write')&&!p.includes('products.read'))c.addIssue({code:'custom',path:['access'],message:'Editar productos requiere consultar el catálogo.'});}
@@ -63,7 +63,7 @@ export type ProfileWrite = Omit<z.infer<typeof profileInput>,'password'> & {pass
 export type Administration = {locations:Location[];users:ManagedUser[];roles:typeof roleTemplates;sections:typeof sections};
 export function effectivePermissions(roles:string[],overrides:Record<string,'ALLOW'|'DENY'>,templates=roleTemplates):string[]{
   if(roles.some(r=>r==='OWNER'||r==='BOSS'))return [...permissionCodes];
-  if(roles.length===1&&roles[0]==='WAITER')return ['home.read','products.read','locations.read','service.read','service.write'];
+  if(roles.length===1&&roles[0]==='WAITER')return ['home.read','products.read','locations.read','service.read','service.write'].filter(code=>overrides[code]!=='DENY');
   const permissions=new Set(templates.filter(t=>roles.includes(t.code)).flatMap(t=>t.permissions).filter(p=>!['administration.manage','sales.manage'].includes(p)));
   for(const [code,effect] of Object.entries(overrides))if(permissionCodes.includes(code)&&code!=='sales.manage'){if(effect==='ALLOW')permissions.add(code);else permissions.delete(code);}
   return [...permissions];

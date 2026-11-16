@@ -15,7 +15,7 @@ window.OracleDb = (() => {
     let response;try{response = await fetch(base + (location.protocol === 'file:' ? '/file/rpc' : '/rpc'), {
       method: 'POST', credentials: 'omit', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({method, path, body, access_token: access,
-        refresh_token: refreshAtStart, location_id: selectedLocation || (path.startsWith('/auth/login')?branch:locationId() || '')}),
+        refresh_token: ['/auth/refresh','/auth/logout'].includes(path)?refreshAtStart:undefined, location_id: selectedLocation || (path.startsWith('/auth/login')?branch:locationId() || '')}),
       keepalive: path === '/auth/logout', signal: AbortSignal.timeout(path==='/auth/refresh'?5000:45000)
     });}catch(error){window.AllianceOffline?.connection(false);throw error;}window.AllianceOffline?.connection(response.ok);
     if (!response.ok) throw new Error('servicio seguro no está disponible. Intenta nuevamente.');

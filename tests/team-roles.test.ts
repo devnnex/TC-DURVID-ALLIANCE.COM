@@ -25,3 +25,7 @@ describe('Cuatro roles, delegación acotada y responsables',()=>{
  });
  it('cliente conserva creador y última edición de otro usuario',()=>{const E=(globalThis as any).AllianceOperationsEngine;let s=E.apply(E.empty(),{id:'create',command:'customer_save',payload:{id:'ana',revision:0,name:'Ana',active:true,creditLimit:0}},{id:'first',name:'Ana jefa'},[],'2026-10-22T10:00:00Z');s=E.apply(s,{id:'edit',command:'customer_save',payload:{id:'ana',revision:1,name:'Ana actualizada',active:true,creditLimit:0}},{id:'second',name:'Otro responsable'},[],'2026-10-23T10:00:00Z');expect(s.customers[0]).toMatchObject({createdById:'first',createdByName:'Ana jefa',createdAt:'2026-10-22T10:00:00Z',actorId:'second',actorName:'Otro responsable',allowCredit:true});});
 });
+
+it('respeta las denegaciones explícitas del mesero sin permitir privilegios adicionales',()=>{
+  expect(effectivePermissions(['WAITER'],{'service.write':'DENY','sales.write':'ALLOW','administration.manage':'ALLOW'})).toEqual(['home.read','products.read','locations.read','service.read']);
+});

@@ -40,8 +40,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_security AS
   END;
   FUNCTION flag(p_obj JSON_OBJECT_T,p_key VARCHAR2) RETURN NUMBER IS e JSON_ELEMENT_T;
   BEGIN e:=p_obj.get(p_key);IF e IS NULL OR NOT e.is_boolean THEN fail(400,'INVALID_INPUT','Valor invalido: '||p_key);END IF;IF p_obj.get_boolean(p_key) THEN RETURN 1;ELSE RETURN 0;END IF;END;
-  PROCEDURE keys_only(p_obj JSON_OBJECT_T,p_keys VARCHAR2) IS k JSON_KEY_LIST:=p_obj.get_keys;
-  BEGIN FOR i IN 1..k.COUNT LOOP IF INSTR(','||p_keys||',',','||k(i)||',')=0 THEN fail(400,'INVALID_INPUT','Campo no permitido: '||k(i));END IF;END LOOP;END;
+  PROCEDURE keys_only(p_obj JSON_OBJECT_T,p_keys VARCHAR2) IS k JSON_KEY_LIST;
+  BEGIN IF p_obj IS NULL THEN fail(400,'INVALID_INPUT','Se requiere un objeto de datos.');END IF;k:=p_obj.get_keys;FOR i IN 1..k.COUNT LOOP IF INSTR(k(i),',')>0 OR INSTR(','||p_keys||',',','||k(i)||',')=0 THEN fail(400,'INVALID_INPUT','Campo no permitido.');END IF;END LOOP;END;
   FUNCTION derive(p_password VARCHAR2,p_salt VARCHAR2) RETURN RAW IS
     k RAW(32767):=UTL_I18N.STRING_TO_RAW(p_password,'AL32UTF8');u RAW(32);t RAW(32);
   BEGIN
@@ -100,7 +100,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_security AS
       l:=JSON_OBJECT_T();l.put('id',x.id);l.put('business_id',x.business_id);l.put('slug',x.slug);l.put('name',x.name);l.put('color',x.color);l.put('active',TRUE);locations_json.append(l);pa:=JSON_ARRAY_T();
       SELECT COUNT(*),NVL(SUM(CASE WHEN role_code='BOSS' THEN 1 ELSE 0 END),0),NVL(SUM(CASE WHEN role_code='WAITER' THEN 1 ELSE 0 END),0) INTO role_num,boss_num,waiter_num FROM user_location_roles WHERE business_id=x.business_id AND user_id=p_user AND location_id=x.id;
       IF role_num<>1 THEN waiter_num:=0;END IF;
-      FOR p IN (SELECT code FROM permissions p WHERE own_num=1 OR boss_num>0 OR (waiter_num=1 AND code IN('home.read','products.read','locations.read','service.read','service.write')) OR (waiter_num=0 AND code<>'sales.manage' AND
+      FOR p IN (SELECT code FROM permissions p WHERE own_num=1 OR boss_num>0 OR (waiter_num=1 AND code IN('home.read','products.read','locations.read','service.read','service.write') AND NOT EXISTS(SELECT 1 FROM user_location_permissions denied WHERE denied.business_id=x.business_id AND denied.user_id=p_user AND denied.location_id=x.id AND denied.permission_code=p.code AND denied.effect='DENY')) OR (waiter_num=0 AND code<>'sales.manage' AND
         (EXISTS(SELECT 1 FROM role_permissions rp JOIN user_location_roles g ON g.role_code=rp.role_code WHERE g.business_id=x.business_id AND g.user_id=p_user AND g.location_id=x.id AND rp.permission_code=p.code)
          OR EXISTS(SELECT 1 FROM user_location_permissions o WHERE o.business_id=x.business_id AND o.user_id=p_user AND o.location_id=x.id AND o.permission_code=p.code AND effect='ALLOW'))
          AND NOT EXISTS(SELECT 1 FROM user_location_permissions o WHERE o.business_id=x.business_id AND o.user_id=p_user AND o.location_id=x.id AND o.permission_code=p.code AND effect='DENY')) ORDER BY code) LOOP pa.append(p.code);END LOOP;
@@ -128,19 +128,21 @@ CREATE OR REPLACE PACKAGE BODY alliance_security AS
     SELECT expires_at-INTERVAL '7' DAY INTO login_time FROM alliance_api_sessions WHERE user_id=p_user AND access_hash=hash_text(p_access);
     ctx:=context_for(p_user);actor:=ctx.get_object('user');actor.put('last_login_at',TO_CHAR(login_time AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));ctx.put('user',actor);
     r.put('access_token',p_access);r.put('refresh_token',p_refresh);r.put('context',ctx);r.put('provider','oracle-ords');RETURN r;END;
-  FUNCTION issue_session(p_user VARCHAR2,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T IS u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);slug_value VARCHAR2(80);
+  FUNCTION auth_scope(slug_value VARCHAR2,branch_value VARCHAR2) RETURN VARCHAR2 IS id_value VARCHAR2(36);
+  BEGIN IF branch_value IS NULL THEN RETURN NULL;END IF;SELECT MIN(l.id) INTO id_value FROM locations l JOIN businesses b ON b.id=l.business_id WHERE b.slug=slug_value AND l.active=1 AND (l.id=branch_value OR l.slug=branch_value);RETURN ':'||NVL(id_value,'invalid');END;
+  FUNCTION issue_session(p_user VARCHAR2,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T IS u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);slug_value VARCHAR2(80);suffix_value VARCHAR2(80);
   BEGIN SELECT * INTO u FROM users WHERE id=p_user AND active=1;
     access_value:=LOWER(RAWTOHEX(DBMS_CRYPTO.RANDOMBYTES(32)));refresh_value:=LOWER(RAWTOHEX(DBMS_CRYPTO.RANDOMBYTES(32)));
     DELETE FROM alliance_api_sessions WHERE expires_at<SYSTIMESTAMP-INTERVAL '1' DAY;
     INSERT INTO alliance_api_sessions(id,business_id,user_id,access_hash,refresh_hash,access_expires,expires_at) VALUES(new_id,u.business_id,u.id,hash_text(access_value),hash_text(refresh_value),SYSTIMESTAMP+INTERVAL '15' MINUTE,SYSTIMESTAMP+INTERVAL '7' DAY);
     SELECT slug INTO slug_value FROM businesses WHERE id=u.business_id;
-    DELETE FROM alliance_login_limits WHERE bucket IN(hash_text('login:'||slug_value||':'||u.username||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END),hash_text('challenge:'||slug_value||':'||u.username||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END));
+    suffix_value:=auth_scope(slug_value,branch_value);DELETE FROM alliance_login_limits WHERE bucket IN(hash_text('login:'||slug_value||':'||u.username||suffix_value),hash_text('challenge:'||slug_value||':'||u.username||suffix_value));
     RETURN session_result(u.id,access_value,refresh_value);
   END;
   FUNCTION login(p_body JSON_OBJECT_T,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T IS slug_value VARCHAR2(80);username_value users.username%TYPE;password_value VARCHAR2(128);u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);valid BOOLEAN;
   BEGIN
     keys_only(p_body,'business_slug,username,password');slug_value:=text_value(p_body,'business_slug',80);username_value:=text_value(p_body,'username',320);password_value:=text_value(p_body,'password',128);
-    throttle('login:'||slug_value||':'||username_value||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END,10);
+    throttle('login:'||slug_value||':'||username_value||auth_scope(slug_value,branch_value),10);
     BEGIN SELECT u.* INTO u FROM users u JOIN businesses b ON b.id=u.business_id WHERE b.slug=slug_value AND u.username=username_value AND u.active=1 AND u.deleted_at IS NULL AND EXISTS(SELECT 1 FROM user_location_roles g JOIN locations l ON l.business_id=g.business_id AND l.id=g.location_id WHERE g.business_id=u.business_id AND g.user_id=u.id AND (branch_value IS NULL OR g.role_code='OWNER' OR (l.active=1 AND (l.slug=branch_value OR l.id=branch_value))));
     EXCEPTION WHEN TOO_MANY_ROWS THEN fail(400,'BRANCH_REQUIRED','Selecciona el negocio para iniciar sesión con este usuario.');WHEN NO_DATA_FOUND THEN u.password_hash:='pbkdf2-sha256$600000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000';END;
     valid:=verify_password(password_value,u.password_hash);

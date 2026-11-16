@@ -1,5 +1,7 @@
 # Seguridad
 
+**Refuerzo 2026-11-16 — todos los negocios:** se endurecieron los límites existentes de autenticación y permisos sin cambiar contraseñas, roles configurados, pantallas ni el protocolo de acceso. Las comprobaciones se aplican en Oracle ORDS y en la API Node alternativa. Ver [alcance y comprobaciones](seguridad-2026-11-16.md).
+
 **Actualización 2026-10-09:** la conexión principal está activa mediante Oracle ORDS. Live Server y GitHub Pages usan la misma API HTTPS. Ver [conexión y mantenimiento](public-api.md). Los pasos Node/TLS siguientes corresponden a la alternativa técnica conservada.
 
 Los límites de acceso de Oracle conservan los intentos incorrectos consecutivos. Un ingreso verificado reinicia los contadores de contraseña y desafío de esa cuenta; los accesos correctos no se acumulan hasta bloquear al usuario. El formulario muestra el mensaje real del servidor para distinguir credenciales incorrectas, límites de intentos y errores de conexión. `scripts/test-auth-proof-live.ts` comprueba accesos correctos repetidos y el bloqueo ante contraseñas incorrectas en una cuenta temporal.
@@ -14,4 +16,4 @@ Setup solo con token externo y cuando no hay business; lock transaccional evita 
 
 La administración permite al propietario gestionar sucursales, usuarios, roles y excepciones por sección/sucursal. Los bloqueos individuales prevalecen sobre roles; no pueden conceder facultades de propietario. Cuenta propietaria protegida, mutaciones serializadas por negocio, sesiones del usuario revocadas al cambiar sus datos/accesos y auditoría transaccional separada sin secretos. Véase [administración](administration.md).
 
-Pendiente de hardening productivo: recuperación/rotación de credenciales del propietario, límites distribuidos, CSP, pruebas de penetración, backups/restore y cifrado de almacenamiento local según dispositivos/amenazas. IndexedDB queda bajo perfil/origen del navegador; no prometer cifrado o autorización remota mientras no hay red. Una revocación en servidor se aplica al reconectar; durante offline permanece la ventana local de autorización de hasta 24 horas.
+Pendiente de hardening productivo: recuperación/rotación de credenciales del propietario, límites distribuidos, CSP, pruebas de penetración, backups/restore y cifrado de almacenamiento local según dispositivos/amenazas. IndexedDB queda bajo perfil/origen del navegador; no prometer cifrado o autorización remota mientras no hay red. Una revocación en servidor se aplica al reconectar; durante offline se conserva el último contexto verificado y el acceso local vigente de hasta 60 días, protegido mediante la contraseña local. Esta ventana existente no cambió con este refuerzo. El servidor vuelve a comprobar los permisos vigentes al sincronizar.

@@ -276,8 +276,8 @@ END;!';
   END;
   FUNCTION flag(p_obj JSON_OBJECT_T,p_key VARCHAR2) RETURN NUMBER IS e JSON_ELEMENT_T;
   BEGIN e:=p_obj.get(p_key);IF e IS NULL OR NOT e.is_boolean THEN fail(400,'INVALID_INPUT','Valor invalido: '||p_key);END IF;IF p_obj.get_boolean(p_key) THEN RETURN 1;ELSE RETURN 0;END IF;END;
-  PROCEDURE keys_only(p_obj JSON_OBJECT_T,p_keys VARCHAR2) IS k JSON_KEY_LIST:=p_obj.get_keys;
-  BEGIN FOR i IN 1..k.COUNT LOOP IF INSTR(','||p_keys||',',','||k(i)||',')=0 THEN fail(400,'INVALID_INPUT','Campo no permitido: '||k(i));END IF;END LOOP;END;
+  PROCEDURE keys_only(p_obj JSON_OBJECT_T,p_keys VARCHAR2) IS k JSON_KEY_LIST;
+  BEGIN IF p_obj IS NULL THEN fail(400,'INVALID_INPUT','Se requiere un objeto de datos.');END IF;k:=p_obj.get_keys;FOR i IN 1..k.COUNT LOOP IF INSTR(k(i),',')>0 OR INSTR(','||p_keys||',',','||k(i)||',')=0 THEN fail(400,'INVALID_INPUT','Campo no permitido.');END IF;END LOOP;END;
   FUNCTION derive(p_password VARCHAR2,p_salt VARCHAR2) RETURN RAW IS
     k RAW(32767):=UTL_I18N.STRING_TO_RAW(p_password,'AL32UTF8');u RAW(32);t RAW(32);
   BEGIN
@@ -336,7 +336,7 @@ END;!';
       l:=JSON_OBJECT_T();l.put('id',x.id);l.put('business_id',x.business_id);l.put('slug',x.slug);l.put('name',x.name);l.put('color',x.color);l.put('active',TRUE);locations_json.append(l);pa:=JSON_ARRAY_T();
       SELECT COUNT(*),NVL(SUM(CASE WHEN role_code='BOSS' THEN 1 ELSE 0 END),0),NVL(SUM(CASE WHEN role_code='WAITER' THEN 1 ELSE 0 END),0) INTO role_num,boss_num,waiter_num FROM user_location_roles WHERE business_id=x.business_id AND user_id=p_user AND location_id=x.id;
       IF role_num<>1 THEN waiter_num:=0;END IF;
-      FOR p IN (SELECT code FROM permissions p WHERE own_num=1 OR boss_num>0 OR (waiter_num=1 AND code IN('home.read','products.read','locations.read','service.read','service.write')) OR (waiter_num=0 AND code<>'sales.manage' AND
+      FOR p IN (SELECT code FROM permissions p WHERE own_num=1 OR boss_num>0 OR (waiter_num=1 AND code IN('home.read','products.read','locations.read','service.read','service.write') AND NOT EXISTS(SELECT 1 FROM user_location_permissions denied WHERE denied.business_id=x.business_id AND denied.user_id=p_user AND denied.location_id=x.id AND denied.permission_code=p.code AND denied.effect='DENY')) OR (waiter_num=0 AND code<>'sales.manage' AND
         (EXISTS(SELECT 1 FROM role_permissions rp JOIN user_location_roles g ON g.role_code=rp.role_code WHERE g.business_id=x.business_id AND g.user_id=p_user AND g.location_id=x.id AND rp.permission_code=p.code)
          OR EXISTS(SELECT 1 FROM user_location_permissions o WHERE o.business_id=x.business_id AND o.user_id=p_user AND o.location_id=x.id AND o.permission_code=p.code AND effect='ALLOW'))
          AND NOT EXISTS(SELECT 1 FROM user_location_permissions o WHERE o.business_id=x.business_id AND o.user_id=p_user AND o.location_id=x.id AND o.permission_code=p.code AND effect='DENY')) ORDER BY code) LOOP pa.append(p.code);END LOOP;
@@ -364,19 +364,21 @@ END;!';
     SELECT expires_at-INTERVAL '7' DAY INTO login_time FROM alliance_api_sessions WHERE user_id=p_user AND access_hash=hash_text(p_access);
     ctx:=context_for(p_user);actor:=ctx.get_object('user');actor.put('last_login_at',TO_CHAR(login_time AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));ctx.put('user',actor);
     r.put('access_token',p_access);r.put('refresh_token',p_refresh);r.put('context',ctx);r.put('provider','oracle-ords');RETURN r;END;
-  FUNCTION issue_session(p_user VARCHAR2,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T IS u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);slug_value VARCHAR2(80);
+  FUNCTION auth_scope(slug_value VARCHAR2,branch_value VARCHAR2) RETURN VARCHAR2 IS id_value VARCHAR2(36);
+  BEGIN IF branch_value IS NULL THEN RETURN NULL;END IF;SELECT MIN(l.id) INTO id_value FROM locations l JOIN businesses b ON b.id=l.business_id WHERE b.slug=slug_value AND l.active=1 AND (l.id=branch_value OR l.slug=branch_value);RETURN ':'||NVL(id_value,'invalid');END;
+  FUNCTION issue_session(p_user VARCHAR2,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T IS u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);slug_value VARCHAR2(80);suffix_value VARCHAR2(80);
   BEGIN SELECT * INTO u FROM users WHERE id=p_user AND active=1;
     access_value:=LOWER(RAWTOHEX(DBMS_CRYPTO.RANDOMBYTES(32)));refresh_value:=LOWER(RAWTOHEX(DBMS_CRYPTO.RANDOMBYTES(32)));
     DELETE FROM alliance_api_sessions WHERE expires_at<SYSTIMESTAMP-INTERVAL '1' DAY;
     INSERT INTO alliance_api_sessions(id,business_id,user_id,access_hash,refresh_hash,access_expires,expires_at) VALUES(new_id,u.business_id,u.id,hash_text(access_value),hash_text(refresh_value),SYSTIMESTAMP+INTERVAL '15' MINUTE,SYSTIMESTAMP+INTERVAL '7' DAY);
     SELECT slug INTO slug_value FROM businesses WHERE id=u.business_id;
-    DELETE FROM alliance_login_limits WHERE bucket IN(hash_text('login:'||slug_value||':'||u.username||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END),hash_text('challenge:'||slug_value||':'||u.username||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END));
+    suffix_value:=auth_scope(slug_value,branch_value);DELETE FROM alliance_login_limits WHERE bucket IN(hash_text('login:'||slug_value||':'||u.username||suffix_value),hash_text('challenge:'||slug_value||':'||u.username||suffix_value));
     RETURN session_result(u.id,access_value,refresh_value);
   END;
   FUNCTION login(p_body JSON_OBJECT_T,branch_value VARCHAR2 DEFAULT NULL) RETURN JSON_OBJECT_T IS slug_value VARCHAR2(80);username_value users.username%TYPE;password_value VARCHAR2(128);u users%ROWTYPE;access_value VARCHAR2(64);refresh_value VARCHAR2(64);valid BOOLEAN;
   BEGIN
     keys_only(p_body,'business_slug,username,password');slug_value:=text_value(p_body,'business_slug',80);username_value:=text_value(p_body,'username',320);password_value:=text_value(p_body,'password',128);
-    throttle('login:'||slug_value||':'||username_value||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END,10);
+    throttle('login:'||slug_value||':'||username_value||auth_scope(slug_value,branch_value),10);
     BEGIN SELECT u.* INTO u FROM users u JOIN businesses b ON b.id=u.business_id WHERE b.slug=slug_value AND u.username=username_value AND u.active=1 AND u.deleted_at IS NULL AND EXISTS(SELECT 1 FROM user_location_roles g JOIN locations l ON l.business_id=g.business_id AND l.id=g.location_id WHERE g.business_id=u.business_id AND g.user_id=u.id AND (branch_value IS NULL OR g.role_code='OWNER' OR (l.active=1 AND (l.slug=branch_value OR l.id=branch_value))));
     EXCEPTION WHEN TOO_MANY_ROWS THEN fail(400,'BRANCH_REQUIRED','Selecciona el negocio para iniciar sesión con este usuario.');WHEN NO_DATA_FOUND THEN u.password_hash:='pbkdf2-sha256$600000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000';END;
     valid:=verify_password(password_value,u.password_hash);
@@ -401,11 +403,13 @@ END;!';
     IF REGEXP_LIKE(encoded,'^SCRAM-SHA-256\$600000\$[0-9a-f]{32}\$[0-9a-f]{64}\$[0-9a-f]{64}$','c') THEN salt:=REGEXP_SUBSTR(encoded,'[^$]+',1,3);stored:=HEXTORAW(REGEXP_SUBSTR(encoded,'[^$]+',1,4));server:=HEXTORAW(REGEXP_SUBSTR(encoded,'[^$]+',1,5));
     ELSE alliance_security.fail(401,'UNAUTHORIZED','Usuario o contrasena incorrectos.');END IF;
   END;
+  FUNCTION auth_scope(slug_value VARCHAR2,branch_value VARCHAR2) RETURN VARCHAR2 IS id_value VARCHAR2(36);
+  BEGIN IF branch_value IS NULL THEN RETURN NULL;END IF;SELECT MIN(l.id) INTO id_value FROM locations l JOIN businesses b ON b.id=l.business_id WHERE b.slug=slug_value AND l.active=1 AND (l.id=branch_value OR l.slug=branch_value);RETURN ':'||NVL(id_value,'invalid');END;
   FUNCTION challenge(p JSON_OBJECT_T,branch_value VARCHAR2) RETURN JSON_OBJECT_T IS
     slug_value VARCHAR2(80);name_value users.username%TYPE;nonce_value VARCHAR2(64);encoded VARCHAR2(512);user_value VARCHAR2(36);salt VARCHAR2(32);stored RAW(32);server RAW(32);secret RAW(32);identifier VARCHAR2(36):=alliance_security.new_id;server_nonce VARCHAR2(128);message_value VARCHAR2(4000);message JSON_ARRAY_T:=JSON_ARRAY_T();empty_branch JSON_ARRAY_T:=JSON_ARRAY_T('[""]');r JSON_OBJECT_T:=JSON_OBJECT_T();
   BEGIN
     alliance_security.keys_only(p,'business_slug,username,nonce');slug_value:=alliance_security.text_value(p,'business_slug',80);name_value:=alliance_security.text_value(p,'username',320);nonce_value:=alliance_security.text_value(p,'nonce',64,'^[0-9a-f]{64}$');
-    alliance_security.throttle('challenge:'||slug_value||':'||name_value||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END,20);
+    alliance_security.throttle('challenge:'||slug_value||':'||name_value||auth_scope(slug_value,branch_value),20);
     BEGIN SELECT u.id,u.password_hash INTO user_value,encoded FROM users u JOIN businesses b ON b.id=u.business_id WHERE b.slug=slug_value AND u.username=name_value AND u.active=1 AND u.deleted_at IS NULL AND EXISTS(SELECT 1 FROM user_location_roles g JOIN locations l ON l.business_id=g.business_id AND l.id=g.location_id WHERE g.business_id=u.business_id AND g.user_id=u.id AND (branch_value IS NULL OR g.role_code='OWNER' OR (l.active=1 AND (l.slug=branch_value OR l.id=branch_value))));IF encoded LIKE 'pbkdf2-sha256$%' THEN r.put('algorithm','PASSWORD');RETURN r;END IF;keys_for(encoded,salt,stored,server);
     EXCEPTION WHEN TOO_MANY_ROWS THEN alliance_security.fail(400,'BRANCH_REQUIRED','Selecciona el negocio para iniciar sesión con este usuario.');WHEN NO_DATA_FOUND THEN SELECT c.secret INTO secret FROM alliance_auth_config c WHERE id=1;salt:=SUBSTR(LOWER(RAWTOHEX(DBMS_CRYPTO.MAC(UTL_I18N.STRING_TO_RAW(slug_value||':'||name_value,'AL32UTF8'),DBMS_CRYPTO.HMAC_SH256,secret))),1,32);END;
     server_nonce:=nonce_value||LOWER(RAWTOHEX(DBMS_CRYPTO.RANDOMBYTES(32)));message.append(slug_value);message.append(name_value);IF branch_value IS NULL THEN message.append(empty_branch.get(0));ELSE message.append(branch_value);END IF;message.append(identifier);message.append(nonce_value);message.append(server_nonce);message.append(salt);message.append(600000);
@@ -423,9 +427,9 @@ END;!';
     c alliance_auth_challenges%ROWTYPE;u users%ROWTYPE;identifier VARCHAR2(36);proof VARCHAR2(64);salt VARCHAR2(32);stored RAW(32);server RAW(32);signature RAW(32);computed VARCHAR2(64);different NUMBER:=0;expected VARCHAR2(64);r JSON_OBJECT_T;
   BEGIN
     alliance_security.keys_only(p,'id,proof');identifier:=alliance_security.text_value(p,'id',36,'^[a-f0-9-]{36}$');proof:=alliance_security.text_value(p,'proof',64,'^[0-9a-f]{64}$');take_challenge(identifier,c);
-    alliance_security.throttle('login:'||c.business_slug||':'||c.username||CASE WHEN branch_value IS NOT NULL THEN ':'||branch_value END,10);
+    alliance_security.throttle('login:'||c.business_slug||':'||c.username||auth_scope(c.business_slug,branch_value),10);
     IF NVL(c.branch,'-')<>NVL(branch_value,'-') THEN alliance_security.fail(401,'UNAUTHORIZED','Este intento no corresponde a la sucursal.');END IF;
-    BEGIN SELECT * INTO u FROM users WHERE id=c.user_id AND active=1 AND username=c.username FOR UPDATE;EXCEPTION WHEN NO_DATA_FOUND THEN alliance_security.fail(401,'UNAUTHORIZED','Usuario o contrasena incorrectos.');END;
+    BEGIN SELECT * INTO u FROM users WHERE id=c.user_id AND active=1 AND deleted_at IS NULL AND username=c.username AND business_id IN(SELECT id FROM businesses WHERE slug=c.business_slug) FOR UPDATE;EXCEPTION WHEN NO_DATA_FOUND THEN alliance_security.fail(401,'UNAUTHORIZED','Usuario o contrasena incorrectos.');END;
     keys_for(u.password_hash,salt,stored,server);IF salt<>c.salt THEN alliance_security.fail(401,'UNAUTHORIZED','Usuario o contrasena incorrectos.');END IF;
     signature:=DBMS_CRYPTO.MAC(UTL_I18N.STRING_TO_RAW(c.message,'AL32UTF8'),DBMS_CRYPTO.HMAC_SH256,stored);computed:=LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(UTL_RAW.BIT_XOR(HEXTORAW(proof),signature),DBMS_CRYPTO.HASH_SH256)));expected:=LOWER(RAWTOHEX(stored));FOR i IN 1..64 LOOP IF SUBSTR(computed,i,1)<>SUBSTR(expected,i,1) THEN different:=different+1;END IF;END LOOP;
     IF different<>0 THEN alliance_security.fail(401,'UNAUTHORIZED','Usuario o contrasena incorrectos.');END IF;
@@ -630,13 +634,23 @@ END;!';
     o:=JSON_OBJECT_T();o.put('productId',r.product_id);o.put('version',r.version);o.put('code',r.code);o.put('name',r.name);o.put('category',r.category);o.put('unit',r.unit_name);o.put('costPrice',r.cost_minor/100);FOR batch_row IN(SELECT data_json FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='op_productions' AND JSON_VALUE(data_json,'$.productId')=r.product_id) LOOP item:=JSON_OBJECT_T(batch_row.data_json);IF item.has('finalUnitCost') THEN o.put('finalProductionCost',item.get_number('finalUnitCost'));END IF;END LOOP;o.put('stock',r.stock);o.put('minStock',r.min_stock);o.put('isAvailable',r.active=1);o.put('salePrice',r.price_minor/100);o.put('updatedAt',TO_CHAR(r.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));a.append(o);
   END LOOP;RETURN a;
   END;
+  PROCEDURE validate_filters(filters JSON_ARRAY_T) IS f JSON_OBJECT_T;field_value VARCHAR2(80);op_value VARCHAR2(12);value_json JSON_ELEMENT_T;values_json JSON_ARRAY_T;
+  BEGIN
+    IF filters IS NULL THEN RETURN;END IF;IF filters.get_size>20 THEN alliance_security.fail(400,'INVALID_INPUT','Demasiados filtros.');END IF;
+    FOR i IN 0..filters.get_size-1 LOOP
+      IF NOT filters.get(i).is_object THEN alliance_security.fail(400,'INVALID_INPUT','Filtro invalido.');END IF;f:=TREAT(filters.get(i) AS JSON_OBJECT_T);alliance_security.keys_only(f,'field,op,value');
+      field_value:=alliance_security.text_value(f,'field',60,'^[a-z_]+$');op_value:=alliance_security.text_value(f,'op',12,'^(eq|neq|in|is)$');value_json:=f.get('value');IF value_json IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Falta el valor del filtro.');END IF;
+      IF op_value='in' THEN IF NOT value_json.is_array THEN alliance_security.fail(400,'INVALID_INPUT','Lista de filtro invalida.');END IF;values_json:=f.get_array('value');IF values_json.get_size>1000 THEN alliance_security.fail(400,'INVALID_INPUT','Demasiados valores de filtro.');END IF;FOR j IN 0..values_json.get_size-1 LOOP IF values_json.get(j).is_object OR values_json.get(j).is_array THEN alliance_security.fail(400,'INVALID_INPUT','Valor de filtro invalido.');END IF;END LOOP;
+      ELSIF value_json.is_object OR value_json.is_array THEN alliance_security.fail(400,'INVALID_INPUT','Valor de filtro invalido.');END IF;
+    END LOOP;
+  END;
   FUNCTION matches(p_row JSON_OBJECT_T,p_filters JSON_ARRAY_T) RETURN BOOLEAN IS f JSON_OBJECT_T;key_value VARCHAR2(80);mode_value VARCHAR2(12);actual JSON_ELEMENT_T;expected JSON_ELEMENT_T;xs JSON_ARRAY_T;hit BOOLEAN;
   BEGIN
   IF p_filters IS NULL THEN RETURN TRUE;END IF;IF p_filters.get_size>20 THEN alliance_security.fail(400,'INVALID_INPUT','Demasiados filtros.');END IF;
   FOR i IN 0..p_filters.get_size-1 LOOP f:=TREAT(p_filters.get(i) AS JSON_OBJECT_T);key_value:=f.get_string('field');mode_value:=f.get_string('op');
-    IF NOT REGEXP_LIKE(key_value,'^[a-z_]{1,60}$') OR mode_value NOT IN('eq','neq','in','is') THEN alliance_security.fail(400,'INVALID_INPUT','Filtro no permitido.');END IF;
+    alliance_security.keys_only(f,'field,op,value');IF key_value IS NULL OR mode_value IS NULL OR NOT f.has('value') OR NOT REGEXP_LIKE(key_value,'^[a-z_]{1,60}$','c') OR mode_value NOT IN('eq','neq','in','is') THEN alliance_security.fail(400,'INVALID_INPUT','Filtro no permitido.');END IF;
     actual:=p_row.get(key_value);expected:=f.get('value');
-    IF mode_value='in' THEN xs:=f.get_array('value');hit:=FALSE;FOR j IN 0..xs.get_size-1 LOOP IF actual IS NOT NULL AND actual.to_string=xs.get(j).to_string THEN hit:=TRUE;END IF;END LOOP;IF NOT hit THEN RETURN FALSE;END IF;
+    IF mode_value='in' THEN xs:=f.get_array('value');IF xs IS NULL OR xs.get_size>1000 THEN alliance_security.fail(400,'INVALID_INPUT','Lista de filtro invalida.');END IF;hit:=FALSE;FOR j IN 0..xs.get_size-1 LOOP IF actual IS NOT NULL AND actual.to_string=xs.get(j).to_string THEN hit:=TRUE;END IF;END LOOP;IF NOT hit THEN RETURN FALSE;END IF;
     ELSIF mode_value='neq' THEN IF actual IS NOT NULL AND expected IS NOT NULL AND actual.to_string=expected.to_string THEN RETURN FALSE;END IF;
     ELSE IF actual IS NULL THEN IF expected IS NOT NULL AND NOT expected.is_null THEN RETURN FALSE;END IF;ELSIF expected IS NULL OR actual.to_string<>expected.to_string THEN RETURN FALSE;END IF;END IF;
   END LOOP;RETURN TRUE;
@@ -654,9 +668,16 @@ END;!';
     END LOOP;
     -- Reservation reconciliation returns the units after cancellation.
   END;
+  PROCEDURE ctx_guard_price(b VARCHAR2,l VARCHAR2,line JSON_OBJECT_T,old JSON_OBJECT_T,allowed BOOLEAN) IS product JSON_OBJECT_T;
+  BEGIN
+    IF allowed THEN RETURN;END IF;
+    IF old.get_string('session_id') IS NOT NULL AND NVL(old.get_string('menu_item_id'),'-')=NVL(line.get_string('menu_item_id'),'-') AND old.get_number('unit_price')=line.get_number('unit_price') THEN RETURN;END IF;
+    product:=document(b,l,'menu_items',line.get_string('menu_item_id'));IF product IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Tu usuario no puede fijar precios manuales.');END IF;
+    IF product.get_number('price') IS NULL OR product.get_boolean('is_available') IS NULL OR product.get_number('price')<>line.get_number('unit_price') OR NOT product.get_boolean('is_available') THEN alliance_security.fail(403,'FORBIDDEN','El precio requiere permiso de cobro. Usa el precio vigente del producto.');END IF;
+  END;
   FUNCTION query(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
   entity_value VARCHAR2(32):=p_body.get_string('table');op VARCHAR2(12):=p_body.get_string('op');permission_value VARCHAR2(80);rows_json JSON_ARRAY_T;out_json JSON_ARRAY_T:=JSON_ARRAY_T();filters JSON_ARRAY_T:=p_body.get_array('filters');patch JSON_OBJECT_T;row_json JSON_OBJECT_T;old_json JSON_OBJECT_T;parent JSON_OBJECT_T;keys_json JSON_KEY_LIST;
-  id_value VARCHAR2(80);category_value VARCHAR2(36);name_value VARCHAR2(160);price_value NUMBER;active_value NUMBER;data_value CLOB;n NUMBER;search_value VARCHAR2(80);branch_slug VARCHAR2(80);date_value VARCHAR2(10);time_value VARCHAR2(5);customer_value VARCHAR2(80);result_json JSON_OBJECT_T:=JSON_OBJECT_T();
+  id_value VARCHAR2(80);category_value VARCHAR2(36);name_value VARCHAR2(160);price_value NUMBER;active_value NUMBER;data_value CLOB;n NUMBER;search_value VARCHAR2(80);branch_slug VARCHAR2(80);date_value VARCHAR2(10);time_value VARCHAR2(5);customer_value VARCHAR2(80);result_json JSON_OBJECT_T:=JSON_OBJECT_T();can_manual_price BOOLEAN:=FALSE;price_context JSON_OBJECT_T;price_permissions JSON_ARRAY_T;
   BEGIN
   alliance_security.keys_only(p_body,'table,op,filters,values,single,order,limit,expected_versions');
   IF entity_value NOT IN('business_settings','restaurant_tables','menu_categories','menu_items','table_sessions','session_items','service_requests') OR op NOT IN('select','insert','update','upsert','delete') OR entity_value IS NULL OR op IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Operacion no permitida.');END IF;
@@ -668,6 +689,7 @@ END;!';
     lock_scope(p_business,p_location);
   END IF;
   alliance_security.require_location(p_user,p_business,p_location,permission_value);
+  IF p_body.has('filters') AND filters IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Filtros invalidos.');END IF;validate_filters(filters);
   rows_json:=list_documents(p_business,p_location,entity_value);
   IF op='insert' OR op='upsert' THEN
     patch:=p_body.get_object('values');IF patch IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Faltan datos.');END IF;
@@ -682,10 +704,11 @@ END;!';
     ELSIF entity_value='restaurant_tables' THEN alliance_security.keys_only(patch,'id,table_number,table_name,qr_code,qr_image_url,is_active');
     ELSIF entity_value='menu_categories' THEN alliance_security.keys_only(patch,'id,name,sort_order,is_active');
     ELSIF entity_value='menu_items' THEN alliance_security.keys_only(patch,'id,category_id,name,description,price,image_url,is_available,sort_order');
-    ELSIF entity_value='table_sessions' THEN alliance_security.keys_only(patch,'id,table_id,status,sale_channel,assigned_waiter_id,payer_name,discount,tax,service_fee,discount_amount,tax_amount,service_fee_amount,closed_at,payment_method,paid_at,subtotal,total,delivery_date,delivery_time,customer_id');
+    ELSIF entity_value='table_sessions' THEN IF patch.has('discount') OR patch.has('tax') OR patch.has('service_fee') OR patch.has('discount_amount') OR patch.has('tax_amount') OR patch.has('service_fee_amount') OR patch.has('subtotal') OR patch.has('total') OR patch.has('payment_method') OR patch.has('paid_at') THEN alliance_security.require_location(p_user,p_business,p_location,'sales.write');END IF;alliance_security.keys_only(patch,'id,table_id,status,sale_channel,assigned_waiter_id,payer_name,discount,tax,service_fee,discount_amount,tax_amount,service_fee_amount,closed_at,payment_method,paid_at,subtotal,total,delivery_date,delivery_time,customer_id');
     ELSIF entity_value='session_items' THEN alliance_security.keys_only(patch,'id,session_id,table_id,menu_item_id,item_name,quantity,unit_price,status,notes,created_by_user_id,updated_by_user_id');
     ELSE alliance_security.keys_only(patch,'id,table_id,session_id,request_type,message,status,acknowledged_by_user_id,acknowledged_at,resolved_at');END IF;
   END IF;
+  IF op<>'select' AND op<>'delete' AND entity_value='session_items' AND (patch.has('unit_price') OR patch.has('menu_item_id')) THEN price_context:=alliance_security.context_for(p_user);price_permissions:=price_context.get_object('permissions').get_array(p_location);FOR j IN 0..price_permissions.get_size-1 LOOP IF price_permissions.get_string(j)='sales.write' THEN can_manual_price:=TRUE;END IF;END LOOP;END IF;
   FOR i IN 0..rows_json.get_size-1 LOOP row_json:=TREAT(rows_json.get(i) AS JSON_OBJECT_T);
     IF op IN('insert','upsert') OR matches(row_json,filters) THEN
       id_value:=row_json.get_string('id');
@@ -724,7 +747,7 @@ END;!';
             IF VALIDATE_CONVERSION(date_value AS DATE,'FXYYYY-MM-DD')=0 THEN alliance_security.fail(400,'DELIVERY_DATE','Revisa la fecha de entrega.');END IF;
             IF TO_DATE(date_value,'FXYYYY-MM-DD')<TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Bogota' AS DATE)) THEN alliance_security.fail(400,'DELIVERY_DATE','No puedes programar entregas en dias pasados. Selecciona hoy o una fecha posterior.');END IF;
             time_value:=alliance_security.text_value(row_json,'delivery_time',5,'^([01][0-9]|2[0-3]):[0-5][0-9]$');customer_value:=alliance_security.text_value(row_json,'customer_id',80);
-            parent:=document(p_business,p_location,'op_customers',customer_value);
+         !') || TO_CLOB(q'!   parent:=document(p_business,p_location,'op_customers',customer_value);
             IF parent IS NULL OR NOT parent.get_boolean('active') THEN alliance_security.fail(400,'DELIVERY_CUSTOMER','Selecciona un cliente activo de esta sucursal.');END IF;
             IF old_json.get_string('customer_id') IS NOT NULL AND old_json.get_string('customer_id')<>customer_value THEN SELECT COUNT(*) INTO n FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='session_items' AND JSON_VALUE(data_json,'$.session_id')=id_value AND NVL(JSON_VALUE(data_json,'$.status'),'served')<>'cancelled';IF n>0 THEN alliance_security.fail(409,'DELIVERY_CUSTOMER','La cuenta ya tiene consumos. Conserva el cliente o crea otra entrega.');END IF;END IF;
             row_json.put('payer_name',parent.get_string('name'));
@@ -745,9 +768,10 @@ END;!';
         ELSIF entity_value='session_items' THEN
           IF row_json.get_string('status')='cancelled' AND NOT alliance_security.location_owner(p_user,p_business,p_location) THEN alliance_security.fail(403,'FORBIDDEN','Solo un jefe puede retirar consumos.');END IF;
           parent:=document(p_business,p_location,'table_sessions',row_json.get_string('session_id'));IF parent IS NULL OR parent.get_string('status')<>'open' THEN alliance_security.fail(409,'CLOSED_ACCOUNT','La cuenta no esta abierta.');END IF;
-          SELECT slug INTO branch_slug FROM locations WHERE business_id=p_business AND id=p_location;IF branch_slug='gcobarf' AND NVL(row_json.get_string('status'),'served')<>'cancelled' AND NVL(row_json.get_number('unit_pric!') || TO_CLOB(q'!e'),0)<=0 THEN alliance_security.fail(400,'PRICE_REQUIRED','Escribe un precio de venta mayor que cero antes de agregar el producto.');END IF;
+          SELECT slug INTO branch_slug FROM locations WHERE business_id=p_business AND id=p_location;IF branch_slug='gcobarf' AND NVL(row_json.get_string('status'),'served')<>'cancelled' AND NVL(row_json.get_number('unit_price'),0)<=0 THEN alliance_security.fail(400,'PRICE_REQUIRED','Escribe un precio de venta mayor que cero antes de agregar el producto.');END IF;
           IF row_json.get_number('quantity') IS NULL OR row_json.get_number('quantity')<=0 OR row_json.get_number('quantity')>10000 OR row_json.get_number('unit_price') IS NULL OR row_json.get_number('unit_price')<0 THEN alliance_security.fail(400,'INVALID_INPUT','Cantidad o precio invalido.');END IF;
           IF row_json.get_string('menu_item_id') IS NOT NULL THEN parent:=document(p_business,p_location,'menu_items',row_json.get_string('menu_item_id'));IF parent IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Producto no disponible.');END IF;END IF;
+          IF patch.has('unit_price') OR patch.has('menu_item_id') THEN ctx_guard_price(p_business,p_location,row_json,old_json,can_manual_price);END IF;
           IF NOT row_json.has('status') THEN row_json.put('status','confirmed');END IF;row_json.put('updated_by_user_id',p_user);IF op='insert' THEN row_json.put('created_by_user_id',p_user);END IF;
         ELSIF entity_value='service_requests' THEN
           parent:=document(p_business,p_location,'restaurant_tables',row_json.get_string('table_id'));IF parent IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Mesa no disponible.');END IF;
@@ -777,7 +801,7 @@ END;!';
   FUNCTION stock_action(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_action VARCHAR2,p_payload JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
   r JSON_OBJECT_T:=JSON_OBJECT_T();items JSON_ARRAY_T;item JSON_OBJECT_T;row_json JSON_OBJECT_T;id_value VARCHAR2(36);event_value VARCHAR2(160);code_value VARCHAR2(64);unit_value VARCHAR2(80);cost_value NUMBER;min_value NUMBER;stock_value NUMBER;before_value NUMBER;n NUMBER;cost_current NUMBER;entity VARCHAR2(36);search_value VARCHAR2(160);ctx JSON_OBJECT_T;pa JSON_ARRAY_T;can_read_cost BOOLEAN:=FALSE;
   BEGIN
-  IF p_action IN('get_inventory','status','bootstrap') THEN alliance_security.require_location(p_user,p_business,p_location,'products.read');ctx:=alliance_security.context_for(p_user);pa:=ctx.get_object('permissions').get_array(p_location);FOR i IN 0..pa.get_size-1 LOOP IF pa.get_string(i)='inventory.read' THEN can_read_cost:=TRUE;END IF;END LOOP;items:=inventory(p_business,p_location);IF NOT can_read_cost THEN FOR i IN 0..items.get_size-1 LOOP item:=TREAT(items.get(i) AS JSON_OBJECT_T);item.put('costPrice',0);items.put(i,item,TRUE);END LOOP;END IF;r.put('items',items);r.put('everInitialized',TRUE);r.put('timezone','America/Bogota');r.put('syncedAt',stamp);r.put('historyRevision',report_revision(p_business,p_location));r.put('movementRevision',report_revision(p_business,p_location));r.put('ok',TRUE);RETURN r;END IF;
+  IF p_action IN('get_inventory','status','bootstrap') THEN alliance_security.require_location(p_user,p_business,p_location,'products.read');ctx:=alliance_security.context_for(p_user);pa:=ctx.get_object('permissions').get_array(p_location);FOR i IN 0..pa.get_size-1 LOOP IF pa.get_string(i)='inventory.read' THEN can_read_cost:=TRUE;END IF;END LOOP;items:=inventory(p_business,p_location);IF NOT can_read_cost THEN FOR i IN 0..items.get_size-1 LOOP item:=TREAT(items.get(i) AS JSON_OBJECT_T);item.put('costPrice',0);item.remove('finalProductionCost');items.put(i,item,TRUE);END LOOP;END IF;r.put('items',items);r.put('everInitialized',TRUE);r.put('timezone','America/Bogota');r.put('syncedAt',stamp);r.put('historyRevision',report_revision(p_business,p_location));r.put('movementRevision',report_revision(p_business,p_location));r.put('ok',TRUE);RETURN r;END IF;
   lock_scope(p_business,p_location);alliance_security.require_location(p_user,p_business,p_location,'inventory.write');
   IF p_action IN('upsert_inventory','sync_inventory') THEN
     IF p_action='upsert_inventory' THEN items:=JSON_ARRAY_T();items.append(p_payload.get_object('item'));ELSE items:=p_payload.get_array('items');END IF;
@@ -2097,9 +2121,44 @@ END;!';
     a:=alliance_pos_store.list_documents(p_business,p_location,'table_sessions');FOR i IN 0..a.get_size-1 LOOP o:=TREAT(a.get(i) AS JSON_OBJECT_T);IF o.get_string('status')='open' THEN filtered.append(o);END IF;END LOOP;r.put('sessions',filtered);
     a:=alliance_pos_store.list_documents(p_business,p_location,'service_requests');filtered:=JSON_ARRAY_T();FOR i IN 0..a.get_size-1 LOOP o:=TREAT(a.get(i) AS JSON_OBJECT_T);IF o.get_string('status') IN('pending','acknowledged') THEN filtered.append(o);END IF;END LOOP;r.put('requests',filtered);RETURN r;
   END;
+  -- Receipt retries must respect the current grants, not the grants at the first write.
+  PROCEDURE authorize_write(u VARCHAR2,b VARCHAR2,l VARCHAR2,a VARCHAR2,p JSON_OBJECT_T,ctx JSON_OBJECT_T) IS
+    permissions_value JSON_ARRAY_T:=ctx.get_object('permissions').get_array(l);command_value VARCHAR2(40);entity_value VARCHAR2(32);operation_value VARCHAR2(12);body JSON_OBJECT_T;needed VARCHAR2(80);roles_value JSON_ARRAY_T;patches JSON_ARRAY_T;is_boss BOOLEAN:=FALSE;
+    FUNCTION has(code VARCHAR2) RETURN BOOLEAN IS BEGIN FOR i IN 0..permissions_value.get_size-1 LOOP IF permissions_value.get_string(i)=code THEN RETURN TRUE;END IF;END LOOP;RETURN FALSE;END;
+    PROCEDURE need(code VARCHAR2) IS BEGIN IF NOT has(code) THEN alliance_security.fail(403,'FORBIDDEN','Tu usuario no tiene permiso para esta operación.');END IF;END;
+    PROCEDURE boss IS BEGIN IF NOT is_boss THEN alliance_security.fail(403,'FORBIDDEN','Esta operación requiere al jefe del negocio.');END IF;END;
+    PROCEDURE guard_patch(row_value JSON_OBJECT_T) IS
+    BEGIN
+      IF row_value IS NULL THEN RETURN;END IF;
+      IF entity_value='table_sessions' THEN
+        IF row_value.has('discount') OR row_value.has('tax') OR row_value.has('service_fee') OR row_value.has('discount_amount') OR row_value.has('tax_amount') OR row_value.has('service_fee_amount') OR row_value.has('subtotal') OR row_value.has('total') OR row_value.has('payment_method') OR row_value.has('paid_at') OR row_value.get_string('status') IN('paid','closed','cancelled') THEN need('sales.write');END IF;
+        IF row_value.get_string('status')='cancelled' THEN boss;END IF;
+        IF row_value.has('delivery_date') OR row_value.has('delivery_time') OR row_value.has('customer_id') THEN need('customers.read');END IF;
+      ELSIF entity_value='session_items' AND row_value.get_string('status')='cancelled' THEN boss;END IF;
+    END;
+  BEGIN
+    is_boss:=ctx.get_boolean('is_owner');roles_value:=ctx.get_object('roles').get_array(l);IF roles_value IS NOT NULL THEN FOR i IN 0..roles_value.get_size-1 LOOP IF roles_value.get_string(i)='BOSS' THEN is_boss:=TRUE;END IF;END LOOP;END IF;
+    IF a='query' THEN
+      entity_value:=p.get_string('table');operation_value:=p.get_string('op');needed:=CASE entity_value WHEN 'business_settings' THEN 'brand.manage' WHEN 'restaurant_tables' THEN 'tables.manage' WHEN 'menu_categories' THEN 'products.write' WHEN 'menu_items' THEN 'products.write' ELSE 'service.write' END;need(needed);IF operation_value='delete' THEN boss;ELSIF p.has('values') THEN IF p.get('values').is_array THEN patches:=p.get_array('values');FOR i IN 0..patches.get_size-1 LOOP guard_patch(TREAT(patches.get(i) AS JSON_OBJECT_T));END LOOP;ELSE guard_patch(p.get_object('values'));END IF;END IF;
+    ELSIF a='operations_apply' THEN
+      command_value:=p.get_string('command');body:=p.get_object('payload');
+      IF command_value LIKE 'materials_%' THEN need('inventory.write');IF command_value='materials_link' THEN need('products.write');END IF;IF command_value='materials_delete' THEN boss;END IF;
+      ELSIF command_value LIKE 'cash_%' THEN need('cash.write');
+      ELSIF command_value LIKE 'ticket_%' THEN IF command_value='ticket_send' OR body.get_string('status')='delivered' THEN need('service.write');ELSE need('kitchen.write');END IF;
+      ELSIF command_value LIKE 'customer_%' OR command_value LIKE 'debt_%' THEN IF command_value='debt_pay' THEN need('sales.write');ELSE need('customers.write');END IF;
+      ELSE IF command_value='purchase_pay' THEN need('cash.write');ELSE need('supplies.write');END IF;IF command_value='policy_save' THEN boss;END IF;END IF;
+    ELSIF a IN('record_sale','edit_sale','delete_sale','clear_income') THEN need('sales.write');IF a<>'record_sale' THEN boss;END IF;
+    ELSIF a='customer_payment' THEN need('sales.write');need('customers.read');
+    ELSIF a IN('upsert_inventory','sync_inventory','adjust_inventory','set_inventory_stock','delete_inventory','update_inventory_movement_cost','clear_inventory','clear_inventory_movements') THEN need('inventory.write');IF a IN('delete_inventory','clear_inventory','clear_inventory_movements','update_inventory_movement_cost') THEN boss;END IF;
+    ELSIF a IN('costing_save','costing_approve','costing_product_delete') THEN need('inventory.read');need('products.write');
+    ELSIF a IN('order_accept','order_reject','order_cancel') THEN IF NOT has('service.write') AND NOT has('kitchen.write') THEN alliance_security.fail(403,'FORBIDDEN','Tu usuario no puede atender comandas.');END IF;IF a='order_cancel' THEN boss;END IF;
+    ELSIF a IN('order_submit','createServiceRequest','createServiceRequestsBatch','acknowledgeServiceRequests','resolveBill') THEN need('service.write');
+    ELSIF a IN('sendChatMessage','closeChatSession','broadcast') THEN need('service.read');need('service.write');
+    END IF;
+  END;
   FUNCTION dispatch(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     action_value VARCHAR2(50):=p_body.get_string('action');payload JSON_OBJECT_T:=p_body.get_object('payload');r JSON_OBJECT_T:=JSON_OBJECT_T();q JSON_OBJECT_T;value_json JSON_OBJECT_T;arr JSON_ARRAY_T;out_json JSON_ARRAY_T;row_json JSON_OBJECT_T;filters JSON_ARRAY_T;f JSON_OBJECT_T;
-    job_id VARCHAR2(160):=p_body.get_string('operation_id');digest VARCHAR2(64);saved_hash VARCHAR2(64);saved_user VARCHAR2(36);saved_value CLOB;save_value CLOB;saved_compressed BLOB;compressed_value BLOB;id_value VARCHAR2(80);table_value VARCHAR2(80);code_value VARCHAR2(64);n NUMBER;permission_value VARCHAR2(32767);is_write BOOLEAN:=FALSE;
+    job_id VARCHAR2(160):=p_body.get_string('operation_id');digest VARCHAR2(64);saved_hash VARCHAR2(64);saved_user VARCHAR2(36);saved_value CLOB;save_value CLOB;saved_compressed BLOB;compressed_value BLOB;grants_hash VARCHAR2(64);cached_result JSON_OBJECT_T;cached_value JSON_OBJECT_T;id_value VARCHAR2(80);table_value VARCHAR2(80);code_value VARCHAR2(64);n NUMBER;permission_value VARCHAR2(32767);is_write BOOLEAN:=FALSE;
   BEGIN
     alliance_security.keys_only(p_body,'action,payload,operation_id,device_id,client_created_at');IF payload IS NULL THEN payload:=JSON_OBJECT_T();END IF;
     alliance_activity.client_context(p_body.get_string('device_id'),p_body.get_string('client_created_at'));
@@ -2111,12 +2170,15 @@ END;!';
     is_write:=action_value NOT IN('getAdminSnapshot','query','get_inventory','get_inventory_movements','get_income_report','status','remote_bootstrap','listChatMessages','getClientSnapshot','getEvents','costing_load','costing_product_load','operations_snapshot','operations_device','orders_revision','customer_history');
     IF action_value='query' THEN is_write:=payload.get_string('op')<>'select';END IF;
     IF is_write THEN
+      grants_hash:=alliance_security.hash_text(q.get_array(p_location).to_string);
+      authorize_write(p_user,p_business,p_location,action_value,payload,value_json);
       alliance_pos_store.lock_scope(p_business,p_location);
       IF job_id IS NOT NULL THEN
         IF LENGTH(job_id)>160 THEN alliance_security.fail(400,'INVALID_INPUT','Operacion invalida.');END IF;
         save_value:=p_body.to_clob;digest:=LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(save_value,DBMS_CRYPTO.HASH_SH256)));
         BEGIN SELECT fingerprint,actor_user_id,result_json,result_compressed INTO saved_hash,saved_user,saved_value,saved_compressed FROM alliance_pos_receipts WHERE business_id=p_business AND location_id=p_location AND id=job_id;
-          IF saved_hash<>digest OR saved_user<>p_user THEN alliance_security.fail(409,'IDEMPOTENCY_REUSE','La operacion ya se uso con otros datos.');END IF;RETURN JSON_OBJECT_T(alliance_receipt_storage.expand_result(saved_value,saved_compressed));
+          IF saved_hash<>digest OR saved_user<>p_user THEN alliance_security.fail(409,'IDEMPOTENCY_REUSE','La operacion ya se uso con otros datos.');END IF;cached_result:=JSON_OBJECT_T(alliance_receipt_storage.expand_result(saved_value,saved_compressed));
+          IF action_value='operations_apply' AND NVL(cached_result.get_string('_grants'),'-')<>grants_hash THEN cached_value:=cached_result.get_object('value');IF cached_value IS NOT NULL AND cached_value.has('model') AND cached_value.has('docs') THEN cached_result.put('value',alliance_operations.snapshot(p_user,p_business,p_location));END IF;END IF;cached_result.remove('_grants');RETURN cached_result;
         EXCEPTION WHEN NO_DATA_FOUND THEN NULL;END;
       END IF;
     END IF;
@@ -2165,7 +2227,7 @@ END;!';
     ELSE alliance_security.fail(404,'NOT_FOUND','Accion no disponible.');END IF;
     IF is_write AND action_value<>'operations_apply' THEN alliance_activity.pos_event(p_user,p_business,p_location,action_value,payload);END IF;
     IF is_write THEN alliance_pos_store.put_document(p_business,p_location,'op_reportsync','primary',JSON_OBJECT_T('{}'));END IF;
-    IF is_write AND job_id IS NOT NULL THEN save_value:=r.to_clob;compressed_value:=alliance_receipt_storage.compress_result(save_value);IF compressed_value IS NOT NULL THEN save_value:='{"codec":"gzip-v1"}';END IF;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json,result_compressed)VALUES(p_business,p_location,job_id,p_user,digest,save_value,compressed_value);IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;END IF;RETURN r;
+    IF is_write AND job_id IS NOT NULL THEN cached_result:=JSON_OBJECT_T(r.to_clob);cached_result.put('_grants',grants_hash);save_value:=cached_result.to_clob;compressed_value:=alliance_receipt_storage.compress_result(save_value);IF compressed_value IS NOT NULL THEN save_value:='{"codec":"gzip-v1"}';END IF;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json,result_compressed)VALUES(p_business,p_location,job_id,p!') || TO_CLOB(q'!_user,digest,save_value,compressed_value);IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;END IF;RETURN r;
   END;
   FUNCTION public_dispatch(p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
     r JSON_OBJECT_T:=JSON_OBJECT_T();payload JSON_OBJECT_T:=p_body.get_object('payload');action_value VARCHAR2(50):=p_body.get_string('action');business_value VARCHAR2(36);location_value VARCHAR2(36);table_id_value VARCHAR2(80);table_json CLOB;table_object JSON_OBJECT_T;arr JSON_ARRAY_T;out_json JSON_ARRAY_T;row_json JSON_OBJECT_T;session_object JSON_OBJECT_T;id_value VARCHAR2(80);body_value VARCHAR2(600);business_slug_value VARCHAR2(80);branch_slug_value VARCHAR2(80);table_code_value VARCHAR2(64);request_object JSON_OBJECT_T;entry JSON_OBJECT_T;product_object JSON_OBJECT_T;duplicate BOOLEAN;
@@ -2194,7 +2256,7 @@ END;!';
       IF action_value IN('createServiceRequest','createServiceRequestsBatch') THEN
         IF action_value='createServiceRequestsBatch' THEN arr:=payload.get_array('requests');ELSE arr:=JSON_ARRAY_T();arr.append(payload);END IF;
         IF arr IS NULL OR arr.get_size>20 THEN alliance_security.fail(400,'INVALID_INPUT','Demasiadas solicitudes.');END IF;out_json:=JSON_ARRAY_T();
-        FOR i IN 0..arr.get_size-1 LOOP entry:=TREAT(arr.get(i) AS JSON_OBJECT_T);id_value:=entry.get_string('session_id');session_object:=alliance_pos_!') || TO_CLOB(q'!store.document(business_value,location_value,'table_sessions',id_value);
+        FOR i IN 0..arr.get_size-1 LOOP entry:=TREAT(arr.get(i) AS JSON_OBJECT_T);id_value:=entry.get_string('session_id');session_object:=alliance_pos_store.document(business_value,location_value,'table_sessions',id_value);
           IF session_object IS NULL OR session_object.get_string('table_id')<>table_id_value OR session_object.get_string('status')<>'open' THEN alliance_security.fail(403,'TABLE_ACCESS','La cuenta no pertenece a tu mesa o esta cerrada.');END IF;
           IF entry.get_string('request_type') NOT IN('waiter','bill','other','chat','song') THEN alliance_security.fail(400,'INVALID_INPUT','Solicitud invalida.');END IF;
           request_object:=alliance_pos_store.document(business_value,location_value,'service_requests',entry.get_string('request_id'));duplicate:=request_object IS NOT NULL;
@@ -2843,7 +2905,7 @@ END;!';
     BEGIN
       response_value:=alliance_api.dispatch(payload);
       OWA_UTIL.mime_header('application/json',FALSE);
-      HTP.p('Cache-Control: no-store');OWA_UTIL.http_header_close;
+      HTP.p('Cache-Control: no-store');HTP.p('Pragma: no-cache');HTP.p('Referrer-Policy: no-referrer');HTP.p('X-Frame-Options: DENY');OWA_UTIL.http_header_close;
       WHILE offset_value<=DBMS_LOB.GETLENGTH(response_value) LOOP
         HTP.prn(DBMS_LOB.SUBSTR(response_value,8000,offset_value));offset_value:=offset_value+8000;
       END LOOP;
@@ -2861,7 +2923,7 @@ END;!';
     DECLARE payload CLOB:=:body_text;response_value CLOB;offset_value NUMBER:=1;
     BEGIN
       response_value:=alliance_api.dispatch(payload);OWA_UTIL.mime_header('application/json',FALSE);
-      HTP.p('Cache-Control: no-store');OWA_UTIL.http_header_close;
+      HTP.p('Cache-Control: no-store');HTP.p('Pragma: no-cache');HTP.p('Referrer-Policy: no-referrer');HTP.p('X-Frame-Options: DENY');OWA_UTIL.http_header_close;
       WHILE offset_value<=DBMS_LOB.GETLENGTH(response_value) LOOP HTP.prn(DBMS_LOB.SUBSTR(response_value,8000,offset_value));offset_value:=offset_value+8000;END LOOP;
     END;~');
   ORDS.SET_MODULE_ORIGINS_ALLOWED(p_module_name=>'alliance.file',p_origins_allowed=>'null');

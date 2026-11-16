@@ -68,13 +68,23 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
     o:=JSON_OBJECT_T();o.put('productId',r.product_id);o.put('version',r.version);o.put('code',r.code);o.put('name',r.name);o.put('category',r.category);o.put('unit',r.unit_name);o.put('costPrice',r.cost_minor/100);FOR batch_row IN(SELECT data_json FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='op_productions' AND JSON_VALUE(data_json,'$.productId')=r.product_id) LOOP item:=JSON_OBJECT_T(batch_row.data_json);IF item.has('finalUnitCost') THEN o.put('finalProductionCost',item.get_number('finalUnitCost'));END IF;END LOOP;o.put('stock',r.stock);o.put('minStock',r.min_stock);o.put('isAvailable',r.active=1);o.put('salePrice',r.price_minor/100);o.put('updatedAt',TO_CHAR(r.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));a.append(o);
   END LOOP;RETURN a;
   END;
+  PROCEDURE validate_filters(filters JSON_ARRAY_T) IS f JSON_OBJECT_T;field_value VARCHAR2(80);op_value VARCHAR2(12);value_json JSON_ELEMENT_T;values_json JSON_ARRAY_T;
+  BEGIN
+    IF filters IS NULL THEN RETURN;END IF;IF filters.get_size>20 THEN alliance_security.fail(400,'INVALID_INPUT','Demasiados filtros.');END IF;
+    FOR i IN 0..filters.get_size-1 LOOP
+      IF NOT filters.get(i).is_object THEN alliance_security.fail(400,'INVALID_INPUT','Filtro invalido.');END IF;f:=TREAT(filters.get(i) AS JSON_OBJECT_T);alliance_security.keys_only(f,'field,op,value');
+      field_value:=alliance_security.text_value(f,'field',60,'^[a-z_]+$');op_value:=alliance_security.text_value(f,'op',12,'^(eq|neq|in|is)$');value_json:=f.get('value');IF value_json IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Falta el valor del filtro.');END IF;
+      IF op_value='in' THEN IF NOT value_json.is_array THEN alliance_security.fail(400,'INVALID_INPUT','Lista de filtro invalida.');END IF;values_json:=f.get_array('value');IF values_json.get_size>1000 THEN alliance_security.fail(400,'INVALID_INPUT','Demasiados valores de filtro.');END IF;FOR j IN 0..values_json.get_size-1 LOOP IF values_json.get(j).is_object OR values_json.get(j).is_array THEN alliance_security.fail(400,'INVALID_INPUT','Valor de filtro invalido.');END IF;END LOOP;
+      ELSIF value_json.is_object OR value_json.is_array THEN alliance_security.fail(400,'INVALID_INPUT','Valor de filtro invalido.');END IF;
+    END LOOP;
+  END;
   FUNCTION matches(p_row JSON_OBJECT_T,p_filters JSON_ARRAY_T) RETURN BOOLEAN IS f JSON_OBJECT_T;key_value VARCHAR2(80);mode_value VARCHAR2(12);actual JSON_ELEMENT_T;expected JSON_ELEMENT_T;xs JSON_ARRAY_T;hit BOOLEAN;
   BEGIN
   IF p_filters IS NULL THEN RETURN TRUE;END IF;IF p_filters.get_size>20 THEN alliance_security.fail(400,'INVALID_INPUT','Demasiados filtros.');END IF;
   FOR i IN 0..p_filters.get_size-1 LOOP f:=TREAT(p_filters.get(i) AS JSON_OBJECT_T);key_value:=f.get_string('field');mode_value:=f.get_string('op');
-    IF NOT REGEXP_LIKE(key_value,'^[a-z_]{1,60}$') OR mode_value NOT IN('eq','neq','in','is') THEN alliance_security.fail(400,'INVALID_INPUT','Filtro no permitido.');END IF;
+    alliance_security.keys_only(f,'field,op,value');IF key_value IS NULL OR mode_value IS NULL OR NOT f.has('value') OR NOT REGEXP_LIKE(key_value,'^[a-z_]{1,60}$','c') OR mode_value NOT IN('eq','neq','in','is') THEN alliance_security.fail(400,'INVALID_INPUT','Filtro no permitido.');END IF;
     actual:=p_row.get(key_value);expected:=f.get('value');
-    IF mode_value='in' THEN xs:=f.get_array('value');hit:=FALSE;FOR j IN 0..xs.get_size-1 LOOP IF actual IS NOT NULL AND actual.to_string=xs.get(j).to_string THEN hit:=TRUE;END IF;END LOOP;IF NOT hit THEN RETURN FALSE;END IF;
+    IF mode_value='in' THEN xs:=f.get_array('value');IF xs IS NULL OR xs.get_size>1000 THEN alliance_security.fail(400,'INVALID_INPUT','Lista de filtro invalida.');END IF;hit:=FALSE;FOR j IN 0..xs.get_size-1 LOOP IF actual IS NOT NULL AND actual.to_string=xs.get(j).to_string THEN hit:=TRUE;END IF;END LOOP;IF NOT hit THEN RETURN FALSE;END IF;
     ELSIF mode_value='neq' THEN IF actual IS NOT NULL AND expected IS NOT NULL AND actual.to_string=expected.to_string THEN RETURN FALSE;END IF;
     ELSE IF actual IS NULL THEN IF expected IS NOT NULL AND NOT expected.is_null THEN RETURN FALSE;END IF;ELSIF expected IS NULL OR actual.to_string<>expected.to_string THEN RETURN FALSE;END IF;END IF;
   END LOOP;RETURN TRUE;
@@ -92,9 +102,16 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
     END LOOP;
     -- Reservation reconciliation returns the units after cancellation.
   END;
+  PROCEDURE ctx_guard_price(b VARCHAR2,l VARCHAR2,line JSON_OBJECT_T,old JSON_OBJECT_T,allowed BOOLEAN) IS product JSON_OBJECT_T;
+  BEGIN
+    IF allowed THEN RETURN;END IF;
+    IF old.get_string('session_id') IS NOT NULL AND NVL(old.get_string('menu_item_id'),'-')=NVL(line.get_string('menu_item_id'),'-') AND old.get_number('unit_price')=line.get_number('unit_price') THEN RETURN;END IF;
+    product:=document(b,l,'menu_items',line.get_string('menu_item_id'));IF product IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Tu usuario no puede fijar precios manuales.');END IF;
+    IF product.get_number('price') IS NULL OR product.get_boolean('is_available') IS NULL OR product.get_number('price')<>line.get_number('unit_price') OR NOT product.get_boolean('is_available') THEN alliance_security.fail(403,'FORBIDDEN','El precio requiere permiso de cobro. Usa el precio vigente del producto.');END IF;
+  END;
   FUNCTION query(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
   entity_value VARCHAR2(32):=p_body.get_string('table');op VARCHAR2(12):=p_body.get_string('op');permission_value VARCHAR2(80);rows_json JSON_ARRAY_T;out_json JSON_ARRAY_T:=JSON_ARRAY_T();filters JSON_ARRAY_T:=p_body.get_array('filters');patch JSON_OBJECT_T;row_json JSON_OBJECT_T;old_json JSON_OBJECT_T;parent JSON_OBJECT_T;keys_json JSON_KEY_LIST;
-  id_value VARCHAR2(80);category_value VARCHAR2(36);name_value VARCHAR2(160);price_value NUMBER;active_value NUMBER;data_value CLOB;n NUMBER;search_value VARCHAR2(80);branch_slug VARCHAR2(80);date_value VARCHAR2(10);time_value VARCHAR2(5);customer_value VARCHAR2(80);result_json JSON_OBJECT_T:=JSON_OBJECT_T();
+  id_value VARCHAR2(80);category_value VARCHAR2(36);name_value VARCHAR2(160);price_value NUMBER;active_value NUMBER;data_value CLOB;n NUMBER;search_value VARCHAR2(80);branch_slug VARCHAR2(80);date_value VARCHAR2(10);time_value VARCHAR2(5);customer_value VARCHAR2(80);result_json JSON_OBJECT_T:=JSON_OBJECT_T();can_manual_price BOOLEAN:=FALSE;price_context JSON_OBJECT_T;price_permissions JSON_ARRAY_T;
   BEGIN
   alliance_security.keys_only(p_body,'table,op,filters,values,single,order,limit,expected_versions');
   IF entity_value NOT IN('business_settings','restaurant_tables','menu_categories','menu_items','table_sessions','session_items','service_requests') OR op NOT IN('select','insert','update','upsert','delete') OR entity_value IS NULL OR op IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Operacion no permitida.');END IF;
@@ -106,6 +123,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
     lock_scope(p_business,p_location);
   END IF;
   alliance_security.require_location(p_user,p_business,p_location,permission_value);
+  IF p_body.has('filters') AND filters IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Filtros invalidos.');END IF;validate_filters(filters);
   rows_json:=list_documents(p_business,p_location,entity_value);
   IF op='insert' OR op='upsert' THEN
     patch:=p_body.get_object('values');IF patch IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Faltan datos.');END IF;
@@ -120,10 +138,11 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
     ELSIF entity_value='restaurant_tables' THEN alliance_security.keys_only(patch,'id,table_number,table_name,qr_code,qr_image_url,is_active');
     ELSIF entity_value='menu_categories' THEN alliance_security.keys_only(patch,'id,name,sort_order,is_active');
     ELSIF entity_value='menu_items' THEN alliance_security.keys_only(patch,'id,category_id,name,description,price,image_url,is_available,sort_order');
-    ELSIF entity_value='table_sessions' THEN alliance_security.keys_only(patch,'id,table_id,status,sale_channel,assigned_waiter_id,payer_name,discount,tax,service_fee,discount_amount,tax_amount,service_fee_amount,closed_at,payment_method,paid_at,subtotal,total,delivery_date,delivery_time,customer_id');
+    ELSIF entity_value='table_sessions' THEN IF patch.has('discount') OR patch.has('tax') OR patch.has('service_fee') OR patch.has('discount_amount') OR patch.has('tax_amount') OR patch.has('service_fee_amount') OR patch.has('subtotal') OR patch.has('total') OR patch.has('payment_method') OR patch.has('paid_at') THEN alliance_security.require_location(p_user,p_business,p_location,'sales.write');END IF;alliance_security.keys_only(patch,'id,table_id,status,sale_channel,assigned_waiter_id,payer_name,discount,tax,service_fee,discount_amount,tax_amount,service_fee_amount,closed_at,payment_method,paid_at,subtotal,total,delivery_date,delivery_time,customer_id');
     ELSIF entity_value='session_items' THEN alliance_security.keys_only(patch,'id,session_id,table_id,menu_item_id,item_name,quantity,unit_price,status,notes,created_by_user_id,updated_by_user_id');
     ELSE alliance_security.keys_only(patch,'id,table_id,session_id,request_type,message,status,acknowledged_by_user_id,acknowledged_at,resolved_at');END IF;
   END IF;
+  IF op<>'select' AND op<>'delete' AND entity_value='session_items' AND (patch.has('unit_price') OR patch.has('menu_item_id')) THEN price_context:=alliance_security.context_for(p_user);price_permissions:=price_context.get_object('permissions').get_array(p_location);FOR j IN 0..price_permissions.get_size-1 LOOP IF price_permissions.get_string(j)='sales.write' THEN can_manual_price:=TRUE;END IF;END LOOP;END IF;
   FOR i IN 0..rows_json.get_size-1 LOOP row_json:=TREAT(rows_json.get(i) AS JSON_OBJECT_T);
     IF op IN('insert','upsert') OR matches(row_json,filters) THEN
       id_value:=row_json.get_string('id');
@@ -186,6 +205,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
           SELECT slug INTO branch_slug FROM locations WHERE business_id=p_business AND id=p_location;IF branch_slug='gcobarf' AND NVL(row_json.get_string('status'),'served')<>'cancelled' AND NVL(row_json.get_number('unit_price'),0)<=0 THEN alliance_security.fail(400,'PRICE_REQUIRED','Escribe un precio de venta mayor que cero antes de agregar el producto.');END IF;
           IF row_json.get_number('quantity') IS NULL OR row_json.get_number('quantity')<=0 OR row_json.get_number('quantity')>10000 OR row_json.get_number('unit_price') IS NULL OR row_json.get_number('unit_price')<0 THEN alliance_security.fail(400,'INVALID_INPUT','Cantidad o precio invalido.');END IF;
           IF row_json.get_string('menu_item_id') IS NOT NULL THEN parent:=document(p_business,p_location,'menu_items',row_json.get_string('menu_item_id'));IF parent IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Producto no disponible.');END IF;END IF;
+          IF patch.has('unit_price') OR patch.has('menu_item_id') THEN ctx_guard_price(p_business,p_location,row_json,old_json,can_manual_price);END IF;
           IF NOT row_json.has('status') THEN row_json.put('status','confirmed');END IF;row_json.put('updated_by_user_id',p_user);IF op='insert' THEN row_json.put('created_by_user_id',p_user);END IF;
         ELSIF entity_value='service_requests' THEN
           parent:=document(p_business,p_location,'restaurant_tables',row_json.get_string('table_id'));IF parent IS NULL THEN alliance_security.fail(403,'FORBIDDEN','Mesa no disponible.');END IF;
@@ -215,7 +235,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos_store AS
   FUNCTION stock_action(p_user VARCHAR2,p_business VARCHAR2,p_location VARCHAR2,p_action VARCHAR2,p_payload JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
   r JSON_OBJECT_T:=JSON_OBJECT_T();items JSON_ARRAY_T;item JSON_OBJECT_T;row_json JSON_OBJECT_T;id_value VARCHAR2(36);event_value VARCHAR2(160);code_value VARCHAR2(64);unit_value VARCHAR2(80);cost_value NUMBER;min_value NUMBER;stock_value NUMBER;before_value NUMBER;n NUMBER;cost_current NUMBER;entity VARCHAR2(36);search_value VARCHAR2(160);ctx JSON_OBJECT_T;pa JSON_ARRAY_T;can_read_cost BOOLEAN:=FALSE;
   BEGIN
-  IF p_action IN('get_inventory','status','bootstrap') THEN alliance_security.require_location(p_user,p_business,p_location,'products.read');ctx:=alliance_security.context_for(p_user);pa:=ctx.get_object('permissions').get_array(p_location);FOR i IN 0..pa.get_size-1 LOOP IF pa.get_string(i)='inventory.read' THEN can_read_cost:=TRUE;END IF;END LOOP;items:=inventory(p_business,p_location);IF NOT can_read_cost THEN FOR i IN 0..items.get_size-1 LOOP item:=TREAT(items.get(i) AS JSON_OBJECT_T);item.put('costPrice',0);items.put(i,item,TRUE);END LOOP;END IF;r.put('items',items);r.put('everInitialized',TRUE);r.put('timezone','America/Bogota');r.put('syncedAt',stamp);r.put('historyRevision',report_revision(p_business,p_location));r.put('movementRevision',report_revision(p_business,p_location));r.put('ok',TRUE);RETURN r;END IF;
+  IF p_action IN('get_inventory','status','bootstrap') THEN alliance_security.require_location(p_user,p_business,p_location,'products.read');ctx:=alliance_security.context_for(p_user);pa:=ctx.get_object('permissions').get_array(p_location);FOR i IN 0..pa.get_size-1 LOOP IF pa.get_string(i)='inventory.read' THEN can_read_cost:=TRUE;END IF;END LOOP;items:=inventory(p_business,p_location);IF NOT can_read_cost THEN FOR i IN 0..items.get_size-1 LOOP item:=TREAT(items.get(i) AS JSON_OBJECT_T);item.put('costPrice',0);item.remove('finalProductionCost');items.put(i,item,TRUE);END LOOP;END IF;r.put('items',items);r.put('everInitialized',TRUE);r.put('timezone','America/Bogota');r.put('syncedAt',stamp);r.put('historyRevision',report_revision(p_business,p_location));r.put('movementRevision',report_revision(p_business,p_location));r.put('ok',TRUE);RETURN r;END IF;
   lock_scope(p_business,p_location);alliance_security.require_location(p_user,p_business,p_location,'inventory.write');
   IF p_action IN('upsert_inventory','sync_inventory') THEN
     IF p_action='upsert_inventory' THEN items:=JSON_ARRAY_T();items.append(p_payload.get_object('item'));ELSE items:=p_payload.get_array('items');END IF;
