@@ -30,7 +30,7 @@ globalThis.AllianceSalesStatisticsEngine=(()=>{
   const rank=(rows,key='net')=>rows.slice().sort((a,b)=>(b[key]??-Infinity)-(a[key]??-Infinity)||b.net-a.net||a.name.localeCompare(b.name,'es')||a.id.localeCompare(b.id));
   function analyse(records,selection,{catalog=[],partial=false,now=new Date()}={}){
     const period=range(selection.from,selection.to,now),totals=fresh(),products=new Map(),categories=new Map(),months=new Map(),hours=Array.from({length:24},(_,hour)=>({...fresh(),id:String(hour),hour})),weekdays=Array.from({length:7},(_,day)=>({...fresh(),id:String(day),day,days:0}));
-    const quality={partial:!!partial,invalid:0,duplicates:0,missingDetails:0,missingCosts:0,missingProductCosts:0,unclassified:0,tipMismatch:0},seen=new Set(),catalogById=new Map(catalog.map(p=>[String(p.id),p]));
+    const quality={partial:!!partial,invalid:0,duplicates:0,missingDetails:0,missingCosts:0,missingProductCosts:0,unclassified:0,tipMismatch:0,paymentMismatch:0},seen=new Set(),catalogById=new Map(catalog.map(p=>[String(p.id),p]));
     for(let key=period.from;key<=period.to;key=shift(key,1)){
       const month=key.slice(0,7),weekday=new Date(key+'T12:00:00Z').getUTCDay();weekdays[weekday].days++;
       if(!months.has(month)){const first=month+'-01',end=dateKey(Date.parse(first+'T12:00:00Z')+32*DAY).slice(0,7)+'-01';months.set(month,{...fresh(),id:month,name:month,days:0,partial:period.from>first||period.to<shift(end,-1)});}months.get(month).days++;
@@ -48,13 +48,15 @@ globalThis.AllianceSalesStatisticsEngine=(()=>{
       if(!id){quality.invalid++;continue;}if(seen.has(key)){quality.duplicates++;continue;}seen.add(key);
       const gross=cents(record.total);if(gross===null||gross<0){quality.invalid++;continue;}
       if(record.recordType==='collection'){
-        totals.collections=add(totals.collections,gross);for(const payment of record.payments||[]){const amount=cents(payment.amount);if(payment.method!=='credit'&&amount!==null&&amount>=0)totals.receipts=add(totals.receipts,amount);}continue;
+        let collected=0;totals.collections=add(totals.collections,gross);for(const payment of record.payments||[]){const amount=cents(payment.amount);if(payment.method!=='credit'&&amount!==null&&amount>=0){totals.receipts=add(totals.receipts,amount);collected=add(collected,amount);}}if(Math.abs(collected-gross)>1)quality.paymentMismatch++;continue;
       }
       const subtotal=cents(record.subtotal),discount=cents(record.discount??0),tax=cents(record.tax??0),service=cents(record.service??0),cost=cents(record.cost);
       if([subtotal,discount,tax,service].some(n=>n===null||n<0)||discount>subtotal){quality.invalid++;continue;}
       const net=subtotal-discount,impliedTip=gross-net-tax-service,explicitTip=cents(record.tipAmount??record.tip),tip=explicitTip??Math.max(0,impliedTip);
+      if(tip<0){quality.invalid++;continue;}
       if(impliedTip<0||Math.abs(gross-(net+tax+service+tip))>1)quality.tipMismatch++;
       let receipts=0,credit=0;for(const payment of record.payments||[]){const amount=cents(payment.amount);if(amount===null||amount<0)continue;if(payment.method==='credit')credit=add(credit,amount);else receipts=add(receipts,amount);}
+      if(Math.abs(add(receipts,credit)-gross)>1)quality.paymentMismatch++;
       const sale={net,gross,tips:tip,discount,tax,service,cost:cost!==null&&cost>=0?cost:null,credit,receipts};if(sale.cost===null)quality.missingCosts++;
       const hour=Number(hourFormat.format(instant)),weekday=new Date(day+'T12:00:00Z').getUTCDay();
       for(const bucket of [totals,months.get(day.slice(0,7)),hours[hour],weekdays[weekday]])noteSale(bucket,sale);

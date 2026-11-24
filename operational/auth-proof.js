@@ -5,11 +5,29 @@ globalThis.AllianceAuthProof=(()=>{
   const digest=value=>crypto.subtle.digest('SHA-256',value);
   async function mac(key,value){const imported=await crypto.subtle.importKey('raw',key,{name:'HMAC',hash:'SHA-256'},false,['sign']);return new Uint8Array(await crypto.subtle.sign('HMAC',imported,value));}
   const same=(a,b)=>a.length===b.length&&a.reduce((n,v,i)=>n|(v^b[i]),0)===0;
+  let prepared;
+  const identity=(credentials,branch)=>JSON.stringify([credentials.business_slug.trim(),credentials.username.trim(),branch]);
+  function requestChallenge(call,credentials) {
+    const nonce=hex(crypto.getRandomValues(new Uint8Array(32)));
+    return {nonce,promise:call('/auth/login/challenge',{business_slug:credentials.business_slug.trim(),username:credentials.username.trim(),nonce})};
+  }
+  // Start the one-use challenge while the user enters their password. Never cache
+  // passwords or derived keys, and never reuse a challenge after submitting it.
+  function prepare(call,credentials,branch='') {
+    if(!globalThis.crypto?.subtle||!credentials.username.trim())return;
+    const key=identity(credentials,branch);
+    if(prepared?.key===key&&Date.now()-prepared.at<45000)return;
+    const entry={key,at:Date.now(),...requestChallenge(call,credentials)};
+    prepared=entry;entry.promise.catch(()=>{if(prepared===entry)prepared=undefined;});
+  }
+  function clear(){prepared=undefined;}
   async function login(call,credentials,branch=''){
     credentials={...credentials,business_slug:credentials.business_slug.trim(),username:credentials.username.trim()};
     if(!globalThis.crypto?.subtle)return call('/auth/login',credentials);
-    const nonce=hex(crypto.getRandomValues(new Uint8Array(32)));let challenge;
-    try{challenge=await call('/auth/login/challenge',{business_slug:credentials.business_slug,username:credentials.username,nonce});}catch(error){if([401,404,405,501].includes(error.status))return call('/auth/login',credentials);throw error;}
+    const ready=prepared?.key===identity(credentials,branch)&&Date.now()-prepared.at<45000?prepared:null;
+    prepared=undefined;
+    const pending=ready||requestChallenge(call,credentials),nonce=pending.nonce;let challenge;
+    try{challenge=await pending.promise;}catch(error){if([401,404,405,501].includes(error.status))return call('/auth/login',credentials);throw error;}
     if(challenge?.algorithm==='PASSWORD')return call('/auth/login',credentials);
     if(challenge?.algorithm!=='SCRAM-SHA-256'||challenge.iterations!==600000||!/^\w{8}-[\da-f-]{27}$/i.test(challenge.id||'')||!/^[0-9a-f]{32}$/.test(challenge.salt||'')||!/^[0-9a-f]{128}$/.test(challenge.nonce||'')||!challenge.nonce.startsWith(nonce)||challenge.message!==JSON.stringify([credentials.business_slug,credentials.username,branch,challenge.id,nonce,challenge.nonce,challenge.salt,600000]))throw new Error('No se pudo verificar el acceso seguro. Recarga e intenta nuevamente.');
     const imported=await crypto.subtle.importKey('raw',encoder.encode(credentials.password),'PBKDF2',false,['deriveBits']);
@@ -19,5 +37,5 @@ globalThis.AllianceAuthProof=(()=>{
     if(!/^[0-9a-f]{64}$/.test(data.server_signature||'')||!same(expected,raw(data.server_signature)))throw new Error('No se pudo verificar la respuesta de acceso.');
     return data;
   }
-  return {login};
+  return {login,prepare,clear};
 })();

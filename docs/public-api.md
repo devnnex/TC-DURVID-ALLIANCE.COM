@@ -50,3 +50,8 @@ Antes de entrega productiva: migrar de ADMIN a un esquema de aplicación, comple
 
 
 El centro operativo administra usuarios y accesos para la sucursal seleccionada. Las tarjetas abren el mismo panel operativo de Nápoles, con datos y marca separados en Oracle. Ver [funcionamiento y alcance](branch-operation.md).
+## Avisos de inventario
+
+Las acciones POS `stock_alert_feed`, `stock_alert_subscribe` y `stock_alert_unsubscribe` requieren un jefe activo en la sucursal seleccionada. Se valida el rol `BOSS`/`OWNER` o la propiedad real del negocio; disponer de `sales.manage` por una excepción de permisos no basta para suscribirse.
+
+El cliente solo puede registrar o retirar su propio endpoint. No puede crear cantidades, programar recordatorios ni escoger destinatarios. Las claves de suscripción quedan fuera de los snapshots y de la caché pública. El remitente privado usa la revisión del inventario para descartar cálculos desactualizados, retira endpoints caducados y aplica una clave de entrega por negocio, alerta, episodio, dispositivo y franja. Una reposición resuelve el episodio; una nueva escasez inicia otro.

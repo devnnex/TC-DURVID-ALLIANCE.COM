@@ -10,6 +10,17 @@ window.OracleDb = (() => {
   let writeGeneration=0,authGeneration=0,preparedProducts=new Set(),pendingOnlineLogin,cachedSession=false;
   const locationId = () => context?.locations.find(l => l.slug === branch && l.active)?.id;
   const uuid = () => {if(crypto.randomUUID)return crypto.randomUUID();const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;return [...bytes].map((b,i)=>([4,6,8,10].includes(i)?'-':'')+b.toString(16).padStart(2,'0')).join('');};
+  document.addEventListener('DOMContentLoaded',()=>{
+    // Resolve DNS/TLS early, without an extra health request or login attempt.
+    if(location.protocol!=='file:'){const link=document.createElement('link');link.rel='preconnect';link.href=new URL(base,location.href).origin;link.crossOrigin='anonymous';document.head.append(link);}
+    const form=document.querySelector('#loginForm');if(!form)return;
+    form.addEventListener('focusin',event=>{
+      if(event.target.name!=='pin'||!navigator.onLine)return;
+      const generation=authGeneration;
+      window.AllianceAuthProof?.prepare((path,body)=>{if(generation!==authGeneration)throw Object.assign(new Error('La sesión se cerró.'),{status:401});return request(path,body,false);},{business_slug:businessSlug(),username:form.elements.username.value},branch);
+    });
+    form.elements.username?.addEventListener('input',()=>window.AllianceAuthProof?.clear());
+  });
   async function request(path, body = {}, retry = true, method = 'POST', selectedLocation) {
     const generation=authGeneration,refreshAtStart=sessionStorage.getItem(refreshKey)||'';
     let response;try{response = await fetch(base + (location.protocol === 'file:' ? '/file/rpc' : '/rpc'), {
@@ -156,7 +167,7 @@ window.OracleDb = (() => {
     rpc:(name,payload={})=>result(async()=>{
       if(name==='login'){if(!navigator.onLine&&window.AllianceOfflineAuth)return offlineLogin(payload);try{const generation=authGeneration,credentials={business_slug:businessSlug(),username:payload.username,password:payload.pin};const data=await AllianceAuthProof.login((path,body)=>{if(generation!==authGeneration)throw Object.assign(new Error('La sesión se cerró.'),{status:401});return request(path,body,false);},credentials,branch);if(generation!==authGeneration){void revoke(data.access_token,data.refresh_token);throw Object.assign(new Error('La sesión se cerró.'),{status:401});}const current=apply(data);void window.AllianceOfflineAuth?.remember(payload.username,payload.pin,data);return {token:'oracle-session',user:current};}catch(error){if(window.AllianceOfflineAuth&&(!error.status||error.status>=500))return offlineLogin(payload);throw error;}}
       if(name==='getCurrentUser')return await renew();
-      if(name==='logout'){window.AllianceForms?.flush?.();void window.AllianceOfflineAuth?.logout(context);pendingOnlineLogin=undefined;const token=access,refreshToken=sessionStorage.getItem(refreshKey)||'';authGeneration++;renewal=undefined;sessionStorage.removeItem(refreshKey);access='';context=undefined;readRequests.clear();browserStorage.removeItem('tc-alliance-session-view-v1');browserStorage.setItem('tc-alliance-logged-out','1');void revoke(token,refreshToken);return true;}
+      if(name==='logout'){window.dispatchEvent(new Event('alliance-logout'));window.AllianceForms?.flush?.();void window.AllianceOfflineAuth?.logout(context);pendingOnlineLogin=undefined;const token=access,refreshToken=sessionStorage.getItem(refreshKey)||'';authGeneration++;renewal=undefined;sessionStorage.removeItem(refreshKey);access='';context=undefined;readRequests.clear();browserStorage.removeItem('tc-alliance-session-view-v1');browserStorage.setItem('tc-alliance-logged-out','1');void revoke(token,refreshToken);return true;}
       if(name==='listUsers')return [user()];
       return pos(name==='getBootstrapData'?'bootstrap':name,payload);
     }), trackSection:section=>!navigator.onLine&&window.AllianceOffline?AllianceOffline.visit(section):access?request('/activity/visit',{section}):Promise.resolve(), user, locationId, permission

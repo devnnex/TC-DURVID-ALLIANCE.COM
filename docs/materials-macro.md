@@ -1,5 +1,13 @@
 # Macro de insumos
 
+## Catálogo de mesas y fotos · 24 de noviembre de 2026
+
+El encabezado de Inicio en Cafetería y Coctelería se llama **Mesas**. Al abrir una cuenta, el catálogo muestra foto, precio y disponibilidad. La selección pendiente también reserva capacidad en la presentación: agregar una receta reduce lo que puede prepararse de otras que comparten ingredientes. Un producto sin capacidad se deshabilita y su foto aparece en gris. Se conservan las comprobaciones de existencias al seleccionar, confirmar y sincronizar.
+
+**Inventario → Editar producto → Foto del producto** permite agregar, reemplazar o quitar una foto. El navegador conserva sus proporciones, reduce el lado mayor a 640 píxeles como máximo y comprime a WebP, con alternativa JPEG. Solo guarda el resultado, de hasta 80 KB; no guarda el archivo original. La foto reutiliza el campo `image_url` y la sincronización existentes, sin migración SQL. La lista conserva su estructura y muestra una miniatura junto a las siglas.
+
+Las cuentas abiertas ofrecen **Cambiar mesa**, **Precuenta** y, cuando existe una solicitud de cuenta, **Enviar cuenta**, junto al cobro y la liberación existentes. Cambiar mesa conserva la selección pendiente y actualiza el encabezado al finalizar.
+
 Disponible en **Inventario → Macro de insumos** para los cuatro negocios. GCOBARF utiliza su hoja de producción y los demás sus hojas de recetas. La merma por ingrediente se explica en [Merma y rendimiento](ingredient-yield.md).
 
 ## Vincular una receta

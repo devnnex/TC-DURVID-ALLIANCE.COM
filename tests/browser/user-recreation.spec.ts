@@ -2,6 +2,7 @@ import {test,expect} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {backend,ready,branch,user} from './helpers/operational-backend';
 import {roleTemplates,sections} from '../../packages/shared/administration';
+import {openWaiterAnalysis} from './helpers/waiter-analysis';
 for(const slug of ['cocteleria','cafeteria','gcobarf','sucursal'])test(slug+': eliminar y recrear las mismas credenciales inicia el progreso de cero',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  const server=await backend(page);server.context.locations[0].slug=slug;
@@ -23,11 +24,14 @@ for(const slug of ['cocteleria','cafeteria','gcobarf','sucursal'])test(slug+': e
    await route.fulfill({contentType:'application/json',body:JSON.stringify({status:200,data})});
  });
  await ready(page,'',slug);await page.locator('.admin-sidebar [href="#users"]').click();
+ if(['cocteleria','cafeteria'].includes(slug))await openWaiterAnalysis(page);
  await expect(page.locator('.waiter-performance-card').filter({hasText:'Empleado anterior'}).locator('.waiter-performance-amount')).toContainText('10.000');
+ if(['cocteleria','cafeteria'].includes(slug))await page.locator('.admin-sidebar [href="#users"]').click();
  await page.getByRole('button',{name:'Retirar acceso de Empleado anterior',exact:true}).click();await page.locator('#systemMessageDialog [value=accept]').click();
  await expect(page.locator('.team-user').filter({hasText:'Empleado anterior'})).toHaveCount(0);expect(removed).toBe(old);
  const form=page.locator('.team-quick-form');await form.locator('[name=name]').fill('Empleado nuevo');await form.locator('[name=username]').fill('misma.cuenta');await form.locator('[name=password]').fill('4826');await form.locator('[name=role]').selectOption('WAITER');await form.getByRole('button',{name:'Guardar usuario',exact:true}).click();
  await expect(page.locator('.team-user').filter({hasText:'Empleado nuevo'})).toHaveCount(1);expect(created).not.toBe(old);
+ if(['cocteleria','cafeteria'].includes(slug))await openWaiterAnalysis(page);
  const report=page.locator('.waiter-performance-card').filter({hasText:'Empleado nuevo'});await expect(report.locator('.waiter-performance-amount')).toContainText(/\$\s*0/);await expect(report.locator('.waiter-person-name')).toContainText('0 comandas · 0 cobradas');await expect(report.locator('.waiter-person-tips')).toContainText(/\$\s*0/);
  await report.locator('summary').click();await expect(report.locator('.waiter-performance-numbers b')).toHaveText(['0','0','0']);
  expect(server.state.sales).toHaveLength(1);expect(server.state.docs.service_requests[0].actor_user_id).toBe(old);expect(server.state.sales[0].id).toBe('historical-sale');

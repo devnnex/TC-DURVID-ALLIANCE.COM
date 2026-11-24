@@ -45,3 +45,5 @@
 .income-section .income-heading-actions>button[hidden]{display:none!important}
 
 .income-section{min-width:0}.income-section .income-heading{min-width:0;max-width:100%}@media(max-width:1200px){.income-section .income-heading-actions{width:100%}}
+.sales-statistics.is-team-analysis{grid-template-rows:auto auto minmax(0,1fr) auto!important}.sales-statistics .ss-kpis[hidden],.sales-statistics .ss-notice[hidden]{display:none!important}.sales-statistics .ss-stage[data-view=waiters]{display:block;overflow-y:auto;overscroll-behavior:contain;padding:4px 2px 16px}.ss-stage [data-analysis-performance]{min-width:0;width:100%}.sales-statistics.is-team-analysis .ss-mobile-switch{display:none}
+.sales-statistics.is-team-analysis .ss-header-actions>[data-ss-action=range],.sales-statistics.is-team-analysis .ss-header-actions>[data-ss-action=refresh]{display:none}

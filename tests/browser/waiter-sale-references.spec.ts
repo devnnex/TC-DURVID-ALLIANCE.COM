@@ -1,3 +1,4 @@
+import {openWaiterAnalysis} from './helpers/waiter-analysis';
 import {test,expect} from '@playwright/test';
 import {backend,ready,branch,user,product} from './helpers/operational-backend';
 import {roleTemplates,sections} from '../../packages/shared/administration';
@@ -17,7 +18,7 @@ for(const slug of ['cocteleria','cafeteria'])test(slug+': resumen consulta cobro
  expect(await page.evaluate(async()=>((await(window as any).OracleDb.remote('operations_snapshot')).sales||[]).length)).toBe(0);
  // Another device takes payment after this browser downloaded its local snapshot.
  server.state.sales=[{id:'sale-one',sessionId:'account-one',createdAt:at,number:'TN-TEST-ONE',waiterName:'Cajera',totals:{subtotal:10000,total:11000,tip:1000},payments:[{method:'cash',amount:11000}],items:[{id:'line-one',quantity:1,unit_price:10000}]}];
- const before=reads;await page.locator('.admin-sidebar [href="#users"]').click();
+ const before=reads;await page.locator('.admin-sidebar [href="#users"]').click();await expect(page.locator('.waiter-performance')).toHaveCount(0);await openWaiterAnalysis(page);
  const panel=page.locator('.waiter-performance'),waiter=panel.locator('.waiter-performance-card').filter({hasText:'Mesera de prueba'});
  await expect(waiter.locator('.waiter-performance-amount')).toContainText('10.000');await expect.poll(()=>reads).toBeGreaterThan(before);
  await waiter.locator('summary').click();await waiter.getByRole('button',{name:'Ver desglose',exact:true}).click();

@@ -58,3 +58,29 @@ Al escribir, muestra **Cada unidad te cuesta**. En ese ejemplo, $62.000 ÷ 30 = 
 Este formulario no necesita proveedores ni insumos existentes y no pide factura, método de pago o saldos pendientes. Las pestañas Insumos y Proveedores conservan sus pantallas. Los registros directos sirven para consultar el costo por unidad; no crean proveedores, insumos, productos de inventario ni movimientos de caja. Las compras antiguas vinculadas a proveedores conservan sus registros y abonos existentes.
 
 La operación se confirma en Oracle por sucursal con el permiso de compras. Sin conexión, se conserva en la cola del dispositivo y se envía con su identificador al reconectar, evitando repetir el registro. La demostración usa el mismo formulario con datos locales separados de Oracle.
+## Análisis de meseros y avisos de insumos · 24 de noviembre de 2026
+
+En Cafetería y Coctelería, **Ventas → Estadísticas → Meseros** reúne el progreso que antes aparecía en Usuarios. Muestra ventas cobradas, propinas recibidas y comandas por cerrar; cada integrante conserva sus facturas, abonos y desglose. El período del equipo se elige en su propio selector. Las estrellas describen el cierre de comandas, no satisfacción ni horas trabajadas. Se mantienen los permisos previos de consulta del equipo. GCOBARF y Sucursal conservan su ubicación anterior.
+
+Todos los negocios tienen una campana para sus jefes. Cada aviso explica la disponibilidad y el faltante para llegar a diez unidades. La capacidad usa los insumos compartidos, sus medidas y reservas; en producción terminada utiliza las unidades pendientes y el consumo real del lote. Los productos ocultos no se anuncian. Reponer diez unidades o recuperar el mínimo del insumo resuelve el aviso.
+
+**Activar notificaciones** se pulsa una vez por jefe, negocio y dispositivo. La suscripción y la autorización se conservan al recargar, cerrar sesión y volver a entrar. Con permiso ya concedido, la app puede recuperar una suscripción caducada sin repetir la solicitud de permiso. **Desactivar notificaciones** retira ese dispositivo; borrar los datos del navegador o revocar su permiso también puede requerir activarlo de nuevo. El remitente vuelve a comprobar el rol real de jefe antes de enviar.
+
+La PWA del administrador y la del mesero usan el logo guardado en Marca, conservando identidades separadas. Los avisos también utilizan ese logo. En iPhone, las notificaciones web corresponden a la app agregada a la pantalla de inicio ([documentación de Apple](https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers)).
+
+### Activación del servicio de envío
+
+La bandeja dentro del sistema funciona con su inventario actual. Los avisos con la app cerrada necesitan instalar la API adicional y mantener el remitente ejecutándose en un servidor privado:
+
+```powershell
+npm run notifications:configure
+# Después de completar ORACLE_USER y ORACLE_PASSWORD_BASE64 en .env privado:
+npm run notifications:configure -- --apply
+npm run notifications:worker
+```
+
+El primer comando crea las claves VAPID en `.env`, excluido de Git. La instalación agrega tablas, valida la compilación y publica solo la clave pública. La clave privada permanece en el remitente. `infrastructure/deployment/stock-notifications.service.example` muestra una ejecución continua. Consulta Oracle cada treinta segundos, solicita únicamente insumos y existencias, y programa recordatorios a las **6:30 a. m. y 6:30 p. m., America/Bogota**, mientras exista el faltante. La entrega final también depende del navegador, la red y el proveedor de push.
+
+Como alternativa, `Recordatorios de insumos` en GitHub Actions ejecuta un ciclo cada cinco minutos cuando `STOCK_NOTIFICATIONS_ENABLED=true`. Requiere los secretos `ORACLE_USER`, `ORACLE_PASSWORD_BASE64`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y la variable `VAPID_SUBJECT`. GitHub puede retrasar tareas programadas; para aproximarse a la hora indicada se recomienda el servicio continuo. La clave por franja impide repetir la misma entrega durante reintentos del trabajador.
+
+Se instaló la API en Oracle y se configuraron los secretos y la activación del remitente de GitHub Actions. Las tres sucursales activas devolvieron existencias reales sin errores de compilación. Cada jefe debe pulsar **Activar notificaciones** una vez en su dispositivo; sin esa autorización no existe un destinatario push. El envío programado comienza al publicar este cambio en `main`. Con esta modalidad la revisión ocurre cada cinco minutos y GitHub puede retrasarla; no se garantiza entrega al segundo de las 6:30. Para una frecuencia de treinta segundos puede instalarse el servicio continuo indicado arriba.

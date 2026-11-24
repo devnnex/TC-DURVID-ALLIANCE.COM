@@ -1081,7 +1081,7 @@ const App = (() => {
   const syncPwaBranding = async () => {
     if (!state.business) return;
     const name = String(state.business.business_name || "Tienda Nápoles").trim() || "Tienda Nápoles";
-    const logoUrl = new URL("../../assets/logo.png", location.href).href;
+    const logoUrl = state.business.logo_url ? new URL(state.business.logo_url,location.href).href : new URL("../../assets/pwa-512.png", location.href).href;
     const themeColor = String(state.business.accent_color || "#f05a28");
     const signature = `${name}|${logoUrl}|${themeColor}`;
     if (signature === state.pwaBrandSignature) return;
@@ -1170,11 +1170,13 @@ const App = (() => {
   };
 
   const renderBrand = () => {
+    window.AllianceBrand={name:state.business?.business_name||window.BRANCH_CONFIG.name,logo:state.business?.logo_url||'../../assets/pwa-192.png',slug:window.BRANCH_CONFIG.slug};
+    document.dispatchEvent(new CustomEvent('alliance-brand-updated',{detail:window.AllianceBrand}));
     const logo = state.business?.logo_url
       ? `<img src="${escapeHTML(state.business.logo_url)}" alt="${escapeHTML(state.business.business_name)}" class="brand-logo">`
       : `<div class="brand-mark">${icon("utensils", 24)}</div>`;
     $$(".js-business-name").forEach((el) => {
-      el.textContent = state.business?.business_name || "Tu restaurante";
+      el.textContent = el.closest('#dashboard') && ['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug) ? 'Mesas' : state.business?.business_name || "Tu restaurante";
     });
     $$(".js-business-subtitle").forEach((el) => {
       el.textContent = state.business?.subtitle || (window.BRANCH_CONFIG?.slug==='gcobarf'?"Programa entregas y organiza los consumos de tus clientes.":"Servicio a la mesa rapido y claro");
@@ -1958,6 +1960,7 @@ const App = (() => {
     if (!changed) return;
     persistInventoryStore();
     persistBootstrapCache();
+    if ($('#consumptionDialog')?.open) renderConsumptionProductOptions($('#consumptionProductSearch')?.value || '');
     if (state.activeAdminSection === "inventory") renderInventory();
     if (state.activeAdminSection === "menu") renderMenuManager();
   };
@@ -4092,24 +4095,51 @@ const App = (() => {
     }
   };
 
+  let consumptionCategory = '';
+  let consumptionCatalogLimit = 48;
+  const consumptionCapacities = () => window.MaterialsPanel?.selectionCapacities(state.consumptionDrafts.filter((_,i)=>i!==state.consumptionDraftEditIndex),$('#consumptionForm')?.session_item_id.value);
+  const consumptionAvailability = (item, capacities) => {
+    const inventory = inventoryFor(item), tracked = Object.prototype.hasOwnProperty.call(state.inventoryMeta, item.id);
+    const portions = capacities?.get(item.id) ?? window.MaterialsPanel?.available(item.id);
+    const prepared = recipeInventory() && (portions != null || OracleDb.isPrepared?.(item.id));
+    const pending = state.consumptionDrafts.filter((_,i)=>i!==state.consumptionDraftEditIndex).filter(d=>d.menuItemId===item.id).reduce((n,d)=>n+d.quantity,0);
+    const quantity = portions != null ? portions : prepared ? null : tracked ? Math.max(0, inventory.stock - pending) : null;
+    return {quantity, out: item.is_available === false || quantity !== null && quantity < 1, checking: prepared && portions == null,
+      label: quantity === null ? prepared ? 'Consultando insumos…' : 'Sin stock configurado' : `${Number(quantity).toLocaleString('es-CO',{maximumFractionDigits:2})} ${portions != null ? 'para preparar' : escapeHTML(inventory.unit)}`};
+  };
+  const renderConsumptionCatalog = (searchValue = '', capacities) => {
+    if (!$('#consumptionDialog')?.open) return;
+    const preview = $('#tableConsumptionPreview'), selection = $('#consumptionSelection');
+    if (preview && selection && !preview.closest('.consumption-cart')) {
+      const cart = document.createElement('aside');cart.className = 'consumption-cart';cart.setAttribute('aria-label','Consumo y selección de la cuenta');preview.before(cart);cart.append(preview,selection);
+    }
+    const picker = $('#consumptionForm .product-picker-field');if (!picker) return;
+    let catalog = $('#consumptionCatalog');
+    if (!catalog) {catalog = document.createElement('section');catalog.id = 'consumptionCatalog';catalog.className = 'consumption-catalog';catalog.setAttribute('aria-label','Productos del inventario');picker.append(catalog);}
+    const all = matchingProducts(searchValue), categories = state.categories.filter(c=>all.some(p=>p.category_id===c.id));
+    if (consumptionCategory && !categories.some(c=>c.id===consumptionCategory)) consumptionCategory = '';
+    const products = all.filter(p=>!consumptionCategory||p.category_id===consumptionCategory);
+    catalog.innerHTML = `<div class="consumption-catalog-head"><strong>Productos para vender</strong><small>${products.length} productos · disponibilidad actual</small></div><div class="consumption-categories" aria-label="Categorías"><button type="button" data-consumption-category="" aria-pressed="${!consumptionCategory}">Todos</button>${categories.map(c=>`<button type="button" data-consumption-category="${escapeHTML(c.id)}" aria-pressed="${c.id===consumptionCategory}">${escapeHTML(c.name)}</button>`).join('')}</div><div class="consumption-product-grid">${products.slice(0,consumptionCatalogLimit).map(item=>{
+      const a = consumptionAvailability(item,capacities), disabled = a.out || a.checking;
+      return `<button type="button" class="consumption-product-card${disabled?' is-unavailable':''}" data-catalog-product="${escapeHTML(item.id)}" ${disabled?'disabled':''} aria-label="${escapeHTML(item.name)} · ${escapeHTML(a.out?'Agotado':a.label)}"><span class="consumption-product-image">${item.image_url?`<img src="${escapeHTML(item.image_url)}" alt="" loading="lazy" decoding="async" width="160" height="120">`:`<span class="consumption-product-placeholder">${icon('utensils',32)}</span>`}${disabled?`<em>${a.out?'Agotado':'Consultando'}</em>`:''}</span><strong>${escapeHTML(item.name)}</strong><small>${a.label}</small><span class="consumption-product-price"><b>${money(item.price)}</b><span aria-hidden="true">${icon('plus',17)}</span></span></button>`;
+    }).join('') || '<p class="consumption-catalog-empty">No hay productos para esta búsqueda.</p>'}</div>${products.length>consumptionCatalogLimit?'<button type="button" class="ghost small" id="consumptionCatalogMore">Mostrar más productos</button>':''}<p class="consumption-catalog-note">Las recetas comparten insumos. La capacidad se actualiza con tu selección; confirmar valida las existencias.</p>`;
+  };
   const renderConsumptionProductOptions = (searchValue = "") => {
     const options = $("#consumptionProductOptions");
     const combobox = $("#consumptionProductCombobox");
     const hint = $("#consumptionProductHint");
     if (!options || !combobox) return;
+    const capacities = consumptionCapacities();
+    renderConsumptionCatalog($('#consumptionForm')?.menu_item_id.value ? '' : searchValue, capacities);
     const products = matchingProducts(searchValue).slice(0, 30);
     state.productPickerMatches = products;
     combobox.dataset.activeIndex = products.length === 1 ? "0" : "-1";
     options.innerHTML = products.length
       ? products.map((item, index) => {
           const inventory = inventoryFor(item);
-          const tracked = Object.prototype.hasOwnProperty.call(state.inventoryMeta, item.id);
-          const portions = window.MaterialsPanel?.available(item.id);
-          const prepared = recipeInventory() && (portions != null || OracleDb.isPrepared?.(item.id));
-          const out = tracked && inventory.stock <= 0 && portions==null && !prepared;
-          const balance = recipeInventory() && portions != null
-            ? `Puedes preparar ${portions.toLocaleString('es-CO')} con los insumos actuales`
-            : tracked ? `${inventory.stock.toLocaleString('es-CO', { maximumFractionDigits: 2 })} ${escapeHTML(inventory.unit)}` : 'Sin stock configurado';
+          const available = consumptionAvailability(item, capacities);
+          const out = available.out || available.checking;
+          const balance = available.label;
           return `<button type="button" class="product-combobox-option${products.length === 1 ? " is-selected" : ""}" role="option"
             id="consumption-product-${index}" data-consumption-product="${escapeHTML(item.id)}" aria-selected="${products.length === 1}" ${out ? "disabled" : ""}>
             <span class="product-option-code">${escapeHTML(inventory.code)}</span>
@@ -4130,11 +4160,12 @@ const App = (() => {
     if (state.activeAdminSection === 'inventory') renderInventory();
   });
 
-  const showConsumptionProductOptions = () => {
+  const showConsumptionProductOptions = (force = false) => {
     const options = $("#consumptionProductOptions");
     const combobox = $("#consumptionProductCombobox");
     const input = $("#consumptionProductSearch");
     if (!options || !combobox || !input) return;
+    if (!force && !input.value.trim()) {closeConsumptionProductOptions();return;}
     options.hidden = false;
     combobox.classList.add("is-open");
     input.setAttribute("aria-expanded", "true");
@@ -4155,6 +4186,8 @@ const App = (() => {
     const form = $("#consumptionForm");
     const search = $("#consumptionProductSearch");
     if (!item || !form || !search) return;
+    const a = consumptionAvailability(item,consumptionCapacities());
+    if (a.out) {toast('Este producto está agotado. Revisa su inventario o abastece los insumos.','error');return;}
     if(window.MaterialsPanel&&!await MaterialsPanel.canSelect([...state.consumptionDrafts.filter((_,i)=>i!==state.consumptionDraftEditIndex),{menuItemId:item.id,quantity:1}],form.session_item_id.value))return;
     form.menu_item_id.value = item.id;
     form.item_name.value = item.name || "";
@@ -4162,6 +4195,7 @@ const App = (() => {
     form.quantity.value = "";
     search.value = `${inventoryFor(item).code} · ${item.name}`;
     closeConsumptionProductOptions();
+    renderConsumptionCatalog('',consumptionCapacities());
     $("#consumptionProductHint") && ($("#consumptionProductHint").textContent = `${item.name} seleccionado · escribe la cantidad y presiona Enter.`);
     window.requestAnimationFrame(() => {
       form.quantity.focus({ preventScroll: true });
@@ -4336,7 +4370,7 @@ const App = (() => {
           return `
             <article class="inventory-row inventory-${status}">
               <div class="inventory-product-identity">
-                <span class="inventory-code">${escapeHTML(inventory.code)}</span>
+                <span class="inventory-code${item.image_url?' has-product-photo':''}">${item.image_url?`<img src="${escapeHTML(item.image_url)}" alt="" loading="lazy" decoding="async" width="40" height="40">`:''}${escapeHTML(inventory.code)}</span>
                 <div><strong>${escapeHTML(item.name)}</strong><small>${escapeHTML(item.menu_categories?.name || "Sin categoria")} · ${escapeHTML(inventory.unit)}</small></div>
               </div>
               <div class="inventory-stock-block">
@@ -4779,6 +4813,7 @@ const App = (() => {
     renderCategorySelects();
     const inventory = inventoryFor(item);
     form.product_id.value = item.id;
+    window.AllianceProductPhotos?.preview(form, item.image_url || '');
     form.product_name.value = item.name || "";
     form.product_code.value = inventory.code;
     const assignedCategory = state.categories.find((category) => String(category.id) === String(item.category_id || ""));
@@ -4917,6 +4952,7 @@ const App = (() => {
   };
 
   const saveInventoryProduct = async (form) => {
+    if(form.photoPending){toast('Espera un momento mientras optimizamos la foto.','error');return;}
     if(form.materialRequired&&!form.materialScope){toast('Espera a que se carguen los vínculos de insumos.','error');return;}
     if(form.materialScope&&!form.reportValidity())return;
     if(!OracleDb.permission("inventory.write")||!OracleDb.permission("products.write")){toast("No tienes permiso para modificar el inventario.","error");return;}
@@ -4956,7 +4992,7 @@ const App = (() => {
       name,
       price: salePrice,
       description: state.items.find((item) => item.id === id)?.description || "",
-      image_url: state.items.find((item) => item.id === id)?.image_url || "",
+      image_url: form.productPhoto ?? state.items.find((item) => item.id === id)?.image_url ?? "",
       is_available: form.materialScope&&!form.materialScope.production?false:form.is_available.checked,
       sort_order: state.items.find((item) => item.id === id)?.sort_order || 0
     };
@@ -6630,6 +6666,10 @@ const App = (() => {
       toast("No se pudo completar el cambio de mesa. La cuenta fue restaurada.", "error", `move-table-related:${sessionId}`);
       return;
     }
+    if ($('#consumptionDialog')?.open && $('#consumptionForm')?.session_id.value === sessionId) {
+      const title = $('#consumptionDialogTitle');if (title) {title.textContent = `Agregar a ${tableLabel(table)}`;title.dataset.baseTitle = title.textContent;}
+      renderTableConsumptionPreview(state.sessions.find(s=>s.id===sessionId));
+    }
     toast(`Cuenta movida a ${tableLabel(table)}.`, "ok", `moved-table:${sessionId}`);
   };
 
@@ -7178,6 +7218,7 @@ const App = (() => {
     lines.innerHTML = drafts.map((draft, index) => `<div class="${state.consumptionDraftEditIndex === index ? "is-editing" : ""}"><span class="consumption-draft-product" data-edit-consumption-product="${index}" title="Doble clic para cambiar este producto"><strong>${escapeHTML(draft.itemName)}</strong><small>${draft.quantity} × ${money(draft.unitPrice)}</small></span><strong${canEditPrice ? ` class="consumption-draft-price" data-edit-consumption-price="${index}" title="Doble clic para editar el precio unitario"` : ""}>${money(draft.quantity * draft.unitPrice)}</strong><button class="icon-btn danger" type="button" data-remove-consumption-draft="${index}" aria-label="Quitar ${escapeHTML(draft.itemName)}">${icon("x", 15)}</button></div>`).join("");
     const form = $("#consumptionForm");
     if (form) form.quantity.required = drafts.length === 0;
+    renderConsumptionProductOptions(form?.menu_item_id.value ? '' : $('#consumptionProductSearch')?.value || '');
     updateConsumptionDraftAction();
     refreshIcons();
   };
@@ -7375,6 +7416,18 @@ const App = (() => {
     const viewButton = $("#viewTableConsumption");
     const chargeButton = $("#chargeTableAccount");
     const releaseButton = $("#releaseEmptyTable");
+    let moveButton = $('#moveCurrentTable');
+    if (!moveButton) {moveButton = document.createElement('button');moveButton.id = 'moveCurrentTable';moveButton.type = 'button';moveButton.className = 'ghost';moveButton.innerHTML = `${icon('replace',17)} Cambiar mesa`;actions.append(moveButton);}
+    moveButton.hidden = !session?.table_id || !OracleDb.permission('service.write');
+    let printButton = $('#printCurrentTable');
+    if (!printButton) {printButton = document.createElement('button');printButton.id = 'printCurrentTable';printButton.type = 'button';printButton.className = 'ghost';printButton.innerHTML = `${icon('printer',17)} Precuenta`;actions.append(printButton);}
+    printButton.hidden = !items.length || !OracleDb.permission('accounts.read');
+    let sendButton = $('#sendCurrentTable');
+    if (!sendButton) {sendButton = document.createElement('button');sendButton.id = 'sendCurrentTable';sendButton.type = 'button';sendButton.className = 'ghost';sendButton.innerHTML = `${icon('send',17)} Enviar cuenta`;actions.append(sendButton);}
+    const billRequest = state.requests.find(r=>r.session_id===session?.id&&r.request_type==='bill'&&r.status!=='resolved');
+    sendButton.hidden = !billRequest || !OracleDb.permission('service.write');
+    if (billRequest) sendButton.dataset.sendBill = billRequest.id;else delete sendButton.dataset.sendBill;
+    if (chargeButton) chargeButton.disabled = !OracleDb.permission('sales.write');
     if (viewButton) viewButton.hidden = window.matchMedia('(min-width:900px)').matches || emptyAccount || !session;
     if (chargeButton) chargeButton.hidden = emptyAccount;
     if (releaseButton) releaseButton.hidden = !emptyAccount;
@@ -7710,6 +7763,8 @@ const App = (() => {
     const form = $("#consumptionForm");
     if (!dialog || !form) return;
     form.reset();
+    consumptionCategory = '';
+    consumptionCatalogLimit = 48;
     clearCreditConsumptionError(form);
     form.session_id.value = sessionId;
     form.dataset.draftRecord=sessionId||pendingTableId||"individual";
@@ -7746,6 +7801,7 @@ const App = (() => {
     renderLastConsumptionTime(session);
     closeConsumptionProductOptions();
     dialog.showModal();
+    renderConsumptionProductOptions('');
     window.setTimeout(() => {
       productSearch?.focus({ preventScroll: true });
     }, 0);
@@ -8769,6 +8825,7 @@ const App = (() => {
     }));
     const productSearch = $("#consumptionProductSearch");
     productSearch?.addEventListener("input", (event) => {
+      consumptionCatalogLimit = 48;
       const form = event.currentTarget.form;
       if (form) {
         form.menu_item_id.value = "";
@@ -8785,7 +8842,7 @@ const App = (() => {
       const availableButtons = $$('[data-consumption-product]:not(:disabled)', $("#consumptionProductOptions"));
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
-        showConsumptionProductOptions();
+        showConsumptionProductOptions(true);
         const currentIndex = Number($("#consumptionProductCombobox")?.dataset.activeIndex ?? -1);
         setConsumptionProductActiveIndex(currentIndex < 0 ? (event.key === "ArrowDown" ? 0 : availableButtons.length - 1) : currentIndex + (event.key === "ArrowDown" ? 1 : -1));
       }
@@ -9093,6 +9150,11 @@ const App = (() => {
         const preview = $("#tableConsumptionPreview");
         if (preview) setTableConsumptionPreviewVisible(preview.hidden);
       }
+      if (target.id === 'moveCurrentTable') { openMoveSessionDialog($('#consumptionForm')?.session_id.value); }
+      if (target.id === 'printCurrentTable') {const session = state.sessions.find(s=>s.id===$('#consumptionForm')?.session_id.value);if(session)printThermalReceipt(session);}
+      if (target.dataset.consumptionCategory !== undefined) {consumptionCategory = target.dataset.consumptionCategory;consumptionCatalogLimit = 48;renderConsumptionProductOptions($('#consumptionForm')?.menu_item_id.value ? '' : $('#consumptionProductSearch')?.value || '');}
+      if (target.id === 'consumptionCatalogMore') {consumptionCatalogLimit += 48;renderConsumptionProductOptions($('#consumptionForm')?.menu_item_id.value ? '' : $('#consumptionProductSearch')?.value || '');}
+      if (target.dataset.catalogProduct) await selectConsumptionProduct(target.dataset.catalogProduct);
       if (target.id === "releaseEmptyTable") {
         const sessionId = $("#consumptionForm")?.session_id.value || "";
         state.consumptionDrafts = [];

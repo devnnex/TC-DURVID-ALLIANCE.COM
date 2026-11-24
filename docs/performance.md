@@ -1,5 +1,11 @@
 # Rendimiento de acceso y navegación
 
+## Acceso · 24 de noviembre de 2026
+
+El login usa el logo existente de 192 píxeles (24.618 bytes) en lugar del original de 2.184.031 bytes. El módulo pequeño de fotos carga con `defer` y el catálogo visual se dibuja únicamente al abrir el modal.
+
+Al entrar al campo de contraseña se anticipa el desafío SCRAM de un solo uso, sin contraseña ni claves derivadas. El envío consume ese desafío una sola vez; si han pasado 45 segundos, cambió el usuario o se limpió la preparación, obtiene otro. Se mantienen las 600.000 iteraciones, la validación de firma, la autorización y los rechazos del servidor. La conexión al origen de la API también se prepara al cargar el formulario. Estas mejoras reducen trabajo en la ruta del clic; la latencia o un arranque lento de Oracle siguen dependiendo del servidor y de la red.
+
 ## Actualización · 16 de noviembre de 2026
 
 Los textos secundarios de Estadísticas usan un gris compartido más oscuro (#536258), incluidos ejes, leyendas, notas, tarjetas y diálogos. El contraste se comprueba en navegador sobre las superficies claras de las cinco vistas; las pruebas exigen al menos 4,5:1. Se conserva la distribución y el contenido.

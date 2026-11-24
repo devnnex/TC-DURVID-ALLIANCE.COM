@@ -1,5 +1,36 @@
 # Validación de esta entrega
 
+## Revisión local · 24 de noviembre de 2026
+
+Entorno: Windows, Node 22.16.0 portátil y Chrome instalado. Validación con datos simulados y demostración; no se modificó ni se auditó el contenido de Oracle de producción.
+
+- Compilación completa y TypeScript aprobados. Los archivos compartidos de `dist` se comparan con las fuentes al finalizar.
+- 389 pruebas unitarias aprobadas, incluidas pruebas de desafío anticipado, expiración y uso único; conciliación de pagos, abonos y estadísticas.
+- 37 escenarios de navegador aprobados: 25 de catálogo/fotos, CRM, estadísticas y acceso; nueve de rendimiento y tres de consumo por mesa. La última tanda de 25 terminó sin fallos.
+- Catálogo y fotos: carga y compresión, persistencia tras recarga, retiro de foto, rechazo de imagen inválida, capacidad compartida, agotados, escala de grises, traslado con selección conservada y vista móvil.
+- CRM, estadísticas y acceso: pruebas en los tres negocios, crédito, abonos, historial parcial, revocación, trabajo offline, navegación antes de respuestas de red y conservación de borradores. La recarga de sesión preparada midió 953 ms en una muestra local; no garantiza la latencia de producción.
+
+Comandos de reproducción para los escenarios del cambio:
+
+```powershell
+npm run build
+npm test
+npx playwright test tests/browser/product-photo-catalog.spec.ts tests/browser/sales-statistics.spec.ts tests/browser/customer-crm.spec.ts tests/browser/login-speed.spec.ts
+npx playwright test tests/browser/interaction-performance.spec.ts
+```
+
+La ejecución ampliada también detectó expectativas pendientes en seis casos adicionales: cuatro de `consumption-layout-collection.spec.ts` (GCOBARF espera 24 mesas, y tres casos buscan tarjetas o textos del diseño anterior del CRM) y dos de `gcobarf-inventory-layout.spec.ts` (posición de la nota de merma y programación de una entrega con hora ya pasada). No se presenta esa ejecución ampliada como completamente aprobada. Los tres escenarios de consumo por mesa de Cafetería, Coctelería y Sucursal sí aprobaron después del ajuste.
+
+## Meseros, identidad PWA y notificaciones · 24 de noviembre de 2026
+
+- 406 pruebas unitarias aprobadas; TypeScript y compilación completos aprobados.
+- Navegador: logo personalizado y manifiestos separados en cuatro negocios; traslado del análisis de meseros, conciliación y recreación de usuarios; autorización persistente tras recarga y nuevo acceso, renovación silenciosa y desactivación expresa. Las tandas de estas funciones aprobaron 13 y ocho casos, con dos casos de persistencia repetidos en ambas.
+- La tanda adicional de estadísticas, avisos y meseros aprobó 23 de 28 inicialmente. Se corrigió la superposición de la campana sobre Actualizar; se sustituyó una mutación artificial de inventario por una reposición real y un triple clic de prueba por tres pulsaciones independientes. Los nueve casos afectados y relacionados aprobaron al repetirlos.
+- Oracle real: API adicional instalada; snapshots de los tres negocios activos y cantidades disponibles verificados, sin modificar inventario, ventas ni usuarios. Cero errores de compilación. La comprobación `npm run notifications:test:live` verifica también exclusión de destinatarios inexistentes y reservas de envío sin duplicados, retirando solo sus metadatos temporales.
+- Secretos de Oracle y VAPID configurados en GitHub; ejecución programada habilitada. Una ejecución sin dispositivos autorizados confirma cero envíos y cero fallos. La recepción real en un teléfono requiere que su jefe conceda el permiso; no se declara esa recepción comprobada. GitHub puede retrasar el cron de cinco minutos.
+
+## Historial de entregas anteriores
+
 2026-10-09, Windows, Node portátil 22.23.3 y Chrome instalado.
 
 - TypeScript y compilación del frontend/backend: pasan.

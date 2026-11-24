@@ -18,3 +18,6 @@ En inventario se comenta el control manual «Actualizar datos» para estos dos n
 - `scripts/test-customer-crm-live.ts`: verifica el CRM y la comanda contra Oracle en un negocio temporal aislado, que elimina al terminar.
 - `tests/customer-crm.test.ts`: validación, cumpleaños, autoría, duplicados, asociación y pedidos normales.
 - `tests/browser/customer-crm.spec.ts`: directorio, edición, indicadores, móvil, ubicación de la sincronización, permisos del mesero y recuperación offline con respuesta perdida.
+## Visitas y fidelización · 24 de noviembre de 2026
+
+Cada ficha del CRM explica cuántos días visitó el cliente en el período seleccionado y su última visita conocida. El resumen por mes o año también aparece en Clientes y cartera de GCOBARF. Reutiliza las reglas existentes: una visita por cliente y día en Colombia, sin sumar rondas repetidas, pedidos pendientes, anulaciones ni abonos. Los datos parciales se identifican en pantalla. No se crean puntos ni beneficios ficticios.

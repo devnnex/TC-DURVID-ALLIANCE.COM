@@ -1,8 +1,8 @@
 /* Inventory macro for every Jespresso business; GCOBARF remains unchanged. */
 globalThis.MaterialsPanel=(()=>{
   const M=AllianceMaterialsEngine,E=AllianceOperationsEngine,esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),qty=n=>Number(n||0).toLocaleString('es-CO',{maximumFractionDigits:3}),uid=()=>crypto.randomUUID(),unit=u=>u==='u'||u==='unit'?'unidades':u;
-  const gcobarf=()=>window.BRANCH_CONFIG?.slug==='gcobarf',cost=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0,maximumFractionDigits:6}).format(n||0);
-  const cardCost=(value,digits)=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:digits,maximumFractionDigits:digits}).format(Math.trunc((value||0)*10**digits)/10**digits);
+  const gcobarf=()=>window.BRANCH_CONFIG?.slug==='gcobarf',cost=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0,maximumFractionDigits:0}).format(n||0);
+  const cardCost=value=>cost(value);
   let historyView=false,historyQuery='',historyActor='',historyAction='',historyFrom='',historyTo='';
   let data=null,loading,visible=false,query='',filter='all',busy=false,linkCosting=null,highlight='',availability=new Map();
   const recipeInventory=()=>!gcobarf();
@@ -108,5 +108,16 @@ globalThis.MaterialsPanel=(()=>{
   function purchaseReference(recipeId,ingredient){const link=data?.model.recipes.find(r=>r.managed&&r.recipeId===recipeId),mapping=link?.mappings?.find(m=>m.ingredientId===ingredient.id),raw=data?.model.ingredients.find(i=>i.id===(gcobarf()?ingredient.stockId!==undefined?ingredient.stockId:mapping?.stockId:mapping?.stockId)&&!i.archived)||(gcobarf()&&ingredient.stockId===undefined?data?.model.ingredients.find(i=>!i.archived&&M.norm(i.name)===M.norm(ingredient.name)&&M.base(i.unit)===M.base(ingredient.unit)):null);return raw?{...ingredient,...(gcobarf()?{stockId:raw.id}:{}),purchasePrice:raw.unitCost*E.convert(ingredient.quantity,ingredient.unit,raw.unit,data.units)*(ingredient.recoverableTax?1+ingredient.purchaseTaxRate/100:1),inventoryReference:true}:ingredient;}
   function applyPurchaseReferences(recipeId,model){const r=model.recipes.find(r=>r.id===recipeId),updates=(r?.lines||[]).map(line=>{const i=model.ingredients.find(i=>i.id===line.ingredientId);return i?{i,before:i.purchasePrice,after:purchaseReference(recipeId,i).purchasePrice}:null;}).filter(Boolean);updates.forEach(v=>v.i.purchasePrice=v.after);return ()=>updates.forEach(v=>v.i.purchasePrice=v.before);}
   function recipeShortages(recipe,model){return data?M.recipeShortages({...state(),costing:{model}},recipe):null;}
-  return {refresh,open,recipeShortages,stockOptions:()=>data?.model.ingredients.filter(i=>!i.archived)||[],stockById:id=>data?.model.ingredients.find(i=>i.id===id&&!i.archived),check,canSelect,capacityDialog,setCapacity,assertEditable,purchaseReference,applyPurchaseReferences,attachInventory,canAddInventory,syncRecipe,linkFromInventory,available:product=>availability.get(product)??null,resetInventory:form=>{form.querySelector('[data-material-inventory-link]')?.remove();delete form.materialScope;delete form.materialRequired;delete form.materialCapacity;}};
+  function selectionCapacities(items=[],excludeItem) {
+    if(!data)return new Map();let local=state();
+    if(excludeItem){
+      local=structuredClone(local);
+      const prepared=local.operations.preparations?.find(p=>p.id===excludeItem&&p.status==='active');
+      for(const part of prepared?.parts||[]){const raw=local.operations.ingredients.find(i=>i.id===part.ingredientId);if(raw)raw.quantity+=E.convert(part.quantity,part.unit,raw.unit,local.units);}
+      local.docs.session_items=local.docs.session_items.filter(i=>i.id!==excludeItem);
+      local.operations.preparations=(local.operations.preparations||[]).filter(p=>p.id!==excludeItem);
+    }
+    return M.cartCapacities(local,items.map(i=>({productId:i.menuItemId||i.productId,quantity:Number(i.quantity)})));
+  }
+  return {refresh,open,recipeShortages,selectionCapacities,stockOptions:()=>data?.model.ingredients.filter(i=>!i.archived)||[],stockById:id=>data?.model.ingredients.find(i=>i.id===id&&!i.archived),check,canSelect,capacityDialog,setCapacity,assertEditable,purchaseReference,applyPurchaseReferences,attachInventory,canAddInventory,syncRecipe,linkFromInventory,available:product=>availability.get(product)??null,resetInventory:form=>{form.querySelector('[data-material-inventory-link]')?.remove();delete form.materialScope;delete form.materialRequired;delete form.materialCapacity;}};
 })();
