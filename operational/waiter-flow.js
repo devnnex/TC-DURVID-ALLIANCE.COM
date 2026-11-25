@@ -2,6 +2,7 @@
 globalThis.WaiterFlow=(()=>{
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const money=n=>AllianceMoney.format(n,{allowEmpty:false}),minor=n=>Math.round((Number(n)+Number.EPSILON)*100);
+  const chevron=collapsed=>'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(collapsed?'m6 9 6 6 6-6':'m6 15 6-6 6 6')+'"/></svg>';
   function amount(items){if(items.some(i=>!Number.isFinite(i.quantity)||i.quantity<=0||!Number.isFinite(i.unitPrice)||i.unitPrice<0))return null;return items.reduce((n,i)=>n+minor(i.quantity*i.unitPrice),0)/100;}
   function adjustQuantity(quantity,direction,maximum=10000){
     const cap=Math.max(0,Math.min(10000,maximum??10000)),current=Number.isFinite(quantity)&&quantity>0?quantity:0;
@@ -25,6 +26,25 @@ globalThis.WaiterFlow=(()=>{
     const context=document.createElement('div');context.className='waiter-flow-context';context.innerHTML='<button type="button" data-waiter-step="1">‹ Cambiar mesa</button><strong data-waiter-current-table></strong><button type="button" data-waiter-step="2" data-waiter-edit-products>Editar productos</button>';layout.before(context);
     const review=document.createElement('button');review.type='button';review.id='waiterReviewNext';review.className='primary';review.textContent='Revisar comanda →';form.querySelector('.waiter-total').after(review);
     form.querySelector('#sendWaiterOrder').innerHTML='<i data-lucide="send"></i> Enviar comanda';catalog.querySelector('.eyebrow').textContent='2. PRODUCTOS Y CANTIDADES';
+    const send=form.querySelector('#sendWaiterOrder');send.setAttribute('form',form.id);
+    const workspace=document.createElement('dialog');workspace.id='waiterConsumptionDialog';workspace.className='modal waiter-consumption-dialog is-compact-consumption';workspace.setAttribute('aria-labelledby','waiterConsumptionTitle');
+    workspace.innerHTML='<div class="modal-card waiter-consumption-surface"><header class="waiter-consumption-head"><div><span class="eyebrow">CONSUMO · MESERO</span><h2 id="waiterConsumptionTitle">Agregar a la mesa</h2><small>Tu comanda se agrega a la cuenta cuando el equipo la acepta.</small></div><div class="waiter-consumption-tools"><button type="button" class="icon-btn" data-waiter-step="1" aria-label="Cerrar consumo y volver a mesas"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div></header><div class="waiter-consumption-footer"></div></div>';
+    layout.before(workspace);const surface=workspace.firstElementChild,footer=surface.querySelector('.waiter-consumption-footer');surface.insertBefore(layout,footer);surface.querySelector('.waiter-consumption-tools').prepend(context);footer.innerHTML='<button type="button" class="ghost" data-waiter-step="1">Volver a mesas</button>';footer.append(review,send);surface.insertBefore(document.querySelector('#waiterStatus'),footer);context.querySelector('[data-waiter-edit-products]').textContent='Productos';catalog.querySelector('h2').textContent='Productos para vender';review.textContent='Revisar comanda';
+    document.body.classList.add('waiter-workspace-active');
+    const categories=document.createElement('nav');categories.id='waiterCategories';categories.className='consumption-categories';categories.setAttribute('aria-label','Categorías de productos');catalog.querySelector('h2').after(categories);document.querySelector('#waiterCategory').closest('label').hidden=true;
+    document.querySelector('#waiterSearch').placeholder='Buscar por nombre o siglas (CN)';
+    categories.onclick=event=>{const button=event.target.closest('[data-waiter-category]');if(button){const select=document.querySelector('#waiterCategory');select.value=button.dataset.waiterCategory;select.dispatchEvent(new Event('change',{bubbles:true}));}};
+    const current=document.createElement('section');current.className='waiter-current-consumption';current.setAttribute('aria-label','Consumo actual de la mesa');current.innerHTML='<header><span><strong>Consumo actual</strong><small data-waiter-current-count></small></span><b data-waiter-current-total></b><button type="button" class="icon-btn consumption-fold" aria-expanded="false" aria-controls="waiterCurrentLines" aria-label="Expandir consumo actual">'+chevron(true)+'</button></header><div id="waiterCurrentLines" hidden></div>';const account=document.createElement('aside');account.className='waiter-account-column';form.before(account);account.append(current,form);
+    let currentCollapsed=true,selectionCollapsed=false,lastCurrent='';
+    const selectionHead=document.createElement('div');selectionHead.className='waiter-selection-head';const selectionTitle=form.querySelector('h2');selectionTitle.before(selectionHead);selectionHead.append(selectionTitle);const selectionToggle=document.createElement('button');selectionToggle.type='button';selectionToggle.className='icon-btn consumption-fold';selectionToggle.setAttribute('aria-controls','waiterCart');selectionHead.append(selectionToggle);
+    function folds(){current.classList.toggle('is-collapsed',currentCollapsed);current.querySelector('#waiterCurrentLines').hidden=currentCollapsed;const button=current.querySelector('button');button.setAttribute('aria-expanded',String(!currentCollapsed));button.setAttribute('aria-label',(currentCollapsed?'Expandir':'Encoger')+' consumo actual');button.innerHTML=chevron(currentCollapsed);form.classList.toggle('is-selection-collapsed',selectionCollapsed);account.classList.toggle('is-selection-collapsed',selectionCollapsed);selectionToggle.setAttribute('aria-expanded',String(!selectionCollapsed));selectionToggle.setAttribute('aria-label',(selectionCollapsed?'Expandir':'Encoger')+' selección actual');selectionToggle.innerHTML=chevron(selectionCollapsed);}
+    current.querySelector('button').onclick=()=>{currentCollapsed=!currentCollapsed;folds();};selectionToggle.onclick=()=>{selectionCollapsed=!selectionCollapsed;folds();};folds();
+    function renderCurrent(){
+      const d=getData(),table=selected();if(!table)return;
+      surface.querySelector('#waiterConsumptionTitle').textContent=(step===3?'Revisar pedido de ':'Agregar a ')+(table.table_name||table.name);
+      const ids=new Set((d.snapshot?.docs?.table_sessions||[]).filter(s=>s.table_id===table.id&&s.status==='open').map(s=>s.id)),lines=(d.snapshot?.docs?.session_items||[]).filter(l=>ids.has(l.session_id)&&l.status!=='cancelled'),signature=JSON.stringify([table.id,table.total,lines.map(l=>[l.id,l.item_name,l.quantity,l.unit_price])]);
+      if(signature!==lastCurrent){lastCurrent=signature;const count=lines.reduce((n,l)=>n+Number(l.quantity||0),0);current.querySelector('[data-waiter-current-count]').textContent=count.toLocaleString('es-CO',{maximumFractionDigits:3})+(count===1?' producto':' productos');current.querySelector('[data-waiter-current-total]').textContent=money(table.total);current.querySelector('#waiterCurrentLines').innerHTML=lines.map(l=>'<div><span>'+esc(l.quantity)+' × '+esc(l.item_name||'Producto')+'</span><strong>'+money(Number(l.quantity)*Number(l.unit_price))+'</strong></div>').join('')||'<small>Sin consumos registrados.</small>';}
+    }
     const available=()=>{const d=getData();return tableStates(d.snapshot?.docs?.restaurant_tables||d.bootstrap?.tables||[],d.snapshot);};
     const selected=()=>available().find(t=>t.id===tableSelect.value);
     const message=text=>{tables.querySelector('[data-waiter-flow-message]').textContent=text||'';};
@@ -46,17 +66,20 @@ globalThis.WaiterFlow=(()=>{
       context.querySelector('[data-waiter-current-table]').textContent=selected()?.table_name||selected()?.name||'';
       nav.querySelectorAll('button').forEach(button=>{const target=Number(button.dataset.waiterStep);button.disabled=d.busy||target>1&&!selected()||target===3&&!validQuantities();button.classList.toggle('is-active',target===step);if(target===step)button.setAttribute('aria-current','step');else button.removeAttribute('aria-current');});
       review.disabled=d.busy||!validQuantities();context.querySelectorAll('button').forEach(button=>button.disabled=d.busy);
+      workspace.querySelector('[aria-label="Cerrar consumo y volver a mesas"]').disabled=d.busy;renderCurrent();
       if(step===1)renderTables();else if(!selected()){show(1,false,true);message('La mesa ya no está disponible. Elige otra para conservar tu comanda.');}
     }
     function show(next,persist=true,force=false){
       if(getData().busy&&!force)return false;if(next>1&&!selected())return false;if(next===3&&!validQuantities(true))return false;
       step=next;tables.hidden=step!==1;context.hidden=step===1;layout.hidden=step===1;catalog.hidden=step!==2;history.hidden=step!==1;layout.classList.toggle('is-review',step===3);
       form.querySelector('#waiterNotes').closest('label').hidden=step!==3;const customer=form.querySelector('.waiter-customer-registration');if(customer)customer.hidden=step!==3;
-      review.hidden=step!==2;form.querySelector('#sendWaiterOrder').hidden=step!==3;context.querySelector('[data-waiter-edit-products]').hidden=step!==3;
-      form.querySelector('h2').textContent=step===2?'Productos elegidos':'Revisa tu comanda';form.querySelector('.eyebrow').textContent=step===2?'AJUSTA LAS CANTIDADES':'3. CONFIRMA LOS DETALLES';
-      layout.classList.remove('is-transitioning');if(step>1){void layout.offsetWidth;layout.classList.add('is-transitioning');}
-      update();onStep?.();if(persist){onSave?.();const surface=step===1?tables:step===2?catalog:form,heading=surface.querySelector('h2');heading.tabIndex=-1;heading.focus({preventScroll:true});surface.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});}return true;
+      review.hidden=step!==2;send.hidden=step!==3;context.querySelector('[data-waiter-edit-products]').hidden=step!==3;
+      form.querySelector('h2').textContent=step===2?'Selección actual':'Revisa tu comanda';form.querySelector('.eyebrow').textContent=step===2?'AJUSTA LAS CANTIDADES':'3. CONFIRMA LOS DETALLES';workspace.dataset.step=String(step);
+      if(step===3){selectionCollapsed=false;folds();}
+      if(step===1){if(workspace.open)workspace.close();currentCollapsed=true;selectionCollapsed=false;folds();}else if(!workspace.open){currentCollapsed=true;selectionCollapsed=false;folds();workspace.showModal();}
+      update();onStep?.();if(persist){onSave?.();const heading=step===1?tables.querySelector('h2'):surface.querySelector('#waiterConsumptionTitle');heading.tabIndex=-1;heading.focus({preventScroll:true});}return true;
     }
+    workspace.addEventListener('cancel',event=>{event.preventDefault();show(1);});workspace.addEventListener('click',event=>{if(event.target===workspace)show(1);});
     async function choose(id){
       if(getData().busy)return;const previous=tableSelect.value;
       if(previous&&previous!==id&&getData().cart.length&&!await AllianceDialogs.confirm({title:'¿Cambiar la mesa de esta comanda?',message:'Los productos que elegiste pasarán a la nueva mesa.',accept:'Cambiar mesa',cancel:'Conservar mesa'}))return;

@@ -14,7 +14,7 @@ for(const slug of ['cocteleria','cafeteria'])test(slug+': cantidades visibles, a
   const tile=page.locator('.waiter-product-card').filter({has:page.locator('[data-product="'+product+'"]')}),other=page.locator('[data-product="'+shared+'"]');
   await tile.locator('[data-catalog-add]').click();await expect(tile.locator('output')).toHaveText('1');await expect(page.locator('#waiterProductFeedback')).toContainText('1 en esta comanda');
   await expect(other).toBeDisabled();await expect(other).toContainText('Agotado');
-  await page.locator('[data-note="0"]').fill('Sin hielo');await tile.locator('[data-catalog-add]').click();await expect(tile.locator('output')).toHaveText('2');await expect(tile.locator('[data-catalog-add]')).toBeDisabled();
+  await page.locator('#waiterReviewNext').click();await page.locator('[data-note="0"]').fill('Sin hielo');await page.locator('[data-waiter-edit-products]').click();await tile.locator('[data-catalog-add]').click();await expect(tile.locator('output')).toHaveText('2');await expect(tile.locator('[data-catalog-add]')).toBeDisabled();
   await tile.locator('[data-catalog-minus]').click();await expect(tile.locator('output')).toHaveText('1');await expect(page.locator('[data-note="0"]')).toHaveValue('Sin hielo');
   await tile.locator('[data-catalog-minus]').click();await expect(tile.locator('output')).toHaveText('0');await expect(tile.locator('[data-catalog-minus]')).toBeDisabled();await expect(page.locator('[data-quantity]')).toHaveCount(0);await expect(other).toBeEnabled();
   // A sale from another device depletes the same raw material without changing ordersRevision.
@@ -29,7 +29,7 @@ for(const slug of ['cocteleria','cafeteria'])test(slug+': cantidades visibles, a
   server.state.operations.ingredients[0].quantity=250;
   await expect(tile.locator('[data-product]')).toBeEnabled({timeout:12000});await expect(other).toBeDisabled();await expect(page.locator('#waiterSearch')).toBeFocused();
   server.state.operations.ingredients[0].quantity=2500;
-  await expect(tile.locator('[data-product]')).toContainText('Puedes agregar 10 más',{timeout:12000});await expect(other).toContainText('Puedes agregar 5 más');
+  await expect(tile.locator('[data-product]')).toContainText('10 para preparar',{timeout:12000});await expect(other).toContainText('5 para preparar');
   for(const width of [320,390,768,1280]){await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
   await page.screenshot({path:'test-results/waiter-catalog-'+slug+'-desktop.png',fullPage:true});
 });

@@ -7,3 +7,96 @@
 @media(max-width:1050px){.waiter-tables-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:650px){.waiter-step-nav{gap:5px!important}.waiter-step-nav button{flex:1;justify-content:center;gap:5px;padding:10px 5px;font-size:10px}.waiter-step-nav button>span{width:20px;height:20px;font-size:10px;flex:none}.waiter-tables-step{padding:19px 15px}.waiter-step-heading{display:grid;gap:14px}.waiter-step-heading h2{font-size:25px}.waiter-step-heading>label{width:100%}.waiter-tables-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.waiter-table{min-height:112px;border-radius:16px}.waiter-table>strong{font-size:19px}.waiter-table>span{font-size:11px}.waiter-flow-context{gap:10px}.waiter-flow-context button{font-size:12px}.waiter-success{padding:28px 22px}.waiter-success h2{font-size:24px}}
 @media(prefers-reduced-motion:reduce){.waiter-guided .waiter-tables-step,.waiter-guided .waiter-layout,.waiter-success-dialog,.waiter-success-mark path{animation:none!important}.waiter-table{transition:none}.waiter-table:hover,.waiter-table:active{transform:none}}
 .waiter-success-dialog[data-state=sending] .waiter-success-mark path{display:none}.waiter-success-dialog[data-state=sending] .waiter-success-mark circle{fill:none;stroke:var(--accent);stroke-width:3;stroke-dasharray:45 135;transform-origin:center;animation:waiter-send-progress .8s linear infinite}.waiter-success-actions[hidden]{display:none!important}@keyframes waiter-send-progress{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.waiter-success-dialog[data-state=sending] .waiter-success-mark circle{animation:none}}
+
+/* The waiter keeps the same order workflow inside the table consumption workspace. */
+.waiter-workspace-active .waiter-step-nav,.waiter-workspace-active #waiterCartSummary{display:none!important}
+#waiterConsumptionDialog{width:min(94vw,1440px);max-width:none;max-height:94dvh;padding:0;margin:auto;border:1px solid #e0e6df;border-radius:22px;overflow:hidden}
+#waiterConsumptionDialog::backdrop{background:#17251b70;backdrop-filter:blur(7px)}
+#waiterConsumptionDialog .waiter-consumption-surface{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto;width:100%;height:min(94dvh,940px);max-width:none;max-height:94dvh;padding:20px;gap:14px;box-sizing:border-box;overflow:hidden}
+.waiter-consumption-head{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0}
+.waiter-consumption-head>div:first-child{flex:1;min-width:0}
+.waiter-consumption-head h2{font-size:clamp(21px,2vw,29px);margin:3px 0;line-height:1.2;overflow-wrap:anywhere}
+.waiter-consumption-head small{font-size:.7rem;color:#536258;line-height:1.5}
+.waiter-consumption-tools{display:flex;align-items:center;gap:9px;flex-shrink:0}
+.waiter-consumption-tools>.icon-btn{width:42px;height:42px;flex-shrink:0}
+#waiterConsumptionDialog .waiter-flow-context{margin:0;gap:0;flex:none}
+#waiterConsumptionDialog .waiter-flow-context>strong,#waiterConsumptionDialog .waiter-flow-context>[data-waiter-step="1"]{display:none}
+#waiterConsumptionDialog .waiter-flow-context>[data-waiter-edit-products]{min-height:40px;padding:9px 12px;border:1px solid #dce4dc;border-radius:10px;color:#3a5544;font-size:.8rem}
+#waiterConsumptionDialog .waiter-layout{display:grid;grid-template-columns:minmax(250px,.32fr) minmax(0,1fr);align-items:stretch;gap:18px;min-height:0;height:auto;max-width:none;margin:0;overflow:hidden;animation:none}
+#waiterConsumptionDialog .waiter-layout[hidden],#waiterConsumptionDialog [hidden]{display:none!important}
+.waiter-account-column{grid-column:1;grid-row:1;display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0;overflow:hidden}
+.waiter-current-consumption{display:flex;flex-direction:column;flex:0 1 auto;min-height:0;max-height:45%;padding:14px;border:1px solid #ffd7c8;border-radius:18px;background:#fffaf7}
+.waiter-current-consumption.is-collapsed{flex:0 0 auto;max-height:none}
+.waiter-current-consumption>header{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px}
+.waiter-current-consumption header>span{min-width:0;display:grid;gap:4px;font-size:.84rem}
+.waiter-current-consumption header small{font-size:.65rem;color:#6c788a}
+.waiter-current-consumption header>b{font-size:.88rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+#waiterCurrentLines{min-height:0;overflow-y:auto;margin-top:12px;padding-top:12px;border-top:1px dashed #ddd5ce}
+#waiterCurrentLines>div{display:flex;align-items:start;justify-content:space-between;gap:10px;margin-bottom:12px;font-size:.78rem;line-height:1.5;color:#526258}
+#waiterCurrentLines>div>span{min-width:0;overflow-wrap:anywhere}#waiterCurrentLines strong{white-space:nowrap;color:#273b2d}
+#waiterConsumptionDialog #waiterOrderForm{position:static;display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;gap:10px;overflow:hidden;padding:14px;border:1px solid #d4e3d8;border-radius:17px;background:#f6faf6;box-shadow:none}
+#waiterConsumptionDialog #waiterOrderForm>.eyebrow,#waiterConsumptionDialog #waiterOrderForm>p{display:none}
+.waiter-selection-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0}
+#waiterConsumptionDialog .waiter-selection-head h2{margin:0;font-size:.95rem;line-height:1.3}
+#waiterConsumptionDialog #waiterCart{flex:1;min-height:0;overflow-y:auto;margin:0;scrollbar-width:thin;overscroll-behavior:contain}
+#waiterConsumptionDialog .waiter-cart-line{padding:10px;margin-bottom:8px;background:#fff;border:0;border-radius:12px}
+#waiterConsumptionDialog .waiter-line-title{display:grid;grid-template-columns:minmax(0,1fr) auto 32px;align-items:center;gap:8px;margin:0}
+#waiterConsumptionDialog .waiter-line-title>span{min-width:0}.waiter-line-summary{display:block;margin-top:4px;color:#667085;font-size:.7rem;line-height:1.4}
+#waiterConsumptionDialog .waiter-line-title strong{font-size:.78rem;line-height:1.4;overflow-wrap:anywhere}
+#waiterConsumptionDialog .waiter-line-title>[data-line-total]{white-space:nowrap;font-variant-numeric:tabular-nums}
+#waiterConsumptionDialog .waiter-line-title .icon-btn{width:32px;height:32px;color:#d04747;background:#fff4f2;border:1px solid #ffd6cf;padding:7px}
+#waiterConsumptionDialog[data-step="2"] .waiter-cart-line>.waiter-line-values,#waiterConsumptionDialog[data-step="2"] .waiter-cart-line>[data-line-capacity],#waiterConsumptionDialog[data-step="2"] .waiter-cart-line>label{display:none}
+#waiterConsumptionDialog .waiter-total{flex-shrink:0;margin:0;padding:12px 0 0;border-top:1px dashed #d4dfd5;font-size:.8rem;color:#23633e;gap:8px}
+#waiterConsumptionDialog .waiter-total strong{font-size:1rem;white-space:nowrap}
+#waiterConsumptionDialog .is-selection-collapsed #waiterCart{display:none}
+#waiterConsumptionDialog #waiterOrderForm.is-selection-collapsed{flex:0 0 auto}
+#waiterConsumptionDialog[data-step="2"] #waiterOrderForm.is-empty{display:none}
+.waiter-account-column.is-selection-collapsed .waiter-current-consumption:not(.is-collapsed){flex:1;max-height:none}
+#waiterConsumptionDialog .waiter-catalog{grid-column:2;grid-row:1;display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0;border:0;border-radius:0;padding:0;box-shadow:none;overflow:hidden}
+#waiterConsumptionDialog .waiter-catalog>.eyebrow,#waiterConsumptionDialog .waiter-catalog>p{display:none}
+#waiterConsumptionDialog .waiter-catalog>h2{order:1;font-size:1rem;line-height:1.3;margin:4px 0 0;color:#263c32}
+#waiterConsumptionDialog .waiter-filters{order:0;flex:0 0 auto;grid-template-columns:minmax(0,1fr);align-items:end;margin:0;gap:10px}
+#waiterConsumptionDialog #waiterCategories{order:2;flex-shrink:0;padding:2px 0 4px;margin:0}
+#waiterConsumptionDialog .waiter-filters label{font-size:.74rem;min-width:0}
+#waiterConsumptionDialog .waiter-filters input,#waiterConsumptionDialog .waiter-filters select{height:44px;padding:9px 12px;margin-top:6px;background:#fff;font-size:.84rem}
+#waiterConsumptionDialog #waiterProducts{order:3;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));align-content:start;min-height:0;overflow-y:auto;gap:12px;padding:4px;scrollbar-width:thin;overscroll-behavior:contain}
+#waiterConsumptionDialog .waiter-product-card{display:flex;flex-direction:column;gap:10px;padding:10px;border:1px solid #e0e7e1;border-radius:18px;background:#fff;min-width:0}
+#waiterConsumptionDialog .waiter-product{display:grid;gap:8px;min-height:0;padding:0;border:0;border-radius:0;background:transparent;color:#263c32;transform:none;align-items:stretch;justify-items:stretch;text-align:left}
+#waiterConsumptionDialog .waiter-product strong{font-size:.85rem;line-height:1.35}
+#waiterConsumptionDialog .waiter-product small{margin:0;font-size:.72rem;color:#52665a}
+#waiterConsumptionDialog .consumption-product-image{display:grid;width:100%;height:auto;aspect-ratio:4/3}
+#waiterConsumptionDialog .consumption-product-image img{display:block;width:100%;height:100%;object-fit:cover}
+#waiterConsumptionDialog .waiter-product-control{width:auto;margin:0;padding:3px;gap:2px;background:#f1f5ef;border:0;display:flex;align-items:center;border-radius:999px}
+#waiterConsumptionDialog .waiter-product-control button{display:grid;place-items:center;border:0;border-radius:50%;width:30px;height:30px;padding:0;background:#a97e43;color:#fff;font-size:19px;flex:none}
+#waiterConsumptionDialog .waiter-product-control button:disabled{background:#e2e7e1;color:#8e9b90;opacity:1}
+#waiterConsumptionDialog .waiter-product-card.is-exhausted{background:#f1f2f1;color:#646b66}
+#waiterConsumptionDialog .waiter-product-card.is-exhausted .consumption-product-image{filter:grayscale(1);opacity:.65}
+#waiterConsumptionDialog .waiter-product-feedback{order:2;font-size:.72rem;color:#386447;margin:0}
+.waiter-consumption-footer{display:flex;align-items:center;justify-content:flex-end;gap:10px;border-top:1px solid #e7ece6;padding-top:10px}
+.waiter-consumption-footer>button{min-height:44px;padding:10px 16px;font-size:.84rem}
+#waiterConsumptionDialog #waiterStatus{font-size:.76rem;min-height:0;margin:0;line-height:1.5}#waiterConsumptionDialog #waiterStatus:empty{display:none}
+#waiterConsumptionDialog[data-step="3"] .waiter-layout{grid-template-columns:1fr}
+#waiterConsumptionDialog[data-step="3"] .waiter-account-column{grid-column:1;max-width:850px;width:100%;margin:auto;height:100%}
+#waiterConsumptionDialog[data-step="3"] .waiter-current-consumption,#waiterConsumptionDialog[data-step="3"] .waiter-selection-head>.consumption-fold{display:none}
+#waiterConsumptionDialog[data-step="3"] #waiterOrderForm{display:block;overflow-y:auto;max-height:100%}
+#waiterConsumptionDialog[data-step="3"] #waiterCart{overflow:visible;flex:none;margin:12px 0}
+#waiterConsumptionDialog[data-step="3"] .waiter-line-values{margin-top:12px;margin-bottom:6px}
+@media(max-width:899px){
+ #waiterConsumptionDialog{width:calc(100vw - 12px);max-height:calc(100dvh - 12px)}
+ #waiterConsumptionDialog .waiter-consumption-surface{height:calc(100dvh - 12px);max-height:calc(100dvh - 12px);padding:12px;gap:10px}
+ #waiterConsumptionDialog .waiter-consumption-head{align-items:start;gap:8px}.waiter-consumption-head small{font-size:.64rem}
+ #waiterConsumptionDialog .waiter-consumption-head h2{font-size:20px}.waiter-consumption-tools{gap:6px}
+ #waiterConsumptionDialog .waiter-layout{display:flex;flex-direction:column;gap:10px}
+ #waiterConsumptionDialog .waiter-account-column{flex:0 0 auto;max-height:35dvh;gap:8px}
+ #waiterConsumptionDialog .waiter-catalog{flex:1;order:1}
+ #waiterConsumptionDialog .waiter-account-column{order:0}
+ #waiterConsumptionDialog[data-step="2"] .waiter-current-consumption{order:2}
+ #waiterConsumptionDialog[data-step="2"] #waiterOrderForm{order:1}
+ #waiterConsumptionDialog #waiterProducts{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ #waiterConsumptionDialog .waiter-product-card{padding:8px}.waiter-consumption-dialog .consumption-product-price{flex-wrap:wrap}
+ #waiterConsumptionDialog .waiter-product-control button{width:34px;height:34px}
+ #waiterConsumptionDialog .waiter-filters{grid-template-columns:minmax(0,1fr)}
+ #waiterConsumptionDialog[data-step="3"] .waiter-account-column{flex:1;max-height:none}
+ #waiterConsumptionDialog .waiter-consumption-footer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:8px}
+ #waiterConsumptionDialog .waiter-consumption-footer>button{padding:9px 7px;font-size:.76rem}
+}

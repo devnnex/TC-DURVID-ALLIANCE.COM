@@ -5523,7 +5523,8 @@ input,select,textarea{max-width:100%;min-width:0}
 .is-compact-consumption .consumption-product-card.just-removed { border-color:#b18b4e;background:#fcf8f0;box-shadow:0 0 0 3px #b18b4e20; }
 .is-compact-consumption .consumption-catalog-feedback { min-height:1em;margin:3px 0 0;font-size:.72rem;color:#386447; }
 .is-compact-consumption .consumption-catalog-feedback:empty { display:none; }
-.is-compact-consumption .consumption-fold { width:28px;height:28px;padding:0;flex-shrink:0; }
+.is-compact-consumption .consumption-fold { width:40px;height:40px;min-width:40px;padding:7px;flex-shrink:0; }
+.is-compact-consumption .consumption-fold>svg { display:block;width:24px;height:24px;min-width:24px;stroke-width:2.2; }
 #consumptionDialog.is-compact-consumption #tableConsumptionPreview .table-consumption-preview-head { display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px; }
 .is-compact-consumption .consumption-selection-head { align-items:center;gap:6px; }
 .is-compact-consumption .consumption-selection-head>strong { flex:1; }

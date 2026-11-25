@@ -4115,7 +4115,10 @@ const App = (() => {
       }
       const collapsed=consumptionCollapsed[key];panel.classList.toggle('is-collapsed',collapsed);
       toggle.setAttribute('aria-expanded',String(!collapsed));toggle.setAttribute('aria-label',(collapsed?'Expandir ':'Encoger ')+(key==='current'?'consumo actual':'selección actual'));
-      toggle.innerHTML=icon(collapsed?'chevron-down':'chevron-up',16);
+      if(toggle.dataset.folded!==String(collapsed)){
+        toggle.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(collapsed?'m6 9 6 6 6-6':'m6 15 6-6 6 6')+'"/></svg>';
+        toggle.dataset.folded=String(collapsed);
+      }
       cart?.classList.toggle('has-collapsed-'+key,collapsed);
     }
   };
