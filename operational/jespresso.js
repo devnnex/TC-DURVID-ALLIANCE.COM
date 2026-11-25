@@ -74,17 +74,17 @@ if (window.BRANCH_CONFIG?.slug && window.BRANCH_CONFIG.slug!=='gcobarf') window.
   }
   function stockIndicators(){
     if(!['cocteleria','cafeteria'].includes(window.BRANCH_CONFIG?.slug)||tab!=='recipe'||!current())return;
-    const shortages=window.MaterialsPanel?.recipeShortages(current(),model),byLine=new Map();
+    const shortages=window.MaterialsPanel?.recipeShortages(current(),model),initialSupply=window.MaterialsPanel?.hasRecipeSupply(current().id)===false,byLine=new Map();
     for(const shortage of shortages||[])for(const index of shortage.indexes)byLine.set(index,shortage);
     for(const warning of root()?.querySelectorAll('[data-j-stock-warning]')||[]){
       const shortage=byLine.get(Number(warning.dataset.jStockWarning)),row=warning.closest('tr'),cell=warning.closest('td');
-      cell.classList.toggle('jr-stock-insufficient',!!shortage);warning.hidden=!shortage;
+      cell.classList.toggle('jr-stock-insufficient',!!shortage&&!initialSupply);cell.classList.toggle('jr-stock-auto-supply',!!shortage&&initialSupply);warning.hidden=!shortage;
       for(const control of row.querySelectorAll('textarea,[data-j-final],[data-j-path$=".quantity"]')){
         if(shortage)control.setAttribute('aria-describedby',warning.id);else control.removeAttribute('aria-describedby');
       }
       if(shortage){
         const unit=shortage.unit==='u'||shortage.unit==='unit'?'unidades':shortage.unit;
-        const message='No alcanza '+shortage.name+'. Disponible: '+decimal(shortage.available)+' '+unit+'. Necesitas: '+decimal(shortage.needed)+' '+unit+'. Faltan: '+decimal(shortage.missing)+' '+unit+'. Debes abastecer este insumo.';
+        const message=(initialSupply?'Abastecimiento inicial · ':'No alcanza ')+shortage.name+'. Disponible: '+decimal(shortage.available)+' '+unit+'. Necesitas: '+decimal(shortage.needed)+' '+unit+'. Faltan: '+decimal(shortage.missing)+' '+unit+'. '+(initialSupply?'Al agregar el producto al Menú Digital, completaremos los insumos de esta receta automáticamente.':'Debes abastecer este insumo para preparar más. Registra una entrada en Macro de Insumos o aumenta la capacidad del producto.');
         if(warning.textContent!==message)warning.textContent=message;
       }
     }

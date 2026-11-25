@@ -19,9 +19,9 @@ for(const branch of ['cocteleria','cafeteria'])test(branch+': la celda avisa al 
   await page.reload();await expect(page.locator('#costingReload')).toBeEnabled();
   const row=page.locator('[data-j-line="0"]'),cell=row.locator('td').first(),warning=row.locator('[data-j-stock-warning]');
   await row.locator('[data-j-action=source]').click();await page.getByRole('option',{name:'Leche · ml',exact:true}).click();
-  await expect(cell).toHaveClass(/jr-stock-insufficient/);await expect(cell).toHaveCSS('animation-name','jr-stock-pulse');
-  await expect(warning).toContainText('Disponible: 500 ml. Necesitas: 1.000 ml. Faltan: 500 ml. Debes abastecer');
-  await expect(page.locator('[data-j-line="1"] td').first()).not.toHaveClass(/jr-stock-insufficient/);
+  await expect(cell).toHaveClass(/jr-stock-auto-supply/);await expect(cell).toHaveCSS('animation-name','none');
+  await expect(warning).toContainText('Disponible: 500 ml. Necesitas: 1.000 ml. Faltan: 500 ml. Al agregar el producto al Menú Digital');
+  await expect(page.locator('[data-j-line="1"] td').first()).not.toHaveClass(/jr-stock-auto-supply/);
   await expect(row.locator('textarea')).toHaveAttribute('aria-describedby','jr-stock-warning-0');
   await page.locator('[data-j-path=name]').fill('Otro nombre');await expect(warning).toBeVisible();
   await page.locator('#costingSave').click();await expect(page.locator('#costingStatus')).toContainText('Receta guardada');await expect(warning).toBeVisible();
@@ -35,7 +35,7 @@ for(const branch of ['cocteleria','cafeteria'])test(branch+': la celda avisa al 
     state.operations.ingredients.find((i:any)=>i.id==='raw-milk').quantity=1500;localStorage.setItem(key,JSON.stringify(state));
     await (window as any).MaterialsPanel.refresh();
   },branch);
-  await expect(warning).toBeHidden();await expect(cell).not.toHaveClass(/jr-stock-insufficient/);
+  await expect(warning).toBeHidden();await expect(cell).not.toHaveClass(/jr-stock-auto-supply/);
   await expect(row.locator('textarea')).not.toHaveAttribute('aria-describedby');
   await row.locator('[data-j-final]').fill('500');await expect(warning).toContainText('Necesitas: 2.000 ml. Faltan: 500 ml.');
   await row.locator('[data-j-final]').fill('1000');await expect(warning).toBeHidden();

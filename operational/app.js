@@ -34,7 +34,7 @@ const App = (() => {
   const USER_CREDENTIALS_CACHE_KEY = "tienda_napoles_user_credentials_v1";
   const PWA_BRAND_CACHE = "alliance-"+window.BRANCH_CONFIG.slug+"-pwa-brand-v1";
   const recipeInventory = () => !!window.BRANCH_CONFIG?.slug && window.BRANCH_CONFIG.slug!=='gcobarf';
-  const ADMIN_SECTION_KEYS = ["dashboard", "service", "accounts", "tips", "inventory", "movements", "income", "costing", /* "assistant", -- activar de nuevo cuando se solicite */ "menu", "brand", "supplies", "kitchen", "customers", "cash"];
+  const ADMIN_SECTION_KEYS = ["dashboard", "service", "accounts", "tips", "inventory", "movements", "income", "costing", "materials", /* "assistant", -- activar de nuevo cuando se solicite */ "menu", "brand", "supplies", "kitchen", "customers", "cash"];
   const CATEGORY_PRESETS = ["Snack", "Bebidas", "Medicina", "Otros"];
   const REQUEST_IMAGES = {
     waiter: "images/mesero.png",
@@ -641,17 +641,17 @@ const App = (() => {
   const isBoss = (user = state.currentUser) => user?.role === "boss";
   const isWaiter = (user = state.currentUser) => user?.role === "waiter";
   const roleLabel = (role) => ({ boss: "Jefe", admin: "Administrador", worker:"Trabajador", waiter: "Mesero",kitchen:"Cocina" }[role] || "Usuario");
-  const sectionReadPermission={dashboard:'home.read',service:'service.read',accounts:'accounts.read',tips:'sales.read',inventory:'inventory.read',costing:'inventory.read',movements:'movements.read',income:'sales.read',assistant:'assistant.read',menu:'tables.manage',brand:'brand.manage',users:'administration.manage',supplies:'supplies.read',kitchen:'kitchen.read',customers:'customers.read',cash:'cash.read'};
+  const sectionReadPermission={dashboard:'home.read',service:'service.read',accounts:'accounts.read',tips:'sales.read',inventory:'inventory.read',costing:'inventory.read',materials:'inventory.read',movements:'movements.read',income:'sales.read',assistant:'assistant.read',menu:'tables.manage',brand:'brand.manage',users:'administration.manage',supplies:'supplies.read',kitchen:'kitchen.read',customers:'customers.read',cash:'cash.read'};
   const normalizedUserPermissions = (user = state.currentUser) => {
     if(!user||!Array.isArray(user.permissions))return [];
     const live=OracleDb.user();if(!live||live.id!==user.id)return [];
-    const sections=[...new Set(user.permissions)].filter(section=>[...ADMIN_SECTION_KEYS,'users'].includes(section)&&document.querySelector('[data-admin-section="'+section+'"]')&&(section!=='tips'||tipsEnabled()));
+    const inherited=[...user.permissions];if(user.permissions.includes("inventory")&&document.querySelector("#materials"))inherited.push("materials");const sections=[...new Set(inherited)].filter(section=>[...ADMIN_SECTION_KEYS,'users'].includes(section)&&document.querySelector('[data-admin-section="'+section+'"]')&&(section!=='tips'||tipsEnabled()));
     // Own-account access is universal; it never grants access to managing other users.
     const allowed=OracleDb.isDemo?sections:sections.filter(section=>section==='users'||OracleDb.permission(sectionReadPermission[section]));
     return personsOnly()?allowed.filter(section=>!['service','accounts','menu'].includes(section)):allowed;
   };
   const canAccessAdminSection = (section, user = state.currentUser) => normalizedUserPermissions(user).includes(section);
-  const firstAllowedAdminSection = (user = state.currentUser) => normalizedUserPermissions(user)[0] || null;
+  const firstAllowedAdminSection = (user = state.currentUser) => normalizedUserPermissions(user).find(section=>section!=="service"||!["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)) || null;
   const canDeleteRecords = () => isBoss();
 
   const syncAdminSectionAccess = () => {
@@ -683,6 +683,7 @@ const App = (() => {
   const showAdminSection = (section = "dashboard") => {
 
     syncAdminSectionAccess();
+    if(section==="service"&&["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug))section=firstAllowedAdminSection();
     if (section === "tips" && !tipsEnabled()) section = canAccessAdminSection("accounts") ? "accounts" : firstAllowedAdminSection();
     if (!canAccessAdminSection(section)) section = firstAllowedAdminSection();
     let notice=$('#adminAccessNotice');
@@ -697,6 +698,7 @@ const App = (() => {
     window.AllianceForms?.flush?.();
     if(state.currentUser) void OracleDb.trackSection?.(section)?.catch(()=>{});
     state.activeAdminSection = section;
+    window.MaterialsPanel?.activateSection(section);
     $$("[data-admin-section]").forEach((el) => {
       el.classList.toggle("section-active", el.dataset.adminSection === section);
     });

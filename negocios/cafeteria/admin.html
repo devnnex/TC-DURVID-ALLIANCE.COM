@@ -55,11 +55,11 @@
       </div>
       <nav>
         <a data-nav-group="operation" href="#dashboard" data-admin-only><i data-lucide="layout-dashboard"></i> Inicio <span class="nav-request-badge" id="navRequestBadge" role="status" aria-label="Solicitudes pendientes" hidden>0</span></a>
-        <a data-nav-group="operation" href="#service" class="service-nav-link"><i data-lucide="scan-line"></i> Atender mesa</a>
         <a data-nav-group="operation" href="#accounts"><i data-lucide="receipt-text"></i> Cuentas</a>
         <a data-nav-group="operation" href="#tips" class="tips-nav-link" data-tip-feature hidden><i data-lucide="hand-coins"></i> Propinas</a>
         <a href="#inventory" data-admin-only><i data-lucide="boxes"></i> Menú Digital</a>
         <a href="#costing" data-admin-only><i data-lucide="calculator"></i> Costo de productos</a>
+        <a href="#materials" data-admin-only><i data-lucide="warehouse"></i> Macro de Insumos</a>
         <a href="#movements" data-admin-only><i data-lucide="arrow-left-right"></i> Movimientos</a>
         <a href="#income" data-admin-only><i data-lucide="circle-dollar-sign"></i> Ventas</a>
         <!-- Asistente IA en pausa; descomentar también su clave en operational/app.js para reactivarlo.
@@ -86,6 +86,7 @@
     </aside>
 
     <main class="admin-app">
+<section class="panel materials-panel" id="materials" data-admin-section="materials" data-admin-only><section id="materialsContent"></section></section>
 <section class="panel cost-panel" id="costing" data-admin-section="costing" data-admin-only><div class="section-head"><div><span class="eyebrow">Control de rentabilidad</span><h2>Costo de productos</h2><p>Descubre cuánto te cuesta preparar un producto y cuánto te queda al venderlo.</p></div><div class="cost-toolbar"><button class="ghost" id="costingReload" type="button">Recargar</button><button class="ghost" id="costingExcel" type="button">Descargar Excel</button><button class="primary" id="costingSave" type="button">Guardar en tu cuenta</button></div></div><p id="costingStatus" role="status" aria-live="polite">Abre la sección para consultar los datos.</p><div id="costingContent"></div></section>
       <header class="admin-header" id="dashboard" data-admin-section="dashboard">
         <div>

@@ -181,3 +181,13 @@ Se corrigieron los indicadores de cafetería y coctelería para usar la capacida
 - Tres pruebas antiguas de `gcobarf-materials-history.spec.ts` siguen fallando por expectativas que no coinciden con la interfaz anterior (editor de producción, selector de unidad editable y posición de columna). Se reprodujeron los mismos tres fallos en un worktree separado del commit base `27c48a8`; esos flujos no se modificaron. El fallo de filtrado producido por la nueva tarjeta con `display:grid` sí se corrigió y su regresión final aprobó.
 
 Guía funcional y límites de interpretación: [Costos e historial de insumos](material-accounting.md).
+
+## Macro independiente y números proporcionados — 25 de noviembre de 2026
+
+En cafetería y coctelería, Macro de Insumos tiene acceso propio inmediatamente debajo de Costo de productos. Se retiró Atender mesa de su navegación; la atención desde Inicio conserva sus acciones y permisos. El costeo no contiene el botón ni el espacio de la macro y conserva sus borradores al cambiar de sección. La nueva sección hereda inventory.read; el acceso a costos y estadísticas privadas mantiene la comprobación anterior de OWNER/BOSS.
+
+Las tarjetas reducen la tipografía de cantidades e importes y redondean su presentación. Los costos inferiores a un peso conservan decimales útiles; el precio interno exacto está disponible en la ficha y sobre el precio de la tarjeta. No se redondean existencias, costos almacenados, disponibilidad ni cálculos contables. El costeo distingue entre abastecimiento inicial automático y reposición de una receta que ya fue abastecida, para no presentar como obligatorio un ingreso manual durante la incorporación inicial al Menú Digital.
+
+- 415 pruebas unitarias y comprobación TypeScript aprobadas.
+- Se validaron 17 escenarios de navegador en tandas: navegación y recarga de la sección independiente, permisos, presentación entre 320 y 1600 px, redondeo sin modificar datos, costeo sin botones de macro, avisos de abastecimiento, incorporación de ingredientes nuevos o agotados, trabajo sin conexión y reintento con respuesta perdida. Incluye las regresiones de consumo desde Inicio, fotografías, estadísticas e indicadores de GCOBARF. Las cinco comprobaciones finales se centraron en navegación y apertura rápida del consumo tras retirar el acceso anterior.
+- 79 comprobaciones en Oracle sobre abastecimiento inicial, unidades, merma, ingredientes compartidos, porciones, reintentos y cambios de capacidad, más la visita autenticada a la nueva sección. Datos de prueba aislados y retirados; los paquetes compilaron sin errores.

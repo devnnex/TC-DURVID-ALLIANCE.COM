@@ -3,7 +3,7 @@ import {backend,ready,product} from './helpers/operational-backend';
 
 async function fullyVisible(page:Page,selector:string){const r=await page.locator(selector).evaluate(e=>{const b=e.getBoundingClientRect();return {top:b.top,bottom:b.bottom,left:b.left,right:b.right,h:innerHeight,w:innerWidth};});expect(r.top).toBeGreaterThanOrEqual(0);expect(r.bottom).toBeLessThanOrEqual(r.h+1);expect(r.left).toBeGreaterThanOrEqual(0);expect(r.right).toBeLessThanOrEqual(r.w+1);}
 
-for(const slug of ['cafeteria','cocteleria'])test(slug+': menú digital compacto y macro dentro del costeo',async({page})=>{
+for(const slug of ['cafeteria','cocteleria'])test(slug+': menú digital compacto y macro en sección independiente',async({page})=>{
  const server=await backend(page);server.context.locations[0].slug=slug;server.state.operations.ingredients=[{id:'milk',name:'Leche',unit:'u',quantity:5,unitCost:100,minStock:1}];
  await page.setViewportSize({width:1280,height:720});await ready(page,'',slug);await expect(page.locator('.admin-sidebar a[href="#inventory"]')).toHaveText('Menú Digital');await page.locator('.admin-sidebar a[href="#inventory"]').click();
  await expect(page.locator('#inventory h2')).toHaveText('Menú Digital');expect(await page.locator('#inventory .materials-tabs,#inventory [data-material-sync]').count()).toBe(0);
@@ -15,9 +15,9 @@ for(const slug of ['cafeteria','cocteleria'])test(slug+': menú digital compacto
  for(const [width,height] of [[1280,720],[1024,600],[390,844],[320,568]]){await page.setViewportSize({width,height});await fullyVisible(page,'#inventoryForm button[type=submit]');expect(await page.locator('#inventoryForm').evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);}
  await page.screenshot({path:'test-results/digital-menu-editor-mobile-'+slug+'.png'});await page.locator('#cancelInventoryEdit').click();await page.setViewportSize({width:1280,height:720});
  await page.locator('.admin-sidebar a[href="#costing"]').click();await expect(page.locator('#costingReload')).toBeHidden();await page.locator('#costingContent').evaluate(e=>e.setAttribute('data-retained','yes'));
- await page.locator('#openCostingMaterials').click();await expect(page.locator('#materialsContent')).toContainText('Leche');await expect(page.locator('#costingContent')).toBeHidden();
- await page.locator('.materials-back').click();await expect(page.locator('#costingContent')).toBeVisible();await expect(page.locator('#costingContent')).toHaveAttribute('data-retained','yes');
- await page.locator('.admin-sidebar a[href="#inventory"]').click();await page.evaluate(()=>(window as any).MaterialsPanel.open(['milk']));await expect(page.locator('#costing')).toHaveClass(/section-active/);await expect(page.locator('[data-material-card=milk]')).toBeVisible();
+ await expect(page.locator('#costing [data-material-view],#openCostingMaterials')).toHaveCount(0);await expect(page.locator('.admin-sidebar a[href="#service"]')).toHaveCount(0);await page.locator('.admin-sidebar a[href="#materials"]').click();await expect(page.locator('#materials')).toHaveClass(/section-active/);await expect(page.locator('#materialsContent')).toContainText('Leche');
+ await page.locator('.admin-sidebar a[href="#costing"]').click();await expect(page.locator('#costingContent')).toBeVisible();await expect(page.locator('#costingContent')).toHaveAttribute('data-retained','yes');
+ await page.locator('.admin-sidebar a[href="#inventory"]').click();await page.evaluate(()=>(window as any).MaterialsPanel.open(['milk']));await expect(page.locator('#materials')).toHaveClass(/section-active/);await expect(page.locator('[data-material-card=milk]')).toBeVisible();
 });
 
 for(const slug of ['cafeteria','cocteleria'])test(slug+': cabecera móvil, consumo plegado y pulso único durante clics rápidos',async({page})=>{

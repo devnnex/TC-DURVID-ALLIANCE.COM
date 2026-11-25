@@ -28,6 +28,7 @@
 .jr-ingredients td.jr-stock-insufficient{background:#fff0ed;box-shadow:inset 0 0 0 2px #d4775e;animation:jr-stock-pulse 2s ease-in-out infinite}
 .jr-ingredients .jr-stock-warning{margin:7px 0;padding:8px;border:1px solid #e4aa98;border-radius:6px;background:#fff8f4;color:#8c2f1e;font-size:12px;line-height:1.5;font-weight:650;text-align:left}
 .jr-ingredients .jr-stock-warning[hidden]{display:none}
+.jr-ingredients td.jr-stock-auto-supply{background:#f4f8f4;box-shadow:inset 0 0 0 1px #bdd6c5}.jr-stock-auto-supply .jr-stock-warning{background:#edf7ef;border-color:#c9dfce;color:#315e40;font-weight:550;font-size:11px;line-height:1.55}
 @keyframes jr-stock-pulse{0%,100%{background-color:#fff4ef;box-shadow:inset 0 0 0 2px #d4775e}50%{background-color:#ffdfd5;box-shadow:inset 0 0 0 2px #b3442a}}
 @media(prefers-reduced-motion:reduce){.jr-ingredients td.jr-stock-insufficient{animation:none}}
 .jr-ingredients .jr-name-col{width:27%}.jr-ingredients .jr-quantity-col,.jr-ingredients .jr-final-weight-col{width:11%}.jr-ingredients .jr-unit-col{width:10%}.jr-ingredients .jr-price-col{width:20%}.jr-ingredients .jr-total-col{width:16%}.jr-ingredients .jr-action-col{width:5%}.jr-ingredients [data-j-final]{font-variant-numeric:tabular-nums}.jr-ingredients .jr-yield-badge{display:inline-flex;margin:5px 0;padding:3px 7px;border:1px solid #eed1a2;border-radius:6px;background:#fff4df;color:#875114;font-size:11px;font-weight:700}.jr-ingredients .jr-yield-badge[hidden]{display:none}.jr-ingredients td:has([data-j-line-total]){background:#f2f2f2}

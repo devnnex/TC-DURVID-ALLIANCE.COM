@@ -73,7 +73,7 @@ window.OracleDb = (() => {
   function user() {
     if(!context)return null;
     const p = context?.permissions?.[locationId()] || [];
-    const map = {dashboard:'home.read', service:'service.read', accounts:'accounts.read', tips:'sales.read', inventory:'inventory.read', costing:'inventory.read', movements:'movements.read', income:'sales.read', assistant:'assistant.read', menu:'tables.manage', brand:'brand.manage', users:'administration.manage',supplies:'supplies.read',kitchen:'kitchen.read',customers:'customers.read',cash:'cash.read'};
+    const map = {dashboard:'home.read', service:'service.read', accounts:'accounts.read', tips:'sales.read', inventory:'inventory.read', costing:'inventory.read', materials:'inventory.read', movements:'movements.read', income:'sales.read', assistant:'assistant.read', menu:'tables.manage', brand:'brand.manage', users:'administration.manage',supplies:'supplies.read',kitchen:'kitchen.read',customers:'customers.read',cash:'cash.read'};
     const owner = !!context.is_owner || p.includes('sales.manage'),roles=context.roles?.[locationId()]||[];
     return {id:context.user.id, full_name:context.user.name, username:context.user.username,last_login_at:context.user.last_login_at,
       role:owner?'boss':roles.includes('WORKER')?'worker':roles.includes('ADMIN')||p.includes('administration.manage')?'admin':p.includes('kitchen.write')&&!p.includes('service.write')?'kitchen':p.some(c=>['sales.write','inventory.read','movements.read','brand.manage','products.write','sales.read'].includes(c))?'admin':'waiter', is_active:true, business_slug:context.user.business_slug,

@@ -1,6 +1,6 @@
 # Costos e historial de insumos
 
-En cafetería y coctelería, abre **Costo de productos → Macro de insumos**. **Existencias** muestra cantidad física, cantidad comprometida en cuentas abiertas, disponibilidad, costo promedio por unidad base y valor de las existencias. Los costos y **Estadísticas y entradas** están reservados al propietario, al jefe de la sucursal y al administrador temporal que tiene rol de propietario. El servidor comprueba el rol en cada consulta; un permiso general de ventas no concede acceso a estas estadísticas.
+En cafetería y coctelería, abre **Macro de Insumos**, justo debajo de **Costo de productos** en la navegación. Es una sección independiente; la hoja de costeo conserva sus recetas y borradores al cambiar entre ambas. **Existencias** muestra cantidad física, cantidad comprometida en cuentas abiertas, disponibilidad, costo promedio por unidad base y valor de las existencias. Los costos y **Estadísticas y entradas** están reservados al propietario, al jefe de la sucursal y al administrador temporal que tiene rol de propietario. El servidor comprueba el rol en cada consulta; un permiso general de ventas no concede acceso a estas estadísticas.
 
 ## Cómo se calculan los indicadores
 
@@ -8,7 +8,7 @@ En cafetería y coctelería, abre **Costo de productos → Macro de insumos**. *
 - **Capacidad:** preparaciones disponibles por receta, después de descontar las reservas de cuentas abiertas. Las capacidades individuales comparten insumos.
 - **Venta potencial:** suma de capacidad individual × precio de venta de cada producto habilitado, más los productos sin receta disponibles. Es una referencia por receta, no una promesa de poder vender simultáneamente todas las capacidades cuando comparten ingredientes; la interfaz lo indica.
 - **Entrada:** se convierte la cantidad a la unidad base antes de calcular el costo promedio. Por ejemplo, 1.000 g a $2/g más una entrada de 1 kg por $4.000 dejan 2.000 g a $3/g. Esa entrada conserva $4.000 y $4/g en el historial aunque el promedio cambie después.
-- Los totales se presentan en pesos enteros. Los costos por gramo, mililitro u otra unidad admiten fracciones para no mostrar como cero un costo pequeño. La base de existencias conserva su precisión existente de ocho decimales.
+- Los totales y los costos unitarios de las tarjetas que superan un peso se presentan en pesos enteros; los costos menores conservan fracciones útiles. Las cantidades se muestran con hasta dos decimales habituales y más precisión si son muy pequeñas. El costo interno puede consultarse sobre el precio de la tarjeta o en su ficha. El redondeo solo afecta la presentación: la base de existencias y los cálculos conservan su precisión existente de ocho decimales.
 
 ## Entradas, aumentos y ediciones
 

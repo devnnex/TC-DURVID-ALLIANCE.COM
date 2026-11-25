@@ -3,7 +3,7 @@ import { Activity,ArrowRight,Check,Eye,RefreshCw } from 'lucide-react';
 import { api } from './api';
 import '../../../operational/activity.js';
 import type { Context } from '../../../packages/shared/domain';
-export const sectionNames:Record<string,string>={dashboard:'Inicio',service:'Atender mesa',accounts:'Cuentas',inventory:'Inventario',movements:'Movimientos',income:'Ventas',assistant:'Asistente IA',menu:'Mesas y menú',brand:'Configuración',users:'Usuarios y accesos',activity:'Seguimiento',costing:'Costo de productos',tips:'Propinas',supplies:'Insumos y compras',kitchen:'Preparación en Inicio',customers:'Clientes y cartera',cash:'Turnos de Ventas'};
+export const sectionNames:Record<string,string>={dashboard:'Inicio',service:'Atender mesa',accounts:'Cuentas',inventory:'Inventario',materials:'Macro de Insumos',movements:'Movimientos',income:'Ventas',assistant:'Asistente IA',menu:'Mesas y menú',brand:'Configuración',users:'Usuarios y accesos',activity:'Seguimiento',costing:'Costo de productos',tips:'Propinas',supplies:'Insumos y compras',kitchen:'Preparación en Inicio',customers:'Clientes y cartera',cash:'Turnos de Ventas'};
 export type TeamEvent={id:string;actorId:string|null;actorName:string;locationId:string|null;locationName:string;section:string;action:string;summary:string;entityId?:string;occurredAt?:string;deviceId?:string;at:string};
 type Page={items:TeamEvent[];hasMore:boolean};
 const demoLog=()=> (globalThis as unknown as {AllianceDemoActivity:{read:()=>TeamEvent[];record:(e:unknown)=>void}}).AllianceDemoActivity;
