@@ -5488,6 +5488,80 @@ input,select,textarea{max-width:100%;min-width:0}
  #consumptionDialog .consumption-cart .consumption-selection-head,#consumptionDialog .consumption-cart .consumption-selection-total { flex-shrink:0;flex-wrap:wrap;gap:6px; }
 }
 @media(max-width:899px) { #consumptionDialog .consumption-cart { order:2; } }
+
+/* Compact table workspace, limited to Cafetería and Coctelería. */
+#consumptionDialog.is-compact-consumption #consumptionForm { gap:16px; }
+.is-compact-consumption #consumptionForm>.section-head { align-items:center;gap:20px;margin:0;min-height:0; }
+.is-compact-consumption #consumptionForm>.section-head>div:first-child { min-width:0; }
+.is-compact-consumption #consumptionDialogTitle { margin:2px 0;font-size:clamp(1.25rem,2vw,1.8rem);line-height:1.18; }
+.is-compact-consumption .consumption-last-added { margin-top:4px;font-size:.68rem; }
+.is-compact-consumption .consumption-header-tools { display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap; }
+#consumptionDialog.is-compact-consumption .consumption-header-tools .table-session-actions { margin:0;padding:0;border:0;background:none;gap:7px; }
+#consumptionDialog.is-compact-consumption .consumption-header-tools .table-session-actions button { padding:10px 12px;min-height:40px;font-size:.76rem; }
+.is-compact-consumption .consumption-header-tools>.icon-btn { width:40px;height:40px;flex-shrink:0; }
+#consumptionDialog.is-compact-consumption .consumption-editor { padding-right:0;overflow:hidden;gap:10px; }
+#consumptionDialog.is-compact-consumption .consumption-workspace { gap:10px;min-height:0;overflow-y:auto;align-content:start; }
+.is-compact-consumption .product-picker-field>label { font-size:.76rem; }
+.is-compact-consumption #consumptionProductHint { font-size:.7rem; }
+.is-compact-consumption .consumption-catalog { margin-top:10px; }
+.is-compact-consumption .consumption-categories { padding:9px 0; }
+.is-compact-consumption .consumption-product-grid { max-height:none;overflow:visible;grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); }
+.is-compact-consumption .consumption-product-card { padding:10px;cursor:default;gap:10px;transition:border-color .12s,box-shadow .12s,background .12s; }
+.is-compact-consumption .consumption-product-card.is-in-selection { border-color:#93b29f; }
+.is-compact-consumption .consumption-product-pick { display:grid;gap:8px;border:0;padding:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer;min-width:0; }
+.is-compact-consumption .consumption-product-pick>strong { font-size:.86rem;line-height:1.35;overflow-wrap:anywhere; }
+.is-compact-consumption .consumption-product-pick>small { font-size:.72rem;color:#52665a; }
+.is-compact-consumption .consumption-product-pick:disabled { cursor:not-allowed;color:inherit;opacity:1; }
+.is-compact-consumption .consumption-product-price { flex-wrap:wrap; }
+.is-compact-consumption .consumption-product-price>b { font-size:.91rem;font-variant-numeric:tabular-nums; }
+.is-compact-consumption .consumption-product-steps { display:flex;align-items:center;gap:2px;margin-left:auto;padding:3px;border-radius:999px;background:#f1f5ef; }
+.is-compact-consumption .consumption-product-steps button { width:29px;height:29px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:#a97e43;color:white;cursor:pointer;transition:transform .1s,background .1s; }
+.is-compact-consumption .consumption-product-steps button:disabled { background:#e2e7e1;color:#8e9b90;cursor:default; }
+.is-compact-consumption .consumption-product-steps button:active:not(:disabled) { transform:scale(.86);background:#234e3b; }
+.is-compact-consumption .consumption-product-steps output { min-width:23px;text-align:center;font-size:.81rem;font-weight:800;font-variant-numeric:tabular-nums;color:#234e3b; }
+.is-compact-consumption .consumption-product-card.just-added { border-color:#377451;background:#f2f8f1;box-shadow:0 0 0 3px #4f936122; }
+.is-compact-consumption .consumption-product-card.just-removed { border-color:#b18b4e;background:#fcf8f0;box-shadow:0 0 0 3px #b18b4e20; }
+.is-compact-consumption .consumption-catalog-feedback { min-height:1em;margin:3px 0 0;font-size:.72rem;color:#386447; }
+.is-compact-consumption .consumption-catalog-feedback:empty { display:none; }
+.is-compact-consumption .consumption-fold { width:28px;height:28px;padding:0;flex-shrink:0; }
+#consumptionDialog.is-compact-consumption #tableConsumptionPreview .table-consumption-preview-head { display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px; }
+.is-compact-consumption .consumption-selection-head { align-items:center;gap:6px; }
+.is-compact-consumption .consumption-selection-head>strong { flex:1; }
+.is-compact-consumption .is-collapsed .table-consumption-preview-lines,.is-compact-consumption .is-collapsed .consumption-selection-lines { display:none; }
+#consumptionDialog.is-compact-consumption .consumption-cart #tableConsumptionPreview.is-collapsed { flex:0 0 auto;min-height:0;height:auto;padding:14px 16px; }
+.is-compact-consumption #tableConsumptionPreview.is-collapsed .table-consumption-preview-head { padding-bottom:0;border:0; }
+#consumptionDialog.is-compact-consumption .consumption-cart .consumption-selection.is-collapsed { flex:0 0 auto;max-height:none; }
+.is-compact-consumption .consumption-selection.is-collapsed .consumption-selection-total { padding-top:5px;font-size:.75rem; }
+#consumptionDialog.is-compact-consumption .consumption-cart.has-collapsed-current .consumption-selection:not(.is-collapsed):not([hidden]) { flex:1;max-height:none; }
+.consumption-credit-panel { box-sizing:border-box;width:min(660px,calc(100vw - 28px));max-height:85dvh;overflow-y:auto;padding:24px;border:1px solid #dce5dd;border-radius:22px;background:#fff;color:#253a2e;box-shadow:0 22px 85px #203c2938; }
+.consumption-credit-panel::backdrop { background:#152c2138;backdrop-filter:blur(3px); }
+.consumption-credit-panel>header { display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:18px; }
+.consumption-credit-panel>header small { color:#887041;font-size:.7rem;text-transform:uppercase;letter-spacing:.07em; }
+.consumption-credit-panel h3 { margin:5px 0 0;font-size:1.3rem; }
+#consumptionDialog .consumption-credit-panel .op-credit-consumption { display:grid;grid-template-columns:1fr;padding:0;margin:0;border:0;background:none;gap:14px; }
+.consumption-credit-panel .op-credit-consumption>p { margin:0;font-size:.82rem;line-height:1.6; }
+.consumption-credit-panel .op-credit-consumption>button { width:100%; }
+.consumption-credit-panel .op-credit-consumption label { min-width:0; }
+.is-compact-consumption .consumption-header-tools [hidden],.is-compact-consumption #consumptionQueueButton[hidden] { display:none!important; }
+@media(min-width:900px) {
+ #consumptionDialog.is-compact-consumption #consumptionForm { height:min(94dvh,940px);max-height:94dvh;padding:20px; }
+ #consumptionDialog.is-compact-consumption .consumption-layout { gap:18px; }
+ #consumptionDialog.is-compact-consumption .modal-actions { position:static;padding-top:10px; }
+}
+@media(max-width:899px) {
+ #consumptionDialog.is-compact-consumption #consumptionForm { max-height:96dvh;gap:12px;padding:16px; }
+ .is-compact-consumption #consumptionForm>.section-head { flex-wrap:wrap;gap:10px; }
+ .is-compact-consumption .consumption-header-tools { width:100%;justify-content:flex-end;gap:6px; }
+ #consumptionDialog.is-compact-consumption .consumption-header-tools .table-session-actions { flex:1; }
+ #consumptionDialog.is-compact-consumption .consumption-header-tools .table-session-actions button { font-size:0;width:36px;height:36px;padding:7px; }
+ #consumptionDialog.is-compact-consumption #viewTableConsumption { display:none; }
+ .is-compact-consumption .consumption-product-grid { grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:9px; }
+ #consumptionDialog.is-compact-consumption .consumption-workspace { overflow:visible; }
+ #consumptionDialog.is-compact-consumption .modal-actions { grid-template-columns:repeat(2,minmax(0,1fr));gap:8px; }
+ .is-compact-consumption .consumption-cart { max-height:440px;overflow:auto; }
+ .is-compact-consumption .table-consumption-preview-lines { max-height:190px;overflow:auto; }
+ #consumptionDialog.is-compact-consumption .consumption-credit-panel .op-credit-consumption { order:initial; }
+}
 @media(max-width:620px) { .consumption-product-grid { grid-template-columns:repeat(2,minmax(0,1fr));max-height:330px;gap:9px; }.consumption-product-card { padding:8px; }.inventory-photo-field { flex-wrap:wrap; }.inventory-photo-field label { flex-basis:calc(100% - 86px); } }
 #inventory .inventory-heading-meta .inventory-sync-status{width:auto;justify-content:center;text-align:center;gap:0;min-height:28px;padding:5px 12px;font-size:11px;line-height:1.3}
 #inventory .inventory-heading-meta .inventory-sync-status>svg{display:none}

@@ -4097,6 +4097,57 @@ const App = (() => {
 
   let consumptionCategory = '';
   let consumptionCatalogLimit = 48;
+  const compactConsumption = () => ['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug);
+  const consumptionCollapsed = {current:false,selection:false};
+  const syncConsumptionPanels = () => {
+    if (!compactConsumption()) return;
+    const cart = $('#consumptionDialog .consumption-cart');
+    for (const [key,id,header,body] of [
+      ['current','tableConsumptionPreview','.table-consumption-preview-head','.table-consumption-preview-lines'],
+      ['selection','consumptionSelection','.consumption-selection-head','#consumptionSelectionLines']
+    ]) {
+      const panel = $('#'+id), heading = panel?.querySelector(header);
+      if (!heading) continue;
+      let toggle = heading.querySelector('[data-consumption-fold]');
+      if (!toggle) {
+        toggle = document.createElement('button');toggle.type='button';toggle.className='icon-btn consumption-fold';toggle.dataset.consumptionFold=key;
+        const content=panel.querySelector(body);content.id ||= id+'Body';toggle.setAttribute('aria-controls',content.id);heading.append(toggle);
+      }
+      const collapsed=consumptionCollapsed[key];panel.classList.toggle('is-collapsed',collapsed);
+      toggle.setAttribute('aria-expanded',String(!collapsed));toggle.setAttribute('aria-label',(collapsed?'Expandir ':'Encoger ')+(key==='current'?'consumo actual':'selección actual'));
+      toggle.innerHTML=icon(collapsed?'chevron-down':'chevron-up',16);
+      cart?.classList.toggle('has-collapsed-'+key,collapsed);
+    }
+  };
+  const prepareCompactConsumption = () => {
+    if (!compactConsumption()) return;
+    const dialog=$('#consumptionDialog'),form=$('#consumptionForm'),head=form.querySelector('.section-head');
+    dialog.classList.add('is-compact-consumption');
+    consumptionCollapsed.current=false;consumptionCollapsed.selection=false;
+    let tools=$('#consumptionHeaderTools');
+    if (!tools) {
+      tools=document.createElement('div');tools.id='consumptionHeaderTools';tools.className='consumption-header-tools';
+      const close=head.querySelector('[data-cancel-consumption]');head.append(tools);tools.append($('#tableSessionActions'),close);
+      // Keep the existing quantity input and keyboard flow available in optional editing.
+      // The product cards replace the always-visible quantity field.
+      const quantity=form.querySelector('.consumption-quantity');quantity.classList.add('consumption-optional-quantity');form.querySelector('.consumption-optional-grid').prepend(quantity);
+      const feedback=document.createElement('p');feedback.id='consumptionCatalogFeedback';feedback.className='consumption-catalog-feedback';feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');form.querySelector('.product-picker-field').append(feedback);
+      dialog.addEventListener('close',()=>{$('#consumptionCreditPanel')?.hidePopover?.();});
+    }
+    const box=form.querySelector('.op-credit-consumption');
+    if (box&&!$('#consumptionCreditPanel')) {
+      const panel=document.createElement('section');panel.id='consumptionCreditPanel';panel.className='consumption-credit-panel';panel.setAttribute('popover','auto');panel.setAttribute('role','dialog');panel.setAttribute('aria-labelledby','consumptionCreditTitle');
+      panel.innerHTML='<header><div><small>Cartera de clientes</small><h3 id="consumptionCreditTitle">Pasar la cuenta a crédito</h3></div><button type="button" class="icon-btn" data-close-consumption-credit aria-label="Cerrar opciones de crédito">'+icon('x',19)+'</button></header>';
+      form.append(panel);panel.append(box);
+      const toggle=document.createElement('button');toggle.type='button';toggle.id='consumptionCreditToggle';toggle.className='icon-btn consumption-credit-toggle';toggle.setAttribute('aria-label','Abrir opciones de crédito');toggle.title='Pasar la cuenta a crédito';toggle.setAttribute('aria-controls',panel.id);toggle.setAttribute('aria-expanded','false');toggle.innerHTML=icon('wallet-cards',20);tools.insertBefore(toggle,tools.lastElementChild);
+      toggle.onclick=()=>panel.togglePopover();panel.querySelector('[data-close-consumption-credit]').onclick=()=>{panel.hidePopover();toggle.focus({preventScroll:true});};
+      panel.addEventListener('toggle',event=>toggle.setAttribute('aria-expanded',String(event.newState==='open')));
+    }
+    const creditToggle=$('#consumptionCreditToggle');if(creditToggle)creditToggle.hidden=!box||box.hidden;
+    $('#consumptionCreditPanel')?.hidePopover?.();
+    for(const button of tools.querySelectorAll('#tableSessionActions button')){button.setAttribute('aria-label',button.textContent.trim());button.title=button.textContent.trim();}
+    $('#consumptionCatalogFeedback').textContent='';
+  };
   const consumptionCapacities = () => window.MaterialsPanel?.selectionCapacities(state.consumptionDrafts.filter((_,i)=>i!==state.consumptionDraftEditIndex),$('#consumptionForm')?.session_item_id.value);
   const consumptionAvailability = (item, capacities) => {
     const inventory = inventoryFor(item), tracked = Object.prototype.hasOwnProperty.call(state.inventoryMeta, item.id);
@@ -4113,6 +4164,7 @@ const App = (() => {
     if (preview && selection && !preview.closest('.consumption-cart')) {
       const cart = document.createElement('aside');cart.className = 'consumption-cart';cart.setAttribute('aria-label','Consumo y selección de la cuenta');preview.before(cart);cart.append(preview,selection);
     }
+    syncConsumptionPanels();
     const picker = $('#consumptionForm .product-picker-field');if (!picker) return;
     let catalog = $('#consumptionCatalog');
     if (!catalog) {catalog = document.createElement('section');catalog.id = 'consumptionCatalog';catalog.className = 'consumption-catalog';catalog.setAttribute('aria-label','Productos del inventario');picker.append(catalog);}
@@ -4121,6 +4173,10 @@ const App = (() => {
     const products = all.filter(p=>!consumptionCategory||p.category_id===consumptionCategory);
     catalog.innerHTML = `<div class="consumption-catalog-head"><strong>Productos para vender</strong><small>${products.length} productos · disponibilidad actual</small></div><div class="consumption-categories" aria-label="Categorías"><button type="button" data-consumption-category="" aria-pressed="${!consumptionCategory}">Todos</button>${categories.map(c=>`<button type="button" data-consumption-category="${escapeHTML(c.id)}" aria-pressed="${c.id===consumptionCategory}">${escapeHTML(c.name)}</button>`).join('')}</div><div class="consumption-product-grid">${products.slice(0,consumptionCatalogLimit).map(item=>{
       const a = consumptionAvailability(item,capacities), disabled = a.out || a.checking;
+      if(compactConsumption()) {
+        const selected=state.consumptionDrafts.filter(d=>d.menuItemId===item.id).reduce((sum,d)=>sum+d.quantity,0);
+        return `<article class="consumption-product-card${disabled?' is-unavailable':''}${selected?' is-in-selection':''}" data-consumption-card="${escapeHTML(item.id)}"><button type="button" class="consumption-product-pick" data-catalog-product="${escapeHTML(item.id)}" ${disabled?'disabled':''} aria-label="${escapeHTML(item.name)} · ${escapeHTML(a.out?'Agotado':a.label)}"><span class="consumption-product-image">${item.image_url?`<img src="${escapeHTML(item.image_url)}" alt="" loading="lazy" decoding="async" width="160" height="120">`:`<span class="consumption-product-placeholder">${icon('utensils',32)}</span>`}${disabled?`<em>${a.out?'Agotado':'Consultando'}</em>`:''}</span><strong>${escapeHTML(item.name)}</strong><small>${a.label}</small></button><div class="consumption-product-price"><b>${money(item.price)}</b><div class="consumption-product-steps" role="group" aria-label="Cantidad de ${escapeHTML(item.name)}"><button type="button" data-consumption-step="-1" data-step-product="${escapeHTML(item.id)}" aria-label="Disminuir ${escapeHTML(item.name)}" ${!selected?'disabled':''}>${icon('minus',15)}</button><output aria-label="${escapeHTML(item.name)} en selección">${selected}</output><button type="button" data-consumption-step="1" data-step-product="${escapeHTML(item.id)}" aria-label="Aumentar ${escapeHTML(item.name)}" ${disabled?'disabled':''}>${icon('plus',15)}</button></div></div></article>`;
+      }
       return `<button type="button" class="consumption-product-card${disabled?' is-unavailable':''}" data-catalog-product="${escapeHTML(item.id)}" ${disabled?'disabled':''} aria-label="${escapeHTML(item.name)} · ${escapeHTML(a.out?'Agotado':a.label)}"><span class="consumption-product-image">${item.image_url?`<img src="${escapeHTML(item.image_url)}" alt="" loading="lazy" decoding="async" width="160" height="120">`:`<span class="consumption-product-placeholder">${icon('utensils',32)}</span>`}${disabled?`<em>${a.out?'Agotado':'Consultando'}</em>`:''}</span><strong>${escapeHTML(item.name)}</strong><small>${a.label}</small><span class="consumption-product-price"><b>${money(item.price)}</b><span aria-hidden="true">${icon('plus',17)}</span></span></button>`;
     }).join('') || '<p class="consumption-catalog-empty">No hay productos para esta búsqueda.</p>'}</div>${products.length>consumptionCatalogLimit?'<button type="button" class="ghost small" id="consumptionCatalogMore">Mostrar más productos</button>':''}<p class="consumption-catalog-note">Las recetas comparten insumos. La capacidad se actualiza con tu selección; confirmar valida las existencias.</p>`;
   };
@@ -4196,8 +4252,10 @@ const App = (() => {
     search.value = `${inventoryFor(item).code} · ${item.name}`;
     closeConsumptionProductOptions();
     renderConsumptionCatalog('',consumptionCapacities());
+    updateConsumptionDraftAction();
     $("#consumptionProductHint") && ($("#consumptionProductHint").textContent = `${item.name} seleccionado · escribe la cantidad y presiona Enter.`);
     window.requestAnimationFrame(() => {
+      if(compactConsumption())$('#consumptionOptionalFields').open=true;
       form.quantity.focus({ preventScroll: true });
     });
   };
@@ -7226,6 +7284,7 @@ const App = (() => {
   const updateConsumptionDraftAction = () => {
     const queue = $("#consumptionQueueButton");
     if (!queue) return;
+    if(compactConsumption()&&!$('#consumptionForm').session_item_id.value)queue.hidden=!($('#consumptionForm').menu_item_id.value||$('#consumptionForm').item_name.value.trim());
     queue.innerHTML = state.consumptionDraftEditIndex >= 0
       ? `${icon("save", 16)} Guardar cambio`
       : `${icon("list-plus", 16)} Añadir a selección`;
@@ -7351,6 +7410,36 @@ const App = (() => {
     return true;
   };
 
+  const stepConsumptionProduct = (id,delta,source) => {
+    if(!compactConsumption()||state.paymentProcessing||$('#consumptionSubmitButton')?.disabled)return;
+    const form=$('#consumptionForm'),item=state.items.find(i=>i.id===id);if(!item||form.session_item_id.value)return;
+    // Save an explicitly edited line before adjusting another card; retain its price and notes.
+    if((state.consumptionDraftEditIndex>=0||currentConsumptionDraft(form,{quiet:true}))&&!queueConsumptionDraft())return;
+    const next=state.consumptionDrafts.map(d=>({...d}));
+    const notes=form.notes.value.trim(),payerName=form.payer_name.value.trim();
+    const index=next.findLastIndex(d=>d.menuItemId===id&&(delta<0||d.notes===notes&&d.payerName===payerName));
+    if(delta>0){
+      const availability=consumptionAvailability(item,consumptionCapacities());if(availability.out||availability.checking)return;
+      if(index>=0&&next[index].quantity<100)next[index].quantity++;
+      else next.push({menuItemId:id,itemName:item.name,quantity:1,unitPrice:Number(item.price||0),notes,payerName});
+      if(window.MaterialsPanel&&!MaterialsPanel.check(next))return;
+    }else{
+      if(index<0)return;
+      if(next[index].quantity>1)next[index].quantity--;else next.splice(index,1);
+    }
+    state.consumptionDrafts=next;
+    // Search text is a filter, not an extra unconfirmed consumption line.
+    form.menu_item_id.value='';form.item_name.value='';form.quantity.value='';setCurrencyInputValue(form.unit_price,0);if($('#consumptionProductSearch'))$('#consumptionProductSearch').value='';
+    renderConsumptionSelection();closeConsumptionProductOptions();
+    const card=[...$('#consumptionCatalog').querySelectorAll('[data-consumption-card]')].find(c=>c.dataset.consumptionCard===id);
+    card?.classList.add(delta>0?'just-added':'just-removed');
+    window.setTimeout(()=>card?.classList.remove('just-added','just-removed'),450);
+    const count=next.filter(d=>d.menuItemId===id).reduce((sum,d)=>sum+d.quantity,0);
+    $('#consumptionCatalogFeedback').textContent=`${delta>0?'+1':'−1'} ${item.name} · ${count} en la selección`;
+    const focus=source?.dataset.consumptionStep?card?.querySelector(`[data-consumption-step="${delta}"]`):card?.querySelector('[data-catalog-product]');
+    (focus&&!focus.disabled?focus:card?.querySelector('[data-consumption-step="-1"]:not(:disabled)'))?.focus({preventScroll:true});
+  };
+
   const applyConsumptionRoleRestrictions = (form) => {
     if (!form) return;
     const waiter = isWaiter();
@@ -7435,6 +7524,7 @@ const App = (() => {
     preview.hidden = true;
     preview.innerHTML = `<div class="table-consumption-preview-head"><span class="table-consumption-preview-title"><span>Consumo actual</span><small>${productCount.toLocaleString("es-CO")} ${productCount === 1 ? "producto" : "productos"}</small></span><strong>${money(session?sessionTotal(session):0)}</strong></div><div class="table-consumption-preview-lines">${items.map((item) => { const formatted = formatConsumptionTimestamp(item.created_at); return `<div data-saved-consumption="${escapeHTML(item.id)}" data-session-id="${escapeHTML(session.id)}" tabindex="0" role="button" title="Doble clic para editar este consumo"><span class="table-consumption-item"><span>${Number(item.quantity || 0)} × ${escapeHTML(item.item_name)}</span>${formatted ? `<time datetime="${escapeHTML(item.created_at)}">${escapeHTML(formatted)}</time>` : ""}</span><strong>${money(Number(item.quantity || 0) * Number(item.unit_price || 0))}</strong></div>`; }).join("") || "<small>Sin consumos registrados.</small>"}</div>`;
     setTableConsumptionPreviewVisible(false);
+    syncConsumptionPanels();
   };
 
   const addConsumptionBatch = async (form, drafts) => {
@@ -7736,7 +7826,7 @@ const App = (() => {
       }
       const emptySearch = target === $("#consumptionProductSearch") && !target.value.trim();
       const quantity = target === form.quantity;
-      const neutralFocus = !target?.closest?.('input, textarea, select, button, a[href], summary, [contenteditable], [role="button"]');
+      const neutralFocus = !target?.closest?.('input, textarea, select, button, a[href], summary, [contenteditable], [role="button"]') || compactConsumption()&&!!target?.closest?.('[data-consumption-step],[data-catalog-product]');
       if ((!emptySearch && !quantity && !neutralFocus) || (!state.consumptionDrafts.length && !currentConsumptionDraft(form, { quiet: true }))) {
         lastSpaceAt = 0;
         return;
@@ -7799,6 +7889,8 @@ const App = (() => {
     renderConsumptionSelection();
     renderTableConsumptionPreview(session);
     renderLastConsumptionTime(session);
+    prepareCompactConsumption();
+    syncConsumptionPanels();
     closeConsumptionProductOptions();
     dialog.showModal();
     renderConsumptionProductOptions('');
@@ -9154,7 +9246,12 @@ const App = (() => {
       if (target.id === 'printCurrentTable') {const session = state.sessions.find(s=>s.id===$('#consumptionForm')?.session_id.value);if(session)printThermalReceipt(session);}
       if (target.dataset.consumptionCategory !== undefined) {consumptionCategory = target.dataset.consumptionCategory;consumptionCatalogLimit = 48;renderConsumptionProductOptions($('#consumptionForm')?.menu_item_id.value ? '' : $('#consumptionProductSearch')?.value || '');}
       if (target.id === 'consumptionCatalogMore') {consumptionCatalogLimit += 48;renderConsumptionProductOptions($('#consumptionForm')?.menu_item_id.value ? '' : $('#consumptionProductSearch')?.value || '');}
-      if (target.dataset.catalogProduct) await selectConsumptionProduct(target.dataset.catalogProduct);
+      if (target.dataset.consumptionFold) {const key=target.dataset.consumptionFold;consumptionCollapsed[key]=!consumptionCollapsed[key];syncConsumptionPanels();return;}
+      if (target.dataset.consumptionStep) {stepConsumptionProduct(target.dataset.stepProduct,Number(target.dataset.consumptionStep),target);return;}
+      if (target.dataset.catalogProduct) {
+        if(compactConsumption())stepConsumptionProduct(target.dataset.catalogProduct,1,target);
+        else await selectConsumptionProduct(target.dataset.catalogProduct);
+      }
       if (target.id === "releaseEmptyTable") {
         const sessionId = $("#consumptionForm")?.session_id.value || "";
         state.consumptionDrafts = [];

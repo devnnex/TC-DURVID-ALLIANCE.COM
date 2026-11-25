@@ -26,11 +26,11 @@ for(const slug of ['cocteleria','cafeteria'])test(slug+': catálogo con fotos, c
   await page.locator('.admin-sidebar [href="#dashboard"]').click();await page.locator('[data-open-table="table-0"]').first().click();
   const first=page.locator('[data-catalog-product="'+product+'"]'),other=page.locator('[data-catalog-product="'+second+'"]');
   await expect(first.locator('img')).toBeVisible();await expect(first).toContainText('2 para preparar');await expect(other).toContainText('1 para preparar');
-  await expect(page.locator('#consumptionProductOptions')).toBeHidden();await first.click();await page.locator('#consumptionForm [name=quantity]').fill('1');await page.locator('#consumptionQueueButton').click();
+  await expect(page.locator('#consumptionProductOptions')).toBeHidden();await first.click();
   await expect(first).toContainText('1 para preparar');await expect(other).toBeDisabled();await expect(other).toContainText('Agotado');
   await page.locator('#consumptionSubmitButton').click();await expect(page.locator('#consumptionDialog')).toBeHidden();
   await page.locator('[data-open-table="table-0"]').first().click();await expect(page.locator('#moveCurrentTable')).toBeVisible();await expect(page.locator('#printCurrentTable')).toBeVisible();
-  await first.click();await page.locator('#consumptionForm [name=quantity]').fill('1');await page.locator('#consumptionQueueButton').click();
+  await first.click();
   await expect(page.locator('#consumptionSelectionTotal')).toBeInViewport();
   await expect(first).toBeDisabled();expect(await first.locator('.consumption-product-image').evaluate(el=>getComputedStyle(el).filter)).toBe('grayscale(1)');
   await page.locator('#moveCurrentTable').click();await page.locator('#moveTableOptions label').filter({has:page.locator('[value="table-1"]')}).click();await page.locator('#moveTableForm [type=submit]').click();
