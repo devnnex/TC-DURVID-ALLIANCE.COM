@@ -87,7 +87,7 @@ window.OracleDb = (() => {
     if(!isPublic&&!skipLocal&&window.AllianceOffline?.canHandle(action,payload))return AllianceOffline.execute(action,payload,operationId,()=>pos(action,payload,operationId,true,metadata));
     const {fresh=false,...requestMetadata}=metadata;
     const body = {action, payload,...requestMetadata}; if(operationId) body.operation_id = operationId;
-    const isRead=['customer_history','orders_revision','getAdminSnapshot','get_inventory','get_income_report','get_inventory_movements','costing_load','costing_product_load','operations_snapshot','operations_device','getEvents','status','remote_bootstrap','listChatMessages'].includes(action)||(action==='query'&&payload.op==='select');
+    const isRead=['tips_snapshot','tips_source','customer_history','orders_revision','getAdminSnapshot','get_inventory','get_income_report','get_inventory_movements','costing_load','costing_product_load','operations_snapshot','operations_device','getEvents','status','remote_bootstrap','listChatMessages'].includes(action)||(action==='query'&&payload.op==='select');
     if(!isRead){writeGeneration++;readRequests.clear();try{return (await request('/pos',body)).value;}finally{writeGeneration++;readRequests.clear();}}
     const key=locationId()+':'+writeGeneration+':'+JSON.stringify(body);let entry=readRequests.get(key);
     if(fresh||!entry||Date.now()-entry.at>1000){entry={at:Date.now(),promise:request('/pos',body).then(r=>r.value)};readRequests.set(key,entry);entry.promise.catch(()=>{if(readRequests.get(key)===entry)readRequests.delete(key);});if(readRequests.size>80)readRequests.delete(readRequests.keys().next().value);}

@@ -18,8 +18,7 @@ for(const slug of ['cafeteria','cocteleria'])test(slug+': CRM claro, cumpleaños
   const customer=await page.evaluate(async()=>{const snapshot=await (window as any).OracleDb.remote('operations_snapshot');return snapshot.model.customers[0];});expect(customer.createdByName).toBe('Administrador de demostración');expect(customer.createdAt).toBe('2026-11-14T16:00:00.000Z');expect(customer.allowCredit).toBe(false);
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.locator('#customers').screenshot({path:'test-results/crm-mobile-'+slug+'.png'});
   await page.getByRole('button',{name:'Cumpleaños',exact:true}).click();await expect(card).toHaveCount(1);
-  await page.locator('.admin-sidebar [href="#inventory"]').click();await expect(page.locator('[data-material-refresh]')).toHaveCount(0);const badge=page.locator('.inventory-shared-sync');await expect(badge).toBeVisible();await expect(page.locator('.materials-tabs [data-material-sync]')).toHaveCount(0);
-  const badgeBox=await badge.boundingBox(),backup=await page.locator('.inventory-history-sync').boundingBox();expect(badgeBox!.y+badgeBox!.height).toBeLessThanOrEqual(backup!.y);
+  await page.locator('.admin-sidebar [href="#inventory"]').click();await expect(page.locator('[data-material-refresh]')).toHaveCount(0);await expect(page.locator('.inventory-shared-sync')).toHaveCount(0);await expect(page.locator('.inventory-history-sync')).toBeVisible();
 });
 
 for(const slug of ['cafeteria','cocteleria'])test(slug+': el mesero registra desde la comanda sin acceso al CRM y sincroniza una sola vez',async({page,context})=>{

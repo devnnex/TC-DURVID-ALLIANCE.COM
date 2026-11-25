@@ -191,3 +191,16 @@ Las tarjetas reducen la tipografía de cantidades e importes y redondean su pres
 - 415 pruebas unitarias y comprobación TypeScript aprobadas.
 - Se validaron 17 escenarios de navegador en tandas: navegación y recarga de la sección independiente, permisos, presentación entre 320 y 1600 px, redondeo sin modificar datos, costeo sin botones de macro, avisos de abastecimiento, incorporación de ingredientes nuevos o agotados, trabajo sin conexión y reintento con respuesta perdida. Incluye las regresiones de consumo desde Inicio, fotografías, estadísticas e indicadores de GCOBARF. Las cinco comprobaciones finales se centraron en navegación y apertura rápida del consumo tras retirar el acceso anterior.
 - 79 comprobaciones en Oracle sobre abastecimiento inicial, unidades, merma, ingredientes compartidos, porciones, reintentos y cambios de capacidad, más la visita autenticada a la nueva sección. Datos de prueba aislados y retirados; los paquetes compilaron sin errores.
+
+## Acceso a clientes y reparto trazable de propinas — 25 de noviembre de 2026
+
+En cafetería y coctelería se adelantó el directorio respecto del análisis de fidelización y se colocó Compras y pagos como acción principal de cada ficha, con historial independiente de Ver registro y desglose de importes adicionales. Disponible tiene más separación en las tarjetas de la macro; Estadísticas y entradas y Vincular receta permanecen comentados en estas sucursales.
+
+Propinas incorpora tres pasos para indicar personas, revisar importes y registrar el reparto. Conserva fuentes, pagos, responsables y personas; distingue lo cobrado de lo pendiente a crédito. La confirmación y la anulación se validan en el servidor. Se protege la corrección de ventas con propinas repartidas y se mantiene la operación local anterior de las otras sucursales.
+
+- 421 pruebas unitarias aprobadas, con conservación de centavos, reparto de pesos sobrantes, crédito y abonos, duplicados, saldo cambiado, anulación y permisos. TypeScript y sintaxis de scripts verificados.
+- 12 escenarios de navegador aprobaron la ficha directa, estilos móviles, macro, historial de costos, permisos y funcionamiento del CRM. La revisión final incluye reparto y anulación en ambas sucursales, respuesta perdida, conservación de nombres, detalles de pago y botones accesibles hasta 320 px y en orientación horizontal. Se comprobaron también las regresiones de comandas sin conexión en los cuatro negocios y clientes frecuentes.
+- 75 comprobaciones reales en Oracle en un negocio aislado: origen de la propina, conservación exacta de importes, reparto persistente, reintentos, intentos simultáneos con un único ganador, recibos aplicados a la venta, crédito pendiente, abonos, consultas paginadas sin alterar el saldo, permisos, separación de sucursales, anulación y protección de ventas. Los datos aislados fueron retirados y los paquetes compilaron sin errores.
+- Las fuentes de propina se consultan en páginas de 25 y el historial de repartos en páginas de 20. La descarga general conserva solo referencias compactas a ventas recientes con reparto, evitando incorporar todos los repartos y sus fuentes en cada sincronización.
+
+Guía y límites del registro: [Clientes y propinas](tips-and-client-access.md).

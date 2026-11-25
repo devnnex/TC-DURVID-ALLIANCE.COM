@@ -6278,6 +6278,7 @@ const App = (() => {
   };
 
   const renderTips = () => {
+    if(["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)&&window.TipsPanel){syncTipFeatureVisibility();if(tipsEnabled())TipsPanel.render(state.invoiceHistory);return;}
     syncTipFeatureVisibility();
     if (!tipsEnabled()) return;
     const kpis = $("#tipsKpis");

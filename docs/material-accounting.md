@@ -2,6 +2,8 @@
 
 En cafetería y coctelería, abre **Macro de Insumos**, justo debajo de **Costo de productos** en la navegación. Es una sección independiente; la hoja de costeo conserva sus recetas y borradores al cambiar entre ambas. **Existencias** muestra cantidad física, cantidad comprometida en cuentas abiertas, disponibilidad, costo promedio por unidad base y valor de las existencias. Los costos y **Estadísticas y entradas** están reservados al propietario, al jefe de la sucursal y al administrador temporal que tiene rol de propietario. El servidor comprueba el rol en cada consulta; un permiso general de ventas no concede acceso a estas estadísticas.
 
+Los accesos **Estadísticas y entradas** y **Vincular receta** están comentados temporalmente en la interfaz de cafetería y coctelería. Se conservan sus datos, módulos y comprobaciones de permisos; el detalle reciente de costos continúa en Editar insumo y el abastecimiento automático desde Costeo sigue funcionando.
+
 ## Cómo se calculan los indicadores
 
 - **Inversión:** cantidad física de cada insumo activo × su costo promedio, más el valor del inventario de productos sin receta. Un insumo compartido entre recetas se cuenta una sola vez. Incluye existencias comprometidas hasta que su consumo se descuenta; excluye insumos retirados.

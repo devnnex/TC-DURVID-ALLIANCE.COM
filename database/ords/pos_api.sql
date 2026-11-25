@@ -62,6 +62,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     is_boss:=ctx.get_boolean('is_owner');roles_value:=ctx.get_object('roles').get_array(l);IF roles_value IS NOT NULL THEN FOR i IN 0..roles_value.get_size-1 LOOP IF roles_value.get_string(i)='BOSS' THEN is_boss:=TRUE;END IF;END LOOP;END IF;
     IF a='query' THEN
       entity_value:=p.get_string('table');operation_value:=p.get_string('op');needed:=CASE entity_value WHEN 'business_settings' THEN 'brand.manage' WHEN 'restaurant_tables' THEN 'tables.manage' WHEN 'menu_categories' THEN 'products.write' WHEN 'menu_items' THEN 'products.write' ELSE 'service.write' END;need(needed);IF operation_value='delete' THEN boss;ELSIF p.has('values') THEN IF p.get('values').is_array THEN patches:=p.get_array('values');FOR i IN 0..patches.get_size-1 LOOP guard_patch(TREAT(patches.get(i) AS JSON_OBJECT_T));END LOOP;ELSE guard_patch(p.get_object('values'));END IF;END IF;
+    ELSIF a IN('tips_distribute','tips_void') THEN need('sales.read');need('sales.write');IF a='tips_void' THEN boss;END IF;
     ELSIF a='operations_apply' THEN
       command_value:=p.get_string('command');body:=p.get_object('payload');
       IF command_value LIKE 'materials_%' THEN need('inventory.write');IF command_value='materials_link' THEN need('products.write');END IF;IF command_value='materials_delete' THEN boss;END IF;
@@ -89,7 +90,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     IF action_value='bootstrap' THEN
       initialize(p_business,p_location);r.put('business',alliance_pos_store.document(p_business,p_location,'business_settings','primary'));r.put('tables',alliance_pos_store.list_documents(p_business,p_location,'restaurant_tables'));r.put('categories',alliance_pos_store.list_documents(p_business,p_location,'menu_categories'));r.put('items',alliance_pos_store.list_documents(p_business,p_location,'menu_items'));arr:=JSON_ARRAY_T();FOR x IN(SELECT id FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='op_recipes') LOOP arr.append(x.id);END LOOP;r.put('preparedProductIds',arr);r.put('value',JSON_OBJECT_T(r.to_clob));RETURN r;
     END IF;
-    is_write:=action_value NOT IN('getAdminSnapshot','query','get_inventory','get_inventory_movements','get_income_report','status','remote_bootstrap','listChatMessages','getClientSnapshot','getEvents','costing_load','costing_product_load','operations_snapshot','operations_device','orders_revision','customer_history','stock_alert_feed','materials_ledger');
+    is_write:=action_value NOT IN('getAdminSnapshot','query','get_inventory','get_inventory_movements','get_income_report','status','remote_bootstrap','listChatMessages','getClientSnapshot','getEvents','costing_load','costing_product_load','operations_snapshot','operations_device','orders_revision','customer_history','stock_alert_feed','materials_ledger','tips_snapshot','tips_source');
     IF action_value='query' THEN is_write:=payload.get_string('op')<>'select';END IF;
     IF is_write THEN
       grants_hash:=alliance_security.hash_text(q.get_array(p_location).to_string||CASE WHEN alliance_material_ledger.allowed(p_user,p_business,p_location) THEN ':private-costs' ELSE ':standard' END);
@@ -104,7 +105,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
         EXCEPTION WHEN NO_DATA_FOUND THEN NULL;END;
       END IF;
     END IF;
-    IF action_value='materials_ledger' THEN r.put('value',alliance_material_ledger.report(p_user,p_business,p_location,payload));
+    IF action_value IN('tips_snapshot','tips_source','tips_distribute','tips_void') THEN r.put('value',alliance_tips.run_action(p_user,p_business,p_location,action_value,payload));
+    ELSIF action_value='materials_ledger' THEN r.put('value',alliance_material_ledger.report(p_user,p_business,p_location,payload));
     ELSIF action_value IN('stock_alert_feed','stock_alert_subscribe','stock_alert_unsubscribe') THEN r.put('value',alliance_stock_notifications.run_action(p_user,p_business,p_location,action_value,payload));
     ELSIF action_value IN('operations_snapshot','operations_apply','operations_device','customer_history') THEN r.put('value',alliance_operations_commands.run_action(p_user,p_business,p_location,action_value,payload));
     ELSIF action_value IN('orders_revision','order_submit','order_accept','order_reject','order_cancel') THEN r.put('value',alliance_orders.run_action(p_user,p_business,p_location,action_value,payload));
@@ -149,7 +151,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
       ELSIF action_value='closeChatSession' THEN alliance_security.require_location(p_user,p_business,p_location,'service.write');DELETE FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='chat_messages' AND JSON_VALUE(data_json,'$.session_id')=id_value;value_json:=JSON_OBJECT_T('{"closed":true}');
       ELSE out_json:=JSON_ARRAY_T();FOR x IN(SELECT data_json FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='chat_messages' AND JSON_VALUE(data_json,'$.session_id')=id_value ORDER BY created_at,id) LOOP out_json.append(JSON_OBJECT_T(x.data_json));END LOOP;value_json:=JSON_OBJECT_T();value_json.put('messages',out_json);END IF;r.put('value',value_json);
     ELSE alliance_security.fail(404,'NOT_FOUND','Accion no disponible.');END IF;
-    IF is_write AND action_value<>'operations_apply' THEN alliance_activity.pos_event(p_user,p_business,p_location,action_value,payload);END IF;
+    IF is_write AND action_value NOT IN('operations_apply','tips_distribute','tips_void') THEN alliance_activity.pos_event(p_user,p_business,p_location,action_value,payload);END IF;
     IF is_write THEN alliance_pos_store.put_document(p_business,p_location,'op_reportsync','primary',JSON_OBJECT_T('{}'));END IF;
     IF is_write AND job_id IS NOT NULL THEN cached_result:=JSON_OBJECT_T(r.to_clob);cached_result.put('_grants',grants_hash);save_value:=cached_result.to_clob;compressed_value:=alliance_receipt_storage.compress_result(save_value);IF compressed_value IS NOT NULL THEN save_value:='{"codec":"gzip-v1"}';END IF;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json,result_compressed)VALUES(p_business,p_location,job_id,p_user,digest,save_value,compressed_value);IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;END IF;RETURN r;
   END;

@@ -52,6 +52,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_operations_sales AS
     END IF;END LOOP;alliance_materials.guard_open(b,l,invoice.get_string('sessionId'));invoice.put('items',lines);
   END;
   PROCEDURE reverse_sale(u VARCHAR2,b VARCHAR2,l VARCHAR2,invoice JSON_OBJECT_T) IS debt JSON_OBJECT_T;payments JSON_ARRAY_T:=invoice.get_array('payments');pay JSON_OBJECT_T;sale_id VARCHAR2(80):=invoice.get_string('id');cash_value NUMBER:=0;BEGIN
+    alliance_tips.protect_sale(b,l,sale_id);
     debt:=alliance_operations.get_row(b,l,'debts',sale_id);IF debt IS NOT NULL THEN IF debt.get_number('paid')>0 THEN alliance_security.fail(409,'CREDIT_ALREADY_PAID','La venta tiene abonos. Revisa la cartera antes de anular o corregir.');END IF;debt.put('voided',TRUE);alliance_operations.put_row(u,b,l,'debts',sale_id,debt);END IF;
     FOR x IN(SELECT ingredient_id,SUM(delta) delta FROM alliance_raw_movements WHERE business_id=b AND location_id=l AND reference=sale_id AND kind IN('sale','return') GROUP BY ingredient_id HAVING SUM(delta)<0) LOOP alliance_operations.raw_move(u,b,l,alliance_security.new_id,x.ingredient_id,-x.delta,'return',sale_id);END LOOP;
     FOR prep_row IN(SELECT id,data_json FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_preparations' AND JSON_VALUE(data_json,'$.saleId')=sale_id AND JSON_VALUE(data_json,'$.status')='sold') LOOP
