@@ -89,10 +89,10 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     IF action_value='bootstrap' THEN
       initialize(p_business,p_location);r.put('business',alliance_pos_store.document(p_business,p_location,'business_settings','primary'));r.put('tables',alliance_pos_store.list_documents(p_business,p_location,'restaurant_tables'));r.put('categories',alliance_pos_store.list_documents(p_business,p_location,'menu_categories'));r.put('items',alliance_pos_store.list_documents(p_business,p_location,'menu_items'));arr:=JSON_ARRAY_T();FOR x IN(SELECT id FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='op_recipes') LOOP arr.append(x.id);END LOOP;r.put('preparedProductIds',arr);r.put('value',JSON_OBJECT_T(r.to_clob));RETURN r;
     END IF;
-    is_write:=action_value NOT IN('getAdminSnapshot','query','get_inventory','get_inventory_movements','get_income_report','status','remote_bootstrap','listChatMessages','getClientSnapshot','getEvents','costing_load','costing_product_load','operations_snapshot','operations_device','orders_revision','customer_history','stock_alert_feed');
+    is_write:=action_value NOT IN('getAdminSnapshot','query','get_inventory','get_inventory_movements','get_income_report','status','remote_bootstrap','listChatMessages','getClientSnapshot','getEvents','costing_load','costing_product_load','operations_snapshot','operations_device','orders_revision','customer_history','stock_alert_feed','materials_ledger');
     IF action_value='query' THEN is_write:=payload.get_string('op')<>'select';END IF;
     IF is_write THEN
-      grants_hash:=alliance_security.hash_text(q.get_array(p_location).to_string);
+      grants_hash:=alliance_security.hash_text(q.get_array(p_location).to_string||CASE WHEN alliance_material_ledger.allowed(p_user,p_business,p_location) THEN ':private-costs' ELSE ':standard' END);
       authorize_write(p_user,p_business,p_location,action_value,payload,value_json);
       alliance_pos_store.lock_scope(p_business,p_location);
       IF job_id IS NOT NULL THEN
@@ -104,7 +104,8 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
         EXCEPTION WHEN NO_DATA_FOUND THEN NULL;END;
       END IF;
     END IF;
-    IF action_value IN('stock_alert_feed','stock_alert_subscribe','stock_alert_unsubscribe') THEN r.put('value',alliance_stock_notifications.run_action(p_user,p_business,p_location,action_value,payload));
+    IF action_value='materials_ledger' THEN r.put('value',alliance_material_ledger.report(p_user,p_business,p_location,payload));
+    ELSIF action_value IN('stock_alert_feed','stock_alert_subscribe','stock_alert_unsubscribe') THEN r.put('value',alliance_stock_notifications.run_action(p_user,p_business,p_location,action_value,payload));
     ELSIF action_value IN('operations_snapshot','operations_apply','operations_device','customer_history') THEN r.put('value',alliance_operations_commands.run_action(p_user,p_business,p_location,action_value,payload));
     ELSIF action_value IN('orders_revision','order_submit','order_accept','order_reject','order_cancel') THEN r.put('value',alliance_orders.run_action(p_user,p_business,p_location,action_value,payload));
     ELSIF action_value IN('costing_load','costing_product_load','costing_save','costing_approve','costing_product_delete') THEN r.put('value',alliance_costing.run_action(p_user,p_business,p_location,action_value,payload));

@@ -4357,9 +4357,9 @@ const App = (() => {
     refreshIcons();
   };
 
-  const inventorySummary = () => state.items.reduce((summary, item) => {
+  const inventorySummary = () => {const summary=state.items.reduce((summary, item) => {
     const inventory = inventoryFor(item);
-    summary.units += window.MaterialsPanel?.available(item.id)??inventory.stock;
+    summary.units += recipeInventory()?(window.MaterialsPanel?.available(item.id)??inventory.stock):inventory.stock;
     summary.costValue += inventory.stock * inventory.costPrice;
     summary.saleValue += inventory.stock * Number(item.price || 0);
     const status = inventoryStatus(item);
@@ -4367,6 +4367,7 @@ const App = (() => {
     if (status === "out") summary.out += 1;
     return summary;
   }, { units: 0, costValue: 0, saleValue: 0, low: 0, out: 0 });
+    const live=window.MaterialsPanel?.accountingSummary(state.items,inventoryFor);return live?{...summary,...live}:summary;};
 
   const renderInventoryLiveCalculation = () => {
     const form = $("#inventoryForm");
@@ -4411,8 +4412,8 @@ const App = (() => {
     const summary = inventorySummary();
     metrics.innerHTML = `
       <article><span>${icon("package-check", 19)} ${recipeInventory()?'Capacidad de preparación':'Unidades'}</span><strong>${summary.units.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong><small>${recipeInventory()?'Potencial por receta; los insumos se comparten':'Existencia total registrada'}</small></article>
-      <article><span>${icon("circle-dollar-sign", 19)} Inversion</span><strong>${money(summary.costValue)}</strong><small>Inventario registrado</small></article>
-      <article><span>${icon("trending-up", 19)} Venta potencial</span><strong>${money(summary.saleValue)}</strong><small>Estimado al vender todo</small></article>
+      <article><span>${icon("circle-dollar-sign", 19)} Inversion</span><strong>${summary.costsVisible===false?"Reservado":money(summary.costValue)}</strong><small>${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Valor de insumos y existencias":"Inventario registrado"}</small></article>
+      <article><span>${icon("trending-up", 19)} Venta potencial</span><strong>${money(summary.saleValue)}</strong><small>${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Por receta; comparten insumos":"Estimado al vender todo"}</small></article>
       <article class="${summary.low || summary.out ? "inventory-alert-metric" : ""}"><span>${icon("triangle-alert", 19)} Alertas</span><strong>${summary.low + summary.out}</strong><small>${summary.out} agotados · ${summary.low} por reponer</small></article>`;
 
     renderInventoryCategoryFilter();
