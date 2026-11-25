@@ -16,6 +16,7 @@ for(const slug of ['cafeteria','cocteleria'])test(slug+': catálogo principal, c
  await minus.click();await expect(page.locator('.consumption-product-steps output')).toHaveText('2');await expect(page.locator('#consumptionSelectionTotal')).toContainText('20.000');await expect(page.locator('#consumptionCatalogFeedback')).toContainText('−1');
  expect(server.state.docs.session_items).toHaveLength(1);
  const current=page.locator('#tableConsumptionPreview'),selection=page.locator('#consumptionSelection');
+ await expect(page.getByRole('button',{name:'Expandir consumo actual',exact:true})).toBeVisible();await page.getByRole('button',{name:'Expandir consumo actual',exact:true}).click();
  const initialCurrent=(await current.boundingBox())!.height,initialSelection=(await selection.boundingBox())!.height;
  await page.getByRole('button',{name:'Encoger consumo actual',exact:true}).click();await expect(page.locator('.table-consumption-preview-lines')).toBeHidden();expect((await selection.boundingBox())!.height).toBeGreaterThan(initialSelection);
  await page.getByRole('button',{name:'Expandir consumo actual',exact:true}).click();

@@ -4123,11 +4123,12 @@ const App = (() => {
     if (!compactConsumption()) return;
     const dialog=$('#consumptionDialog'),form=$('#consumptionForm'),head=form.querySelector('.section-head');
     dialog.classList.add('is-compact-consumption');
-    consumptionCollapsed.current=false;consumptionCollapsed.selection=false;
+    consumptionCollapsed.current=true;consumptionCollapsed.selection=false;
     let tools=$('#consumptionHeaderTools');
     if (!tools) {
       tools=document.createElement('div');tools.id='consumptionHeaderTools';tools.className='consumption-header-tools';
-      const close=head.querySelector('[data-cancel-consumption]');head.append(tools);tools.append($('#tableSessionActions'),close);
+      const close=head.querySelector('[data-cancel-consumption]');head.firstElementChild.classList.add('consumption-heading');head.append(tools);tools.append($('#tableSessionActions'));
+      const controls=document.createElement('div');controls.className='consumption-window-controls';controls.append(close);tools.append(controls);
       // Keep the existing quantity input and keyboard flow available in optional editing.
       // The product cards replace the always-visible quantity field.
       const quantity=form.querySelector('.consumption-quantity');quantity.classList.add('consumption-optional-quantity');form.querySelector('.consumption-optional-grid').prepend(quantity);
@@ -4139,7 +4140,7 @@ const App = (() => {
       const panel=document.createElement('section');panel.id='consumptionCreditPanel';panel.className='consumption-credit-panel';panel.setAttribute('popover','auto');panel.setAttribute('role','dialog');panel.setAttribute('aria-labelledby','consumptionCreditTitle');
       panel.innerHTML='<header><div><small>Cartera de clientes</small><h3 id="consumptionCreditTitle">Pasar la cuenta a crédito</h3></div><button type="button" class="icon-btn" data-close-consumption-credit aria-label="Cerrar opciones de crédito">'+icon('x',19)+'</button></header>';
       form.append(panel);panel.append(box);
-      const toggle=document.createElement('button');toggle.type='button';toggle.id='consumptionCreditToggle';toggle.className='icon-btn consumption-credit-toggle';toggle.setAttribute('aria-label','Abrir opciones de crédito');toggle.title='Pasar la cuenta a crédito';toggle.setAttribute('aria-controls',panel.id);toggle.setAttribute('aria-expanded','false');toggle.innerHTML=icon('wallet-cards',20);tools.insertBefore(toggle,tools.lastElementChild);
+      const toggle=document.createElement('button');toggle.type='button';toggle.id='consumptionCreditToggle';toggle.className='icon-btn consumption-credit-toggle';toggle.setAttribute('aria-label','Abrir opciones de crédito');toggle.title='Pasar la cuenta a crédito';toggle.setAttribute('aria-controls',panel.id);toggle.setAttribute('aria-expanded','false');toggle.innerHTML=icon('wallet-cards',20);tools.querySelector('.consumption-window-controls').prepend(toggle);
       toggle.onclick=()=>panel.togglePopover();panel.querySelector('[data-close-consumption-credit]').onclick=()=>{panel.hidePopover();toggle.focus({preventScroll:true});};
       panel.addEventListener('toggle',event=>toggle.setAttribute('aria-expanded',String(event.newState==='open')));
     }
@@ -7261,7 +7262,15 @@ const App = (() => {
     state.paymentProcessing = false;
   };
 
-  const renderConsumptionSelection = () => {
+  const pulseConsumptionSelection = (row) => {
+    if(!compactConsumption()||!row)return;
+    const targets=[row.querySelector('small'),row.querySelector(':scope > strong'),$('#consumptionSelectionTotal')];
+    for(const target of targets.filter(Boolean)){
+      target.getAnimations().forEach(animation=>animation.cancel());
+      target.animate([{backgroundColor:'#d5f3df',color:'#116634'},{backgroundColor:'transparent'}],{duration:window.matchMedia('(prefers-reduced-motion:reduce)').matches?120:460,easing:'ease-out'});
+    }
+  };
+  const renderConsumptionSelection = ({highlightIndex=-1}={}) => {
     const box = $("#consumptionSelection");
     const lines = $("#consumptionSelectionLines");
     const count = $("#consumptionSelectionCount");
@@ -7279,6 +7288,7 @@ const App = (() => {
     renderConsumptionProductOptions(form?.menu_item_id.value ? '' : $('#consumptionProductSearch')?.value || '');
     updateConsumptionDraftAction();
     refreshIcons();
+    if(highlightIndex>=0)pulseConsumptionSelection(lines.children[highlightIndex]);
   };
 
   const updateConsumptionDraftAction = () => {
@@ -7399,13 +7409,14 @@ const App = (() => {
     const draft = currentConsumptionDraft(form);
     if (!draft) return false;
     if(window.MaterialsPanel&&!MaterialsPanel.check([...state.consumptionDrafts.filter((_,i)=>i!==state.consumptionDraftEditIndex),draft]))return false;
+    const highlightIndex=state.consumptionDraftEditIndex>=0?state.consumptionDraftEditIndex:state.consumptionDrafts.length;
     if (state.consumptionDraftEditIndex >= 0 && state.consumptionDrafts[state.consumptionDraftEditIndex]) {
       state.consumptionDrafts[state.consumptionDraftEditIndex] = draft;
     } else {
       state.consumptionDrafts.push(draft);
     }
     clearConsumptionEntry(form);
-    renderConsumptionSelection();
+    renderConsumptionSelection({highlightIndex});
     window.requestAnimationFrame(() => $("#consumptionProductSearch")?.focus({ preventScroll: true }));
     return true;
   };
@@ -7430,7 +7441,7 @@ const App = (() => {
     state.consumptionDrafts=next;
     // Search text is a filter, not an extra unconfirmed consumption line.
     form.menu_item_id.value='';form.item_name.value='';form.quantity.value='';setCurrencyInputValue(form.unit_price,0);if($('#consumptionProductSearch'))$('#consumptionProductSearch').value='';
-    renderConsumptionSelection();closeConsumptionProductOptions();
+    renderConsumptionSelection({highlightIndex:delta>0?next.findLastIndex(d=>d.menuItemId===id&&d.notes===notes&&d.payerName===payerName):-1});closeConsumptionProductOptions();
     const card=[...$('#consumptionCatalog').querySelectorAll('[data-consumption-card]')].find(c=>c.dataset.consumptionCard===id);
     card?.classList.add(delta>0?'just-added':'just-removed');
     window.setTimeout(()=>card?.classList.remove('just-added','just-removed'),450);
@@ -7456,7 +7467,7 @@ const App = (() => {
     const button = $("#viewTableConsumption");
     if (!preview) return;
     const desktop=window.matchMedia('(min-width:900px)').matches;
-    preview.hidden = !(desktop||visible);
+    preview.hidden = compactConsumption()?false:!(desktop||visible);
     if(!button)return;
     button.innerHTML = visible
       ? `${icon("list-x", 17)} Esconder lista`
@@ -7520,6 +7531,7 @@ const App = (() => {
     if (viewButton) viewButton.hidden = window.matchMedia('(min-width:900px)').matches || emptyAccount || !session;
     if (chargeButton) chargeButton.hidden = emptyAccount;
     if (releaseButton) releaseButton.hidden = !emptyAccount;
+    if(compactConsumption())actions.style.setProperty('--consumption-action-count',String([...actions.querySelectorAll('button')].filter(button=>!button.hidden&&button.id!=='viewTableConsumption').length||1));
     actions.classList.toggle("is-single", emptyAccount);
     preview.hidden = true;
     preview.innerHTML = `<div class="table-consumption-preview-head"><span class="table-consumption-preview-title"><span>Consumo actual</span><small>${productCount.toLocaleString("es-CO")} ${productCount === 1 ? "producto" : "productos"}</small></span><strong>${money(session?sessionTotal(session):0)}</strong></div><div class="table-consumption-preview-lines">${items.map((item) => { const formatted = formatConsumptionTimestamp(item.created_at); return `<div data-saved-consumption="${escapeHTML(item.id)}" data-session-id="${escapeHTML(session.id)}" tabindex="0" role="button" title="Doble clic para editar este consumo"><span class="table-consumption-item"><span>${Number(item.quantity || 0)} × ${escapeHTML(item.item_name)}</span>${formatted ? `<time datetime="${escapeHTML(item.created_at)}">${escapeHTML(formatted)}</time>` : ""}</span><strong>${money(Number(item.quantity || 0) * Number(item.unit_price || 0))}</strong></div>`; }).join("") || "<small>Sin consumos registrados.</small>"}</div>`;

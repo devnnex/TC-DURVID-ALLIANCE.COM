@@ -47,3 +47,17 @@
 .income-section{min-width:0}.income-section .income-heading{min-width:0;max-width:100%}@media(max-width:1200px){.income-section .income-heading-actions{width:100%}}
 .sales-statistics.is-team-analysis{grid-template-rows:auto auto minmax(0,1fr) auto!important}.sales-statistics .ss-kpis[hidden],.sales-statistics .ss-notice[hidden]{display:none!important}.sales-statistics .ss-stage[data-view=waiters]{display:block;overflow-y:auto;overscroll-behavior:contain;padding:4px 2px 16px}.ss-stage [data-analysis-performance]{min-width:0;width:100%}.sales-statistics.is-team-analysis .ss-mobile-switch{display:none}
 .sales-statistics.is-team-analysis .ss-header-actions>[data-ss-action=range],.sales-statistics.is-team-analysis .ss-header-actions>[data-ss-action=refresh]{display:none}
+
+/* Text rows retain their natural height; only the content area scrolls on short screens. */
+.sales-statistics .ss-product-list>header,.sales-statistics .ss-profit>header,.sales-statistics .ss-card-bottom,.sales-statistics .ss-footnote{flex-shrink:0}
+.sales-statistics .ss-rank-list{grid-auto-rows:minmax(58px,1fr);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding-right:3px}
+.sales-statistics .ss-rank{min-height:58px;align-content:center;flex-shrink:0}
+.sales-statistics .ss-rank strong,.sales-statistics .ss-rank small{line-height:1.4}
+.sales-statistics .ss-profit-rows{overflow-y:auto;justify-content:flex-start;overscroll-behavior:contain;scrollbar-width:thin;padding-right:4px}
+.sales-statistics .ss-metric-row{flex-shrink:0;min-height:44px;line-height:1.4}
+.sales-statistics .ss-metric-row>span{min-width:0;overflow-wrap:anywhere}
+.sales-statistics .ss-footnote{padding-top:6px;line-height:1.6}
+.sales-statistics .ss-stage{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.sales-statistics .ss-stage[data-view=summary]{grid-template-rows:minmax(220px,1fr) 103px}
+.sales-statistics.ss-short .ss-stage[data-view=summary]{grid-template-rows:minmax(220px,1fr)}
+.sales-statistics .ss-main-grid,.sales-statistics .ss-analysis-grid{min-height:220px}

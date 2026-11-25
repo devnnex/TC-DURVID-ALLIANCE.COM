@@ -5576,3 +5576,87 @@ input,select,textarea{max-width:100%;min-width:0}
 
 /* Touch controls respond without waiting for a double tap; panning and pinch zoom remain available. */
 :where(button,a[href],summary,[role="button"],input[type="button"],input[type="submit"],input[type="reset"],input[type="checkbox"],input[type="radio"]){touch-action:manipulation}
+
+/* Digital menu editor: compact fields and actions outside the scrolling form area. */
+.is-digital-menu-editor#inventoryDialog{width:min(860px,calc(100vw - 24px));max-height:96dvh}
+.is-digital-menu-editor #inventoryForm{position:static;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;height:min(94dvh,760px);gap:12px;padding:18px;max-height:94dvh;box-sizing:border-box}
+.is-digital-menu-editor #inventoryForm>.section-head{grid-column:1/-1;margin:0;gap:10px;align-items:center}
+.is-digital-menu-editor #inventoryFormTitle{margin:3px 0 0;font-size:1.35rem;line-height:1.2}
+.is-digital-menu-editor #inventoryForm .inventory-form{grid-column:1;min-height:0;max-height:none;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px 12px;align-items:start;align-content:start;padding-right:4px;overflow-y:auto}
+.is-digital-menu-editor .inventory-form>label,.is-digital-menu-editor .inventory-availability{grid-column:span 2}
+.is-digital-menu-editor .inventory-form>label.inventory-name-field{grid-column:span 3}
+.is-digital-menu-editor .inventory-form>label.inventory-code-field{grid-column:span 1;max-width:125px}
+.is-digital-menu-editor .inventory-form>label.inventory-new-category-field{grid-column:span 2}
+.is-digital-menu-editor .inventory-form>label{display:grid;grid-template-rows:auto 44px;gap:4px;font-size:.74rem;line-height:1.2}
+.is-digital-menu-editor .inventory-form>.inventory-photo-field,.is-digital-menu-editor .inventory-form>.inventory-live-calculation,.is-digital-menu-editor .inventory-form>.inventory-costing-details{grid-column:1/-1}
+.is-digital-menu-editor .inventory-form label>input,.is-digital-menu-editor .inventory-form label>select{box-sizing:border-box;width:100%;height:44px;min-height:44px;max-height:44px;padding:9px 11px;font-size:.88rem;align-self:start}
+.is-digital-menu-editor .inventory-category-field{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:8px}
+.is-digital-menu-editor .inventory-category-field>.op-select-search{display:block;grid-column:1;grid-row:2}
+.is-digital-menu-editor .inventory-category-field>select{grid-column:2;grid-row:2}
+.is-digital-menu-editor .inventory-category-field:not(:has(.op-select-search))>select{grid-column:1/-1}
+.is-digital-menu-editor .inventory-availability{align-self:end;min-height:44px;gap:8px;font-size:.83rem}
+.is-digital-menu-editor .inventory-live-calculation{grid-template-columns:repeat(4,minmax(0,1fr));padding:8px 10px;gap:6px}
+.is-digital-menu-editor .inventory-live-calculation strong{font-size:.85rem}
+.is-digital-menu-editor .inventory-live-calculation small{font-size:.65rem}
+.is-digital-menu-editor #inventoryForm>.inventory-form-actions{padding-top:10px;margin:0;border-top:1px solid var(--line);background:#fff;flex-shrink:0}
+.is-digital-menu-editor .inventory-form-actions button{min-height:44px;padding:10px 16px;font-size:.85rem}
+.inventory-photo-field.is-premium-photo{box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #dce5dc;border-radius:16px;background:linear-gradient(115deg,#f3f7ef,#fff)}
+.is-premium-photo .inventory-photo-preview{width:62px;height:62px;flex-basis:62px;border-radius:12px;border:1px solid #e0e7dc}
+.inventory-photo-copy{flex:1;min-width:0;display:grid;gap:5px}
+.inventory-photo-copy>strong{font-size:.8rem;color:#344d3e}
+.inventory-photo-copy>small{font-size:.68rem;color:#536258;line-height:1.5}
+.inventory-photo-input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
+#inventoryForm .is-premium-photo input.inventory-photo-input{inset:0 auto auto 0;width:1px;height:1px;min-width:1px;min-height:1px;max-width:1px;max-height:1px;padding:0;margin:0;border:0;clip-path:inset(50%)}
+.inventory-photo-field.is-premium-photo{position:relative}
+.inventory-photo-choose{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;border:1px solid #cbdccb;border-radius:11px;padding:9px 12px;background:#fff;color:#2a573a;font:inherit;font-size:.76rem;font-weight:700;white-space:nowrap;cursor:pointer}
+.inventory-photo-choose:hover{background:#eef5eb;border-color:#91ae93}
+.inventory-photo-choose:focus-visible{outline:3px solid #9dbb9c;outline-offset:2px}
+.is-premium-photo [data-remove-product-photo]{font-size:.72rem;padding:9px;min-height:42px}
+.is-premium-photo [data-remove-product-photo][hidden]{display:none}
+.digital-menu-section{gap:14px}
+#costingReload[hidden],#costingMaterialsWorkspace[hidden],#costingContent[hidden],#costingSave[hidden],#costingExcel[hidden],#costingStatus[hidden]{display:none!important}
+.materials-back{margin:10px 0 16px;min-height:42px}
+#costingMaterialsWorkspace{min-width:0}
+
+/* Centered table modal, with a readable title and a separate mobile actions row. */
+#consumptionDialog.is-compact-consumption{width:min(94vw,1440px);margin:auto}
+#consumptionDialog.is-compact-consumption #consumptionForm>.section-head>.consumption-header-tools{flex:0 1 auto}
+.consumption-window-controls{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.consumption-window-controls>.icon-btn{width:42px;height:42px;flex-shrink:0}
+.is-compact-consumption .consumption-selection-lines small,.is-compact-consumption .consumption-selection-lines>div>strong,.is-compact-consumption #consumptionSelectionTotal{border-radius:5px}
+@media(max-width:899px){
+ #consumptionDialog.is-compact-consumption{width:calc(100vw - 12px);max-height:calc(100dvh - 12px)}
+ #consumptionDialog.is-compact-consumption #consumptionForm{height:calc(100dvh - 12px);max-height:calc(100dvh - 12px);display:grid;grid-template-rows:auto minmax(0,1fr);padding:12px;gap:10px;box-sizing:border-box;overflow:hidden}
+ #consumptionDialog.is-compact-consumption #consumptionForm>.section-head{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'heading controls' 'actions actions';align-items:start;gap:8px 10px}
+ #consumptionDialog.is-compact-consumption #consumptionForm>.section-head>.consumption-heading{grid-area:heading;display:grid;grid-template-columns:38px minmax(0,1fr);align-items:center;column-gap:8px;min-width:0}
+ #consumptionDialog.is-compact-consumption #consumptionEyebrow{grid-column:2;font-size:.65rem}
+ #consumptionDialog.is-compact-consumption #consumptionContextIcon{grid-column:1;grid-row:1/span 2;float:none;margin:0;padding:7px;border-radius:10px;align-self:start}
+ #consumptionDialog.is-compact-consumption #consumptionDialogTitle{grid-column:2;margin:2px 0 0;font-size:clamp(18px,4.5vw,22px);white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.2}
+ #consumptionDialog.is-compact-consumption #consumptionLastAdded{grid-column:1/-1;font-size:.62rem;line-height:1.5;margin-top:6px}
+ #consumptionDialog.is-compact-consumption #consumptionHeaderTools{display:contents;flex:none;width:auto}
+ #consumptionDialog.is-compact-consumption .consumption-window-controls{grid-area:controls;justify-self:end;gap:6px}
+ #consumptionDialog.is-compact-consumption .consumption-window-controls>.icon-btn{width:44px;height:44px;min-width:44px;padding:9px}
+ #consumptionDialog.is-compact-consumption .consumption-window-controls svg{width:22px;height:22px}
+ #consumptionDialog.is-compact-consumption #tableSessionActions:not([hidden]){grid-area:actions;display:grid;grid-template-columns:repeat(var(--consumption-action-count,3),minmax(0,1fr));gap:8px;width:100%;box-sizing:border-box;flex:none;padding:0 4px;margin:0;background:none;border:0}
+ #consumptionDialog.is-compact-consumption #tableSessionActions button{width:100%;box-sizing:border-box;height:46px;min-width:46px;min-height:46px;padding:10px;font-size:0;border-radius:12px}
+ #consumptionDialog.is-compact-consumption #tableSessionActions button svg{width:23px;height:23px}
+ #consumptionDialog.is-compact-consumption .consumption-layout{display:flex;flex-direction:column;min-height:0;overflow:hidden;gap:10px}
+ #consumptionDialog.is-compact-consumption .consumption-cart{order:0;flex:0 0 auto;max-height:34dvh;overflow-y:auto;gap:8px}
+ #consumptionDialog.is-compact-consumption .consumption-editor{display:flex;flex-direction:column;min-height:0;flex:1;overflow:hidden;gap:8px}
+ #consumptionDialog.is-compact-consumption .consumption-workspace{flex:1;min-height:0;overflow-y:auto;gap:8px}
+ #consumptionDialog.is-compact-consumption .modal-actions{flex:0 0 auto;position:static;margin:0;padding:10px 0 0;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ #consumptionDialog.is-compact-consumption .modal-actions button{min-height:44px;padding:9px 7px;font-size:.76rem}
+ #consumptionDialog.is-compact-consumption .consumption-product-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-height:none;overflow:visible}
+}
+@media(max-width:480px){
+ .is-digital-menu-editor .inventory-form>label.inventory-category-field,.is-digital-menu-editor .inventory-form>label.inventory-new-category-field{grid-column:1/-1}
+ .is-digital-menu-editor .inventory-live-calculation{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .is-digital-menu-editor #inventoryForm{padding:12px;gap:10px}
+ .is-digital-menu-editor .inventory-form>label{font-size:.7rem}
+ .is-digital-menu-editor .inventory-form label>input,.is-digital-menu-editor .inventory-form label>select{font-size:16px;padding:8px}
+ .inventory-photo-field.is-premium-photo{display:grid;grid-template-columns:50px minmax(0,1fr) auto;gap:8px;padding:10px}
+ .is-premium-photo .inventory-photo-preview{width:50px;height:50px;grid-row:1/span 2}
+ .is-premium-photo .inventory-photo-copy{grid-column:2/-1}
+ .is-premium-photo .inventory-photo-choose{grid-column:2;font-size:.7rem;min-height:38px;padding:8px}
+ .is-premium-photo [data-remove-product-photo]{grid-column:3;font-size:.66rem;padding:8px;min-height:38px}
+}
