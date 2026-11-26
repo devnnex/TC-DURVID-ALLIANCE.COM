@@ -40,3 +40,38 @@
 @media(max-width:1180px){.jr-table textarea,.jr-operating textarea[data-j-path$=".detail"]{font-size:16px}}
 @media(max-width:640px){.jr-metadata,.jr-metadata tbody{display:block}.jr-metadata tr{display:grid;grid-template-columns:minmax(100px,.4fr) minmax(0,.6fr)}.jr-metadata th,.jr-metadata td,.jr-metadata tr:nth-child(2) td:first-of-type,.jr-metadata tr:nth-child(2) td:last-of-type{display:block;width:auto;box-sizing:border-box;align-content:center}.jr-table textarea{font-size:16px}}
 .jr-readable-units .jr-operating td:last-child{position:relative;padding-right:25px}.jr-readable-units .jr-expense-remove{position:absolute;right:1px;top:50%;transform:translateY(-50%);width:23px;height:28px;display:grid;place-items:center;padding:0;border:0;background:transparent;color:#a54c42;border-radius:6px;font-size:19px;cursor:pointer}.jr-readable-units .jr-expense-remove:hover{background:#feece8}.jr-readable-units .jr-expense-remove:focus-visible{outline:2px solid #a54c42;outline-offset:1px}
+/* Compact monthly close and comparable unit costs for cafeteria and cocktails. */
+.jr-readable-units .jr-workbook{grid-template-columns:minmax(340px,.34fr) minmax(0,.66fr);gap:18px}
+.jr-readable-units .jr-operating th:first-child{width:35%}
+.jr-readable-units .jr-operating th:nth-child(2){width:33%}
+.jr-readable-units .jr-operating th:last-child{width:32%}
+.jr-readable-units .jr-operating th,.jr-readable-units .jr-operating td{padding:6px 8px;line-height:1.4}
+.jr-readable-units .jr-operating td:last-child{padding-right:8px;font-variant-numeric:tabular-nums}
+.jr-readable-units .jr-operating td:has(.jr-expense-remove){padding-right:25px}
+.jr-readable-units .jr-operating thead th{background:#d5d5d5}
+.jr-readable-units .jr-operating textarea{min-height:32px;padding:5px 2px;resize:vertical;overflow-y:hidden;line-height:1.4}
+.jr-readable-units .jr-operating textarea[data-j-path$=".name"]{font-weight:700}
+.jr-readable-units .jr-operating input[data-j-path="sheet.workingDays"],.jr-readable-units .jr-operating input[data-j-path="sheet.closingDays"]{max-width:48px;min-height:30px;padding:3px}
+.jr-readable-units .jr-operating .jr-monthly-profit td:last-child{background:#fff;font-weight:700}
+.jr-readable-units .jr-operating-scroll{min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;grid-row:span 3}
+.jr-readable-units .jr-operating{min-width:420px}
+.jr-readable-units .jr-operating [data-j-result]{white-space:nowrap}
+.jr-readable-units .jr-ingredients{min-width:800px}
+.jr-readable-units .jr-ingredients .jr-name-col{width:22%}
+.jr-readable-units .jr-ingredients .jr-quantity-col,.jr-readable-units .jr-ingredients .jr-final-weight-col{width:9%}
+.jr-readable-units .jr-ingredients .jr-unit-col{width:12%}
+.jr-readable-units .jr-ingredients .jr-price-col{width:16%}
+.jr-readable-units .jr-ingredients .jr-net-col{width:16%}
+.jr-readable-units .jr-ingredients .jr-total-col{width:12%}
+.jr-readable-units .jr-ingredients .jr-action-col{width:4%}
+.jr-readable-units .jr-ingredients th{padding:10px 7px;text-align:left}
+.jr-readable-units .jr-ingredients td{padding:7px;vertical-align:top}
+.jr-readable-units .jr-ingredients td.jr-net-cost{background:#f0f7f1;text-align:left;vertical-align:middle}
+.jr-readable-units .jr-ingredients th.jr-net-cost{background:#dce9df}
+.jr-readable-units .jr-net-cost output{display:block;color:#21684d;font-size:15px;line-height:1.5;font-weight:750;font-variant-numeric:tabular-nums;overflow-wrap:normal}
+.jr-readable-units .jr-net-cost small{margin-top:5px;color:#4e685b;font-size:12px;line-height:1.4}
+.jr-readable-units .jr-ingredients td:has([data-j-line-total]){background:#fff;vertical-align:middle;font-variant-numeric:tabular-nums}
+.jr-readable-units .jr-ingredients td:last-child{vertical-align:middle;padding-inline:4px}
+.jr-readable-units .jr-ingredients .jr-yield-badge{font-size:12px;font-weight:600}
+@media(max-width:1380px){.jr-readable-units .jr-workbook{grid-template-columns:minmax(0,1fr)}.jr-readable-units .jr-recipe{grid-row:1}.jr-readable-units .jr-side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}.jr-readable-units .jr-operating{grid-row:span 3}.jr-readable-units .jr-small-action,.jr-readable-units .jr-side>.jr-note{margin:0}}
+@media(max-width:640px){.jr-readable-units .jr-side{display:flex;flex-direction:column;gap:14px}.jr-readable-units .jr-operating{min-width:460px}.jr-readable-units .jr-net-cost output{font-size:16px}}
