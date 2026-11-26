@@ -1,0 +1,10 @@
+{
+  "name": "alliance-notifications-runtime",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "tsx": "^4.19.0",
+    "web-push": "^4.0.0"
+  }
+}

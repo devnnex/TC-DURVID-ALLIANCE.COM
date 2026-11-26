@@ -2,6 +2,28 @@ import {test,expect,type Page} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {backend,ready,branch,product} from './helpers/operational-backend';
 
+test('dos pestañas comparten una sola actualización de avisos ante una ráfaga de push',async({page,context})=>{
+ const server=await backend(page);let events:any[]=[],reads=0;
+ await context.route(/\/api\/v1\/(?:file\/)?rpc$/,async route=>{const request=route.request().postDataJSON();if(request.body?.action!=='stock_alert_feed'){await route.fallback();return;}reads++;await new Promise(resolve=>setTimeout(resolve,150));await route.fulfill({contentType:'application/json',body:JSON.stringify({status:200,data:{value:{configured:false,subscriptionKeys:[],alerts:[],events}}})});});
+ await ready(page);await page.locator('#stockAlertBell').click();await page.locator('[data-stock-close]').click();const other=await context.newPage();await other.goto('/negocios/cocteleria/admin.html');await expect(other.locator('#metricTables')).toHaveText('24');await other.locator('#stockAlertBell').click();await other.locator('[data-stock-close]').click();
+ events=[{id:'shared-login',kind:'staff-login',name:'Ana',role:'Mesero',at:new Date().toISOString(),body:'Ana inició sesión.'}];const before=reads;
+ await Promise.all([page,other].map(tab=>tab.evaluate(()=>navigator.serviceWorker.dispatchEvent(new MessageEvent('message',{data:{type:'alliance-notice',branch:'cocteleria'}})))));
+ await expect(page.locator('#stockAlertBell b')).toHaveText('1',{timeout:3000});await expect(other.locator('#stockAlertBell b')).toHaveText('1');expect(reads-before).toBe(1);await other.close();
+});
+
+for(const slug of ['cafeteria','cocteleria'])test(slug+': el push actualiza la bandeja de inmediato y conserva el fondo negro del icono',async({page})=>{
+ const server=await backend(page);server.context.locations[0].slug=slug;let events:any[]=[],reads=0;
+ await page.route(/\/api\/v1\/(?:file\/)?rpc$/,async route=>{const request=route.request().postDataJSON();if(request.body?.action!=='stock_alert_feed'){await route.fallback();return;}reads++;await route.fulfill({contentType:'application/json',body:JSON.stringify({status:200,data:{value:{configured:false,subscriptionKeys:[],alerts:[],events}}})});});
+ await ready(page,'',slug);await page.locator('#stockAlertBell').click();await page.locator('[data-stock-close]').click();
+ events=[{id:'new-login',kind:'staff-login',name:'Luisa',role:'Mesero',at:new Date().toISOString(),body:'Luisa inició sesión como mesero.'}];const before=reads;
+ await page.evaluate(slug=>{for(let i=0;i<8;i++)navigator.serviceWorker.dispatchEvent(new MessageEvent('message',{data:{type:'alliance-notice',branch:slug}}));},slug);
+ await expect(page.locator('#stockAlertBell b')).toHaveText('1',{timeout:3000});expect(reads-before).toBe(1);
+ await page.locator('#stockAlertBell').click();await expect(page.locator('.stock-team-events')).toContainText('Luisa');
+ const worker=page.context().serviceWorkers().find(worker=>worker.url().includes('/negocios/'+slug+'/'))||page.context().serviceWorkers()[0];
+ const corner=await worker.evaluate(async slug=>{const src=await (self as any).noticeIcon({branch:slug},slug),picture=await createImageBitmap(await (await fetch(src)).blob()),canvas=new OffscreenCanvas(192,192),ctx=canvas.getContext('2d')!;ctx.drawImage(picture,0,0);return [...ctx.getImageData(0,0,1,1).data];},slug);
+ expect(corner).toEqual([0,0,0,255]);
+});
+
 for(const slug of ['cafeteria','cocteleria'])test(slug+': el jefe ve el acceso de su equipo con nombre, rol y hora',async({page})=>{const server=await backend(page);server.context.locations[0].slug=slug;await page.route(/\/api\/v1\/(?:file\/)?rpc$/,async route=>{const r=route.request().postDataJSON();if(r.body?.action!=='stock_alert_feed'){await route.fallback();return;}await route.fulfill({contentType:'application/json',body:JSON.stringify({status:200,data:{value:{configured:false,subscriptionKeys:[],alerts:[],events:[{id:'staff',kind:'staff-login',name:'Ana de prueba',role:'Mesero',at:'2026-11-26T12:00:00Z',body:'Ana de prueba inició sesión como mesero. Tu equipo se está preparando para atender.'}]}}})});});await ready(page,'',slug);await page.locator('#stockAlertBell').click();await expect(page.locator('#stockAlertsDialog h2')).toHaveText('Avisos del negocio');await expect(page.locator('.stock-team-events')).toContainText('Ana de prueba');await expect(page.locator('.stock-team-events')).toContainText('Mesero');await expect(page.locator('.stock-team-events')).toContainText('7:00');await page.setViewportSize({width:390,height:700});expect(await page.locator('#stockAlertsDialog').evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);});
 
 for(const slug of ['cocteleria','cafeteria','gcobarf','sucursal'])test(slug+': bandeja de jefe explica faltantes y se actualiza al reponer',async({page})=>{

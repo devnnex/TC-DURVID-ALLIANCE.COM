@@ -6,7 +6,8 @@ Los accesos **Estadísticas y entradas** y **Vincular receta** están comentados
 
 ## Cómo se calculan los indicadores
 
-- **Inversión:** cantidad física de cada insumo activo × su costo promedio, más el valor del inventario de productos sin receta. Un insumo compartido entre recetas se cuenta una sola vez. Incluye existencias comprometidas hasta que su consumo se descuenta; excluye insumos retirados.
+- **Costo de productos (Menú Digital):** suma de la capacidad disponible de cada producto × su costo unitario registrado. Los productos sin receta utilizan sus existencias disponibles. Incluye productos suspendidos, que siguen teniendo costo, aunque se excluyen de la venta potencial. Es una referencia por producto: las recetas pueden compartir insumos, por lo que no representa una valoración física de la materia prima.
+- **Valor de insumos en existencia (Macro de Insumos):** cantidad física de cada insumo activo × su costo promedio. Un insumo compartido entre recetas se cuenta una sola vez. Incluye existencias comprometidas hasta descontar su consumo; excluye insumos retirados. Este indicador conserva su cálculo independiente del Menú Digital.
 - **Capacidad:** preparaciones disponibles por receta, después de descontar las reservas de cuentas abiertas. Las capacidades individuales comparten insumos.
 - **Venta potencial:** suma de capacidad individual × precio de venta de cada producto habilitado, más los productos sin receta disponibles. Es una referencia por receta, no una promesa de poder vender simultáneamente todas las capacidades cuando comparten ingredientes; la interfaz lo indica.
 - **Entrada:** se convierte la cantidad a la unidad base antes de calcular el costo promedio. Por ejemplo, 1.000 g a $2/g más una entrada de 1 kg por $4.000 dejan 2.000 g a $3/g. Esa entrada conserva $4.000 y $4/g en el historial aunque el promedio cambie después.

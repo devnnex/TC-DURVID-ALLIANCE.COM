@@ -5,8 +5,8 @@ globalThis.AllianceMaterialAccounting=(()=>{
  function valuation(snapshot){const rows=(snapshot?.model?.ingredients||[]).filter(r=>!r.archived);return rows.reduce((v,r)=>v+Math.max(0,Number(r.quantity)||0)*Math.max(0,Number(r.unitCost)||0),0);}
  function stockSummary(snapshot,products,stock){
   const materialState={operations:snapshot.model,docs:snapshot.docs,units:snapshot.units},capacities=AllianceMaterialsEngine.cartCapacities(materialState,[]);
-  let units=0,potential=0,investment=valuation(snapshot);
-  for(const product of products){const item=stock(product),capacity=capacities.get(product.id);if(capacity!==undefined&&capacity!==null){units+=capacity;if(product.is_available!==false)potential+=capacity*Number(product.price||0);}else{units+=Math.max(0,item.stock);investment+=Math.max(0,item.stock)*item.costPrice;if(product.is_available!==false)potential+=Math.max(0,item.stock)*Number(product.price||0);}}
+  let units=0,potential=0,investment=0;
+  for(const product of products){const item=stock(product),capacity=capacities.get(product.id),available=Math.max(0,Number(capacity??item.stock)||0);units+=available;investment+=available*Math.max(0,Number(item.costPrice)||0);if(product.is_available!==false)potential+=available*Number(product.price||0);}
   return {units,costValue:investment,saleValue:potential};
  }
  function entries(model){

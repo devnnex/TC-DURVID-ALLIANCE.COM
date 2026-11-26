@@ -1,19 +1,38 @@
 /* Cache public application files only. API requests and account data never enter this cache. */
-const BUILD_VERSION='4dbce920fc7f2aa43277f0af';
+const BUILD_VERSION='632da6199ae06e1d531875d5';
 const ROOT=new URL(self.location.pathname.includes('/negocios/')?'../../':'./',self.location.href);
 const CACHE_PREFIX='alliance-portal-'+encodeURIComponent(ROOT.pathname)+':';
 const PORTAL_CACHE=CACHE_PREFIX+BUILD_VERSION;
 const DEVELOPMENT=['localhost','127.0.0.1','[::1]'].includes(ROOT.hostname);
+async function noticeIcon(data,folder){
+ const dark=['cafeteria','cocteleria'].includes(data.branch),fallback=new URL(dark?'assets/pwa-dark-192.png':'assets/pwa-192.png',ROOT).href;
+ if(!dark&&typeof data.logo==='string'&&data.logo.length<1200&&/^https:\/\//.test(data.logo))return data.logo;
+ const asData=async response=>{const bytes=new Uint8Array(await response.arrayBuffer());let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);return 'data:image/png;base64,'+btoa(binary);};
+ try{
+  const cache=await caches.open('alliance-'+data.branch+'-pwa-brand-v1'),saved=await cache.match(new URL('negocios/'+folder+'/pwa-icon-192.png',ROOT));
+  if(saved&&(!dark||saved.headers.get('X-Alliance-Icon-Background')==='black'))return await asData(saved);
+  const logo=typeof data.logo==='string'&&data.logo.length<1200&&/^https:\/\//.test(data.logo)?data.logo:null;
+  if(!dark)return logo||fallback;
+  if(!logo)return fallback;
+  const source=logo||new URL('assets/logo.png',ROOT).href,key=new URL('negocios/'+folder+'/notification-black.png',ROOT),prepared=await cache.match(key);
+  if(prepared?.headers.get('X-Alliance-Icon-Source')===source)return await asData(prepared);
+  if(typeof OffscreenCanvas==='undefined')return fallback;
+  let response;try{response=await fetch(source,{signal:AbortSignal.timeout(1800)});if(!response.ok)throw Error('Logo no disponible');}catch{response=await fetch(new URL('assets/logo.png',ROOT),{signal:AbortSignal.timeout(1800)});}
+  const image=await createImageBitmap(await response.blob()),canvas=new OffscreenCanvas(192,192),ctx=canvas.getContext('2d');
+  ctx.fillStyle='#000';ctx.fillRect(0,0,192,192);const scale=Math.min(146/image.width,146/image.height),w=image.width*scale,h=image.height*scale;ctx.drawImage(image,(192-w)/2,(192-h)/2,w,h);image.close();
+  const icon=new Response(await canvas.convertToBlob({type:'image/png'}),{headers:{'Content-Type':'image/png','X-Alliance-Icon-Source':source,'X-Alliance-Icon-Background':'black'}});await cache.put(key,icon.clone());return await asData(icon);
+ }catch{return fallback;}
+}
 self.addEventListener('push',event=>{
  event.waitUntil((async()=>{
   let data;try{data=event.data?.json();}catch{return;}
   if(!['stock-alert','staff-login'].includes(data?.type)||!/^[-a-z0-9]{3,80}$/.test(data.branch||'')||typeof data.body!=='string'||typeof data.title!=='string')return;
   const folder=['cafeteria','cocteleria','gcobarf'].includes(data.branch)?data.branch:'sucursal';
   const url=new URL('negocios/'+folder+'/admin.html',ROOT);if(folder==='sucursal')url.searchParams.set('branch',data.branch);url.searchParams.set('stock-alert','1');url.hash=data.type==='staff-login'?'dashboard':['cafeteria','cocteleria'].includes(data.branch)?'materials':'inventory';
-  let icon=new URL('assets/pwa-192.png',ROOT).href;
-  if(typeof data.logo==='string'&&data.logo.length<1200&&/^https:\/\//.test(data.logo))icon=data.logo;
-  else for(const name of await caches.keys()){if(name==='alliance-'+data.branch+'-pwa-brand-v1'){const cache=await caches.open(name),saved=await cache.match(new URL('negocios/'+folder+'/pwa-icon-192.png',ROOT));if(saved){const bytes=new Uint8Array(await saved.arrayBuffer());let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);icon='data:image/png;base64,'+btoa(binary);}break;}}
-  await self.registration.showNotification(data.title.slice(0,180),{body:data.body.slice(0,1600),icon,badge:new URL('assets/pwa-192.png',ROOT).href,tag:'stock-'+data.branch+'-'+String(data.id).slice(0,64),renotify:true,data:{kind:'stock-alert',url:url.href},actions:[{action:'inventory',title:data.type==='staff-login'?'Ver equipo':'Revisar insumos'}]});
+  // Wake existing inboxes through the push already received, without adding a polling loop.
+  for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true}))if(new URL(client.url).pathname===url.pathname)client.postMessage({type:'alliance-notice',branch:data.branch});
+  const icon=await noticeIcon(data,folder);
+  await self.registration.showNotification(data.title.slice(0,180),{body:data.body.slice(0,1600),icon,tag:'stock-'+data.branch+'-'+String(data.id).slice(0,64),renotify:true,data:{kind:'stock-alert',url:url.href},actions:[{action:'inventory',title:data.type==='staff-login'?'Ver equipo':'Revisar insumos'}]});
  })());
 });
 self.addEventListener('notificationclick',event=>{
@@ -24,7 +43,7 @@ self.addEventListener('notificationclick',event=>{
   if(current){await current.navigate(target.href);await current.focus();}else await self.clients.openWindow(target.href);
  })());
 });
-const PUBLIC_ASSETS=['negocios/cocteleria/waiter.webmanifest','negocios/cafeteria/waiter.webmanifest','operational/sales-statistics-engine.js','operational/sales-statistics-worker.js','operational/sales-statistics.js','operational/sales-statistics.css','index.html','portal.css','brand.css','pwa.js','api-config.js','open-local.js','assets/logo.png','assets/pwa-192.png','assets/pwa-512.png','operational/waiter-flow.js','operational/waiter-flow.css',
+const PUBLIC_ASSETS=['negocios/cocteleria/waiter.webmanifest','negocios/cafeteria/waiter.webmanifest','operational/sales-statistics-engine.js','operational/sales-statistics-worker.js','operational/sales-statistics.js','operational/sales-statistics.css','index.html','portal.css','brand.css','pwa.js','api-config.js','open-local.js','assets/logo.png','assets/pwa-192.png','assets/pwa-512.png','assets/pwa-dark-192.png','assets/pwa-dark-512.png','operational/waiter-flow.js','operational/waiter-flow.css',
   'operational/team/team-panel.js','operational/team/team-panel.css','operational/operations-engine.js','operational/customer-ledger.js','operational/disclosures.js','operational/pos-local.js','operational/orders-local.js','operational/orders-panel.js','operational/printing.js','operational/waiter.js','operational/waiter-brand.js','operational/waiter.css','operational/auth-proof.js','operational/browser-storage.js','operational/performance.js','operational/dialogs.js','operational/offline.js','operational/offline-auth.js','operational/forms.js','operational/selectors.js','operational/selectors.css','operational/gcobarf-calendar.js','operational/gcobarf-calendar.css','operational/operations.js','operational/operations.css','operational/sales-range.js','operational/app.js','operational/style.css','operational/currency.js','operational/stock-alerts-engine.js','operational/stock-alerts.js','operational/stock-alerts.css','operational/product-photos.js','operational/tips-engine.js','operational/tips.js','operational/tips.css','operational/customer-crm.js','operational/customer-crm.css','operational/activity.js','operational/oracle-client.js','operational/demo-client.js','operational/ingredient-yield.js','operational/ingredient-yield.css','operational/materials-engine.js','operational/production-engine.js','operational/material-accounting.js','operational/material-statistics.js','operational/materials.js','operational/materials.css','operational/jespresso-engine.js','operational/jespresso-templates.js','operational/jespresso.js','operational/jespresso.css','operational/costing.js','operational/costing-engine.js','operational/login-feedback.js','operational/login.js','operational/vendor/lucide.js','operational/vendor/qrcode.js','operational/vendor/jspdf.js','operational/vendor/xlsx.js'];
 for(const branch of ['gcobarf','cocteleria','cafeteria','sucursal'])PUBLIC_ASSETS.push('negocios/'+branch+'/admin.html','negocios/'+branch+'/index.html','negocios/'+branch+'/config.js','negocios/'+branch+'/manifest.webmanifest','negocios/'+branch+'/pwa-icon.svg');
 self.addEventListener('install',event=>{event.waitUntil((async()=>{const cache=await caches.open(PORTAL_CACHE);await Promise.all(PUBLIC_ASSETS.map(async path=>{try{const url=new URL(path,ROOT),versioned=new URL(url);versioned.searchParams.set('v',BUILD_VERSION);const response=await fetch(versioned,{cache:'reload'});if(response.ok)await cache.put(/\.(js|css)$/.test(url.pathname)?versioned:url,response);}catch{}}));await self.skipWaiting();})());});

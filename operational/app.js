@@ -1061,7 +1061,7 @@ const App = (() => {
     canvas.height = size;
     const context = canvas.getContext("2d");
     if (!context) throw new Error("El navegador no puede generar el icono de instalación.");
-    context.fillStyle = "#ffffff";
+    context.fillStyle = ["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"#000000":"#ffffff";
     context.fillRect(0, 0, size, size);
     const safeArea = size * .76;
     const scale = Math.min(safeArea / image.naturalWidth, safeArea / image.naturalHeight);
@@ -1083,9 +1083,10 @@ const App = (() => {
   const syncPwaBranding = async () => {
     if (!state.business) return;
     const name = String(state.business.business_name || "Tienda Nápoles").trim() || "Tienda Nápoles";
-    const logoUrl = state.business.logo_url ? new URL(state.business.logo_url,location.href).href : new URL("../../assets/pwa-512.png", location.href).href;
+    const darkIcon=["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug);
+    const logoUrl = state.business.logo_url ? new URL(state.business.logo_url,location.href).href : new URL(darkIcon?"../../assets/logo.png":"../../assets/pwa-512.png", location.href).href;
     const themeColor = String(state.business.accent_color || "#f05a28");
-    const signature = `${name}|${logoUrl}|${themeColor}`;
+    const signature = `${name}|${logoUrl}|${themeColor}|${darkIcon?'black-v1':'white'}`;
     if (signature === state.pwaBrandSignature) return;
     state.pwaBrandSignature = signature;
     const syncToken = ++state.pwaBrandSyncToken;
@@ -1123,8 +1124,8 @@ const App = (() => {
       if ("caches" in window && location.protocol!=="file:") {
         const cache = await caches.open(PWA_BRAND_CACHE);
         await Promise.all([
-          cache.put(pwaAssetUrl("pwa-icon-192.png"), new Response(icon192, { headers: { "Content-Type": "image/png", "Cache-Control": "no-store", "X-Alliance-Pwa-Version": version } })),
-          cache.put(pwaAssetUrl("pwa-icon-512.png"), new Response(icon512, { headers: { "Content-Type": "image/png", "Cache-Control": "no-store", "X-Alliance-Pwa-Version": version } }))
+          cache.put(pwaAssetUrl("pwa-icon-192.png"), new Response(icon192, { headers: { "Content-Type": "image/png", "Cache-Control": "no-store", "X-Alliance-Pwa-Version": version,"X-Alliance-Icon-Background":darkIcon?'black':'white' } })),
+          cache.put(pwaAssetUrl("pwa-icon-512.png"), new Response(icon512, { headers: { "Content-Type": "image/png", "Cache-Control": "no-store", "X-Alliance-Pwa-Version": version,"X-Alliance-Icon-Background":darkIcon?'black':'white' } }))
         ]);
       }
       iconEntries = [
@@ -4414,7 +4415,7 @@ const App = (() => {
     const summary = inventorySummary();
     metrics.innerHTML = `
       <article><span>${icon("package-check", 19)} ${recipeInventory()?'Capacidad de preparación':'Unidades'}</span><strong>${summary.units.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong><small>${recipeInventory()?'Potencial por receta; los insumos se comparten':'Existencia total registrada'}</small></article>
-      <article><span>${icon("circle-dollar-sign", 19)} Inversion</span><strong>${summary.costsVisible===false?"Reservado":money(summary.costValue)}</strong><small>${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Valor de insumos y existencias":"Inventario registrado"}</small></article>
+      <article><span>${icon("circle-dollar-sign", 19)} ${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Costo de productos":"Inversion"}</span><strong>${summary.costsVisible===false?"Reservado":money(summary.costValue)}</strong><small>${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Capacidad disponible × costo unitario":"Inventario registrado"}</small></article>
       <article><span>${icon("trending-up", 19)} Venta potencial</span><strong>${money(summary.saleValue)}</strong><small>${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Por receta; comparten insumos":"Estimado al vender todo"}</small></article>
       <article class="${summary.low || summary.out ? "inventory-alert-metric" : ""}"><span>${icon("triangle-alert", 19)} Alertas</span><strong>${summary.low + summary.out}</strong><small>${summary.out} agotados · ${summary.low} por reponer</small></article>`;
 
@@ -8422,7 +8423,7 @@ const App = (() => {
         pdf.text(`Generado: ${pdfSafeText(new Date().toLocaleString("es-CO"))}`, pageWidth - margin, 12, { align: "right" });
         if (includeSummary) {
           pdf.text(
-            `${products.length} productos  |  ${summary.units.toLocaleString("es-CO", { maximumFractionDigits: 2 })} unidades  |  Inversion ${pdfSafeText(money(summary.costValue))}  |  Venta potencial ${pdfSafeText(money(summary.saleValue))}`,
+            `${products.length} productos  |  ${summary.units.toLocaleString("es-CO", { maximumFractionDigits: 2 })} unidades  |  ${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Costo de productos":"Inversion"} ${pdfSafeText(money(summary.costValue))}  |  Venta potencial ${pdfSafeText(money(summary.saleValue))}`,
             margin,
             24
           );

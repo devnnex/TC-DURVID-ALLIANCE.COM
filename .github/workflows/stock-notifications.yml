@@ -25,5 +25,12 @@ jobs:
         with:
           node-version: 22.23.3
           cache: npm
-      - run: npm ci
-      - run: npm run notifications:once -- --burst
+          cache-dependency-path: infrastructure/notifications/package-lock.json
+      - name: Preparar solo el remitente
+        run: node scripts/prepare-notification-runtime.mjs "$RUNNER_TEMP/alliance-notifications"
+      - name: Instalar dependencias del remitente
+        working-directory: ${{ runner.temp }}/alliance-notifications
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Enviar avisos pendientes
+        working-directory: ${{ runner.temp }}/alliance-notifications
+        run: node --import tsx scripts/stock-notification-worker.ts --once --burst
