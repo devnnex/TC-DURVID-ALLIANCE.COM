@@ -59,7 +59,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_stock_notifications AS
   IF a='stock_alert_feed' THEN
    alliance_security.keys_only(p,'');
    FOR x IN(SELECT payload FROM alliance_stock_alerts WHERE business_id=b AND location_id=l AND active=1 ORDER BY CASE level_value WHEN 'out' THEN 0 ELSE 1 END,id) LOOP items.append(JSON_OBJECT_T(x.payload));END LOOP;
-   r.put('alerts',items);items:=JSON_ARRAY_T();FOR x IN(SELECT endpoint FROM alliance_push_subscriptions WHERE business_id=b AND location_id=l AND user_id=u AND active=1)LOOP items.append(alliance_security.hash_text(x.endpoint));END LOOP;r.put('subscriptionKeys',items);r.put('at',alliance_pos_store.stamp);RETURN r;
+   r.put('alerts',items);r.put('events',alliance_notices.feed(u,b,l));items:=JSON_ARRAY_T();FOR x IN(SELECT endpoint FROM alliance_push_subscriptions WHERE business_id=b AND location_id=l AND user_id=u AND active=1)LOOP items.append(alliance_security.hash_text(x.endpoint));END LOOP;r.put('subscriptionKeys',items);r.put('at',alliance_pos_store.stamp);RETURN r;
   ELSIF a='stock_alert_subscribe' THEN
    alliance_security.keys_only(p,'subscription');sub:=p.get_object('subscription');alliance_security.keys_only(sub,'endpoint,expirationTime,keys');keys_value:=sub.get_object('keys');alliance_security.keys_only(keys_value,'p256dh,auth');
    endpoint_value:=alliance_security.text_value(sub,'endpoint',2048);

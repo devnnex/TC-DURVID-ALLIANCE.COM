@@ -267,6 +267,17 @@ MERGE INTO alliance_material_entries e USING(
 ) v ON(e.business_id=v.business_id AND e.location_id=v.location_id AND e.id=v.entry_id)
 WHEN NOT MATCHED THEN INSERT(business_id,location_id,id,movement_id,ingredient_id,name,unit_id,quantity_delta,stock_before,stock_after,cost_before,cost_after,unit_cost,total_cost,source,kind,estimated,reference,actor_id,actor_name,occurred_at)
 VALUES(v.business_id,v.location_id,v.entry_id,v.id,v.ingredient_id,v.name,v.unit_id,v.delta,v.stock_before,v.stock_after,v.unit_cost,v.unit_cost,v.unit_cost,ABS(v.delta)*v.unit_cost,'legacy',v.kind,1,v.reference,v.actor_user_id,NVL(v.full_name,'Usuario anterior'),v.created_at);!';
+  EXECUTE IMMEDIATE q'!-- Private dispatch configuration is never returned through the public API.
+BEGIN
+ FOR x IN(SELECT 'CREATE TABLE alliance_notice_config(id NUMBER PRIMARY KEY,dispatch_url VARCHAR2(400),dispatch_token VARCHAR2(1000),enabled NUMBER(1) DEFAULT 0 NOT NULL,next_dispatch TIMESTAMP WITH TIME ZONE,last_status NUMBER)' ddl FROM dual UNION ALL
+ SELECT 'CREATE TABLE alliance_notice_scopes(business_id VARCHAR2(36) NOT NULL,location_id VARCHAR2(36) NOT NULL,version NUMBER DEFAULT 1 NOT NULL,processed_version NUMBER DEFAULT 0 NOT NULL,updated_at TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,PRIMARY KEY(business_id,location_id))' FROM dual UNION ALL
+ SELECT 'CREATE TABLE alliance_notice_events(id VARCHAR2(64) PRIMARY KEY,business_id VARCHAR2(36) NOT NULL,location_id VARCHAR2(36) NOT NULL,actor_user_id VARCHAR2(36) NOT NULL,kind VARCHAR2(30) NOT NULL,payload CLOB CHECK(payload IS JSON),created_at TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL)' FROM dual UNION ALL
+ SELECT 'CREATE INDEX alliance_notice_events_scope ON alliance_notice_events(business_id,location_id,created_at)' FROM dual) LOOP
+  BEGIN EXECUTE IMMEDIATE x.ddl;EXCEPTION WHEN OTHERS THEN IF SQLCODE<>-955 THEN RAISE;END IF;END;
+ END LOOP;
+ EXECUTE IMMEDIATE 'MERGE INTO alliance_notice_config c USING(SELECT 1 id FROM dual)s ON(c.id=s.id) WHEN NOT MATCHED THEN INSERT(id)VALUES(1)';
+ COMMIT;
+END;!';
   EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE alliance_security AUTHID DEFINER AS
   FUNCTION new_id RETURN VARCHAR2;
   FUNCTION hash_text(p_text VARCHAR2) RETURN VARCHAR2;
@@ -847,7 +858,7 @@ END;!';
       IF item.has('expectedStockVersion') THEN SELECT version INTO cost_current FROM alliance_pos_stock WHERE business_id=p_business AND location_id=p_location AND product_id=id_value;IF cost_current<>item.get_number('expectedStockVersion') THEN alliance_security.fail(409,'STOCK_CONFLICT','Las existencias cambiaron en otro equipo. Revisa el registro pendiente.');END IF;END IF;
       UPDATE alliance_pos_stock SET cost_minor=cost_value,min_stock=min_value,code=code_value,unit_name=unit_value,updated_at=SYSTIMESTAMP WHERE business_id=p_business AND location_id=p_location AND product_id=id_value;
       IF item.has('productionRecipeId') THEN stock_value:=before_value;END IF;
-      event_value:=NVL(item.get_string('movementEventId'),alliance_security.new_id);movement(p_user,p_business,p_location,event_value,id_value,stock_value-before_value,CASE WHEN n=0 THEN 'NUEVO_PRODUCTO' WHEN stock_value>=before_value THEN 'ENTRADA_EDICION' ELSE 'SALIDA_EDICION' END,'FICHA_PRODUCTO',NULL);IF item.has('productionRecipeId') THEN ctx:=JSON_OBJECT_T();ctx.put('recipeId',alliance_security.text_value(item,'productionRecipeId',80));ctx.put('productId',id_value);ctx:=alliance_production.transfer_batch(p_user,p_business,p_location,ctx);END IF;
+      event_value:=NVL(item.get_string('movementEventId'),alliance_security.new_id);ctx:=document(p_business,p_location,'op_recipes',id_value);IF NOT item.has('productionRecipeId') AND (stock_value<>before_value OR ctx IS NULL) THEN movement(p_user,p_business,p_location,event_value,id_value,stock_value-before_value,CASE WHEN n=0 THEN 'NUEVO_PRODUCTO' WHEN stock_value>=before_value THEN 'ENTRADA_EDICION' ELSE 'SALIDA_EDICION' END,'FICHA_PRODUCTO',NULL);END IF;IF item.has('productionRecipeId') THEN ctx:=JSON_OBJECT_T();ctx.put('recipeId',alliance_security.text_value(item,'productionRecipeId',80));ctx.put('productId',id_value);ctx:=alliance_production.transfer_batch(p_user,p_business,p_location,ctx);END IF;
     END LOOP;
   ELSIF p_action='adjust_inventory' THEN
     item:=p_payload.get_object('adjustment');id_value:=item.get_string('productId');event_value:=alliance_security.text_value(item,'eventId',160);
@@ -1048,7 +1059,7 @@ END;!';
     r.put('docVersions',versions);r.put('docs',docs);IF stock THEN r.put('inventory',alliance_pos_store.inventory(b,l));ELSE r.put('inventory',JSON_ARRAY_T());END IF;
     history:=alliance_pos_store.document(b,l,'configuration','history');IF history IS NOT NULL AND history.has('income_cutoff') THEN cutoff:=FROM_TZ(TO_TIMESTAMP(history.get_string('income_cutoff'),'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'),'UTC');r.put('incomeCutoff',history.get_string('income_cutoff'));END IF;arr:=JSON_ARRAY_T();IF INSTR(p,',sales.read,')>0 THEN FOR x IN(SELECT invoice_json,voided FROM alliance_pos_sales WHERE business_id=b AND location_id=l AND (cutoff IS NULL OR created_at>cutoff) ORDER BY created_at DESC FETCH FIRST 2000 ROWS ONLY) LOOP o:=JSON_OBJECT_T(x.invoice_json);o.put('voided',x.voided=1);arr.append(o);END LOOP;END IF;r.put('model',model);r.put('sales',arr);r.put('salesHistoryPartial',arr.get_size>=2000);IF catalog_scope THEN sales_text:=arr.to_clob;arr:=JSON_ARRAY_T();IF INSTR(p,',sales.read,')>0 THEN FOR c IN(SELECT d.id FROM alliance_pos_documents d JOIN JSON_TABLE(sales_text,'$[*]' COLUMNS(sale_id VARCHAR2(80) PATH '$.id')) j ON j.sale_id=d.id WHERE d.business_id=b AND d.location_id=l AND d.entity='op_tipclaims' AND JSON_VALUE(d.data_json,'$.allocatedMinor' RETURNING NUMBER)>0)LOOP arr.append(c.id);END LOOP;END IF;model.put('tipDistributedSaleIds',arr);END IF;
     -- Appointment payment states must not depend on the recent-sales download limit.
-    arr:=JSON_ARRAY_T();IF INSTR(p,',sales.read,')>0 THEN FOR delivery_row IN(SELECT sale.invoice_json FROM alliance_pos_sales sale JOIN alliance_pos_documents account ON account.business_id=sale.business_id AND account.location_id=sale.location_id AND account.entity='table_sessions' AND account.id=sale.session_id WHERE sale.business_id=b AND sale.location_id=l AND sale.voided=0 AND JSON_VALUE(account.data_json,'$.delivery_date') IS NOT NULL) LOOP arr.append(JSON_OBJECT_T(delivery_row.invoice_json));END LOOP;END IF;model.put('deliverySales',arr);r.put('model',model);r.put('at',alliance_pos_store.stamp);RETURN r;
+    arr:=JSON_ARRAY_T();IF INSTR(p,',sales.read,')>0 THEN FOR delivery_row IN(SELECT sale.invoice_json FROM alliance_pos_sales sale JOIN alliance_pos_documents account ON account.business_id=sale.business_id AND account.location_id=sale.location_id AND account.entity='table_sessions' AND account.id=sale.session_id WHERE sale.business_id=b AND sale.location_id=l AND sale.voided=0 AND JSON_VALUE(account.data_json,'$.delivery_date') IS NOT NULL) LOOP arr.append(JSON_OBJECT_T(delivery_row.invoice_json));END LOOP;END IF;model.put('deliverySales',arr);r.put('model',model);IF catalog_scope THEN r.put('materialRevision',alliance_pos_store.report_revision(b,l));END IF;r.put('at',alliance_pos_store.stamp);RETURN r;
   END;
 END;!';
   EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE alliance_tips AUTHID DEFINER AS
@@ -1714,7 +1725,7 @@ END;!';
       IF p_payload.has('cursor') AND NOT p_payload.get('cursor').is_null THEN cursor_json:=p_payload.get_object('cursor');cursor_id:=cursor_json.get_string('id');BEGIN cursor_stamp:=FROM_TZ(TO_TIMESTAMP(cursor_json.get_string('at'),'YYYY-MM-DD"T"HH24:MI:SS.FF9"Z"'),'UTC');EXCEPTION WHEN OTHERS THEN alliance_security.fail(400,'INVALID_INPUT','Revisa la página de movimientos.');END;END IF;
       FOR x IN(SELECT m.*,p.name,u.full_name,s.code,d.data_json movement_detail FROM alliance_pos_movements m JOIN products p ON p.id=m.product_id AND p.business_id=m.business_id JOIN users u ON u.id=m.actor_user_id AND u.business_id=m.business_id LEFT JOIN alliance_pos_stock s ON s.business_id=m.business_id AND s.location_id=m.location_id AND s.product_id=m.product_id LEFT JOIN alliance_pos_documents d ON d.business_id=m.business_id AND d.location_id=m.location_id AND d.entity='op_movementdetail' AND d.id=alliance_security.hash_text(m.id) WHERE m.business_id=p_business AND m.location_id=p_location AND (movement_cutoff IS NULL OR m.created_at>movement_cutoff) AND (cursor_stamp IS NULL OR m.created_at<cursor_stamp OR (m.created_at=cursor_stamp AND m.id<cursor_id)) ORDER BY m.created_at DESC,m.id DESC FETCH FIRST 801 ROWS ONLY) LOOP
         IF arr.get_size=800 THEN has_more:=TRUE;EXIT;END IF;next_json:=JSON_OBJECT_T();next_json.put('id',x.id);next_json.put('at',TO_CHAR(x.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF9"Z"'));
-        record_json:=JSON_OBJECT_T();record_json.put('movementId',x.id);record_json.put('productId',x.product_id);record_json.put('code',x.code);record_json.put('product',x.name);record_json.put('type',x.kind);record_json.put('delta',x.delta);record_json.put('before',x.stock_before);record_json.put('after',x.stock_after);record_json.put('unitCost',x.cost_minor/100);record_json.put('reference',x.reference);record_json.put('sessionId',x.sessi!') || TO_CLOB(q'!on_id);IF x.movement_detail IS NOT NULL THEN link_context(record_json,JSON_OBJECT_T(x.movement_detail));ELSE link_context(record_json,alliance_pos_store.document(p_business,p_location,'table_sessions',x.session_id));END IF;record_json.put('date',TO_CHAR(x.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));record_json.put('user',x.full_name);IF x.kind IN('SALIDA_VENTA_RECETA','DEVOLUCION_VENTA_RECETA') THEN record_json.put('stockBasis','recipe');record_json.put_null('before');record_json.put_null('after');IF x.movement_detail IS NOT NULL THEN invoice:=JSON_OBJECT_T(x.movement_detail);record_json.put('ingredients',invoice.get_array('ingredients'));END IF;END IF;
+        record_json:=JSON_OBJECT_T();record_json.put('movementId',x.id);record_json.put('productId',x.product_id);record_json.put('code',x.code);record_json.put('product',x.name);record_json.put('type',x.kind);record_json.put('delta',x.delta);record_json.put('before',x.stock_before);record_json.put('after',x.stock_after);record_json.put('unitCost',x.cost_minor/100);record_json.put('reference',x.reference);record_json.put('sessionId',x.sessi!') || TO_CLOB(q'!on_id);IF x.movement_detail IS NOT NULL THEN link_context(record_json,JSON_OBJECT_T(x.movement_detail));ELSE link_context(record_json,alliance_pos_store.document(p_business,p_location,'table_sessions',x.session_id));END IF;record_json.put('date',TO_CHAR(x.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'));record_json.put('user',x.full_name);IF x.kind='CAPACIDAD_RECETA' AND x.movement_detail IS NOT NULL THEN invoice:=JSON_OBJECT_T(x.movement_detail);record_json.put('stockBasis','capacity');record_json.put('capacityBefore',invoice.get_number('capacityBefore'));record_json.put('capacityAfter',invoice.get_number('capacityAfter'));record_json.put('ingredients',invoice.get_array('ingredients'));END IF;IF x.kind IN('SALIDA_VENTA_RECETA','DEVOLUCION_VENTA_RECETA') THEN record_json.put('stockBasis','recipe');record_json.put_null('before');record_json.put_null('after');IF x.movement_detail IS NOT NULL THEN invoice:=JSON_OBJECT_T(x.movement_detail);record_json.put('ingredients',invoice.get_array('ingredients'));END IF;END IF;
         IF x.session_id IS NOT NULL THEN
           value:=NULL;
           FOR price_row IN(SELECT SUM(j.qty*j.price)/NULLIF(SUM(j.qty),0) price FROM alliance_pos_sales sale CROSS APPLY JSON_TABLE(sale.invoice_json,'$.items[*]' COLUMNS(product_id VARCHAR2(80) PATH '$.menu_item_id',qty NUMBER PATH '$.quantity',price NUMBER PATH '$.unit_price')) j WHERE sale.business_id=p_business AND sale.location_id=p_location AND sale.session_id=x.session_id AND sale.voided=0 AND j.product_id=x.product_id) LOOP value:=price_row.price;END LOOP;
@@ -2041,6 +2052,21 @@ END;!');
     AND NOT EXISTS(SELECT 1 FROM alliance_pos_documents prep WHERE prep.business_id=b AND prep.location_id=l AND prep.entity='op_preparations' AND prep.id=d.id AND JSON_VALUE(prep.data_json,'$.status')='active');
     RETURN held;
   END;
+  FUNCTION recipe_capacity(b VARCHAR2,l VARCHAR2,recipe JSON_OBJECT_T) RETURN NUMBER IS
+    parts JSON_ARRAY_T;part JSON_OBJECT_T;raw JSON_OBJECT_T;value NUMBER:=1e30;per_unit NUMBER;
+  BEGIN
+    IF recipe IS NULL THEN RETURN 0;END IF;parts:=recipe.get_array('lines');IF parts IS NULL OR parts.get_size=0 THEN RETURN 0;END IF;
+    FOR i IN 0..parts.get_size-1 LOOP part:=TREAT(parts.get(i) AS JSON_OBJECT_T);raw:=alliance_operations.raw_item(b,l,part.get_string('ingredientId'));per_unit:=alliance_operations.convert_quantity(part.get_number('quantity'),part.get_string('unit'),raw.get_string('unit'));IF per_unit>0 THEN value:=LEAST(value,FLOOR((GREATEST(0,raw.get_number('quantity')-held_quantity(b,l,raw.get_string('id')))+0.00000001)/per_unit));END IF;END LOOP;
+    RETURN CASE WHEN value=1e30 THEN 0 ELSE value END;
+  END;
+  PROCEDURE capacity_entry(u VARCHAR2,b VARCHAR2,l VARCHAR2,product_id VARCHAR2,job VARCHAR2,before_capacity NUMBER,recipe JSON_OBJECT_T) IS
+    details JSON_OBJECT_T:=JSON_OBJECT_T();items JSON_ARRAY_T:=JSON_ARRAY_T();parts JSON_ARRAY_T:=recipe.get_array('lines');part JSON_OBJECT_T;raw JSON_OBJECT_T;o JSON_OBJECT_T;after_capacity NUMBER:=recipe_capacity(b,l,recipe);event_value VARCHAR2(160):='RECIPE-'||alliance_security.hash_text(job);
+  BEGIN
+    FOR i IN 0..parts.get_size-1 LOOP part:=TREAT(parts.get(i) AS JSON_OBJECT_T);raw:=alliance_operations.raw_item(b,l,part.get_string('ingredientId'));o:=JSON_OBJECT_T();o.put('ingredientId',raw.get_string('id'));o.put('name',raw.get_string('name'));o.put('unit',raw.get_string('unit'));o.put('available',GREATEST(0,raw.get_number('quantity')-held_quantity(b,l,raw.get_string('id'))));o.put('perPreparation',alliance_operations.convert_quantity(part.get_number('quantity'),part.get_string('unit'),raw.get_string('unit')));items.append(o);END LOOP;
+    details.put('stockBasis','capacity');details.put('capacityBefore',before_capacity);details.put('capacityAfter',after_capacity);details.put('ingredients',items);details.put('recipeId',recipe.get_string('recipeId'));
+    INSERT INTO alliance_pos_movements(business_id,location_id,id,product_id,actor_user_id,delta,stock_before,stock_after,cost_minor,kind,reference,allow_negative)VALUES(b,l,event_value,product_id,u,0,0,0,0,'CAPACIDAD_RECETA','Registro desde costeo',0);
+    alliance_pos_store.put_document(b,l,'op_movementdetail',alliance_security.hash_text(event_value),details);
+  END;
   PROCEDURE increase_capacity(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) IS
     recipe JSON_OBJECT_T;raw JSON_OBJECT_T;part JSON_OBJECT_T;old JSON_OBJECT_T;ledger JSON_OBJECT_T;entry JSON_OBJECT_T;covered JSON_OBJECT_T:=JSON_OBJECT_T();lines JSON_ARRAY_T;old_parts JSON_ARRAY_T;parts JSON_ARRAY_T:=JSON_ARRAY_T();keys_value JSON_KEY_LIST;
     slug_value VARCHAR2(80);product_id VARCHAR2(80);recipe_id VARCHAR2(80);raw_id VARCHAR2(80);target NUMBER;expected NUMBER;current_value NUMBER:=1e30;per_unit NUMBER;delta NUMBER;q NUMBER;n NUMBER:=0;
@@ -2096,7 +2122,7 @@ END;!');
   FUNCTION run_action(u VARCHAR2,b VARCHAR2,l VARCHAR2,command_value VARCHAR2,p JSON_OBJECT_T,job VARCHAR2,sync_mode BOOLEAN DEFAULT FALSE) RETURN JSON_OBJECT_T IS
     history_before JSON_OBJECT_T;history_after JSON_OBJECT_T;history_row JSON_OBJECT_T;
     v JSON_OBJECT_T;old JSON_OBJECT_T;r JSON_OBJECT_T;m JSON_OBJECT_T;wrapper JSON_OBJECT_T;ing JSON_OBJECT_T;raw JSON_OBJECT_T;part JSON_OBJECT_T;mapping JSON_OBJECT_T;row_json JSON_OBJECT_T;result_json JSON_OBJECT_T:=JSON_OBJECT_T();lines JSON_ARRAY_T;ings JSON_ARRAY_T;recipes JSON_ARRAY_T;maps JSON_ARRAY_T;parts JSON_ARRAY_T:=JSON_ARRAY_T();merged JSON_OBJECT_T:=JSON_OBJECT_T();keys_value JSON_KEY_LIST;s JSON_OBJECT_T;man JSON_ARRAY_T;
-    id_value VARCHAR2(80);raw_id VARCHAR2(80);name_value VARCHAR2(1200);unit_value VARCHAR2(12);source_unit VARCHAR2(12);slug_value VARCHAR2(80);n NUMBER;rev NUMBER;q NUMBER;target_quantity NUMBER;delta_quantity NUMBER;portions NUMBER;batch NUMBER:=0;overhead NUMBER;percent_value NUMBER:=0;cost_value NUMBER;found BOOLEAN;
+    id_value VARCHAR2(80);raw_id VARCHAR2(80);name_value VARCHAR2(1200);unit_value VARCHAR2(12);source_unit VARCHAR2(12);slug_value VARCHAR2(80);n NUMBER;rev NUMBER;q NUMBER;target_quantity NUMBER;delta_quantity NUMBER;portions NUMBER;batch NUMBER:=0;overhead NUMBER;percent_value NUMBER:=0;cost_value NUMBER;found BOOLEAN;capacity_before NUMBER:=0;
   BEGIN
     SELECT slug INTO slug_value FROM locations WHERE business_id=b AND id=l;
     alliance_security.require_location(u,b,l,CASE WHEN sync_mode THEN 'products.write' ELSE 'inventory.write' END);alliance_pos_store.lock_scope(b,l);
@@ -2107,9 +2133,19 @@ END;!');
     END IF;
     IF slug_value IN('cafeteria','cocteleria') AND command_value IN('materials_save','materials_adjust','materials_delete') THEN SELECT COUNT(*) INTO n FROM alliance_material_entries WHERE business_id=b AND location_id=l AND id=alliance_security.hash_text('movement:'||job);IF n>0 THEN alliance_security.fail(409,'DUPLICATE_OPERATION','El movimiento ya fue registrado.');END IF;END IF;
     IF slug_value IN('cafeteria','cocteleria') AND command_value IN('materials_save','materials_adjust') AND p.has('totalCost') AND NOT alliance_material_ledger.allowed(u,b,l) THEN alliance_security.fail(403,'FORBIDDEN','Solo los jefes pueden registrar o cambiar costos de insumos.');END IF;
-    IF command_value='materials_capacity' THEN id_value:=alliance_security.text_value(p,'productId',80);increase_capacity(u,b,l,p);
+    IF command_value='materials_empty' THEN id_value:=l;
+      alliance_security.keys_only(p,'confirmation,expectedRevision');
+      IF slug_value NOT IN('cafeteria','cocteleria') OR NOT alliance_security.location_owner(u,b,l) THEN alliance_security.fail(403,'FORBIDDEN','Solo un jefe de cafetería o coctelería puede vaciar los insumos.');END IF;
+      IF p.get_string('confirmation')<>'VACIAR' OR p.get_string('confirmation') IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Escribe VACIAR para confirmar.');END IF;
+      IF NVL(p.get_string('expectedRevision'),'-')<>alliance_pos_store.report_revision(b,l) THEN alliance_security.fail(409,'VERSION_CONFLICT','Las existencias cambiaron. Actualiza antes de vaciar.');END IF;
+      SELECT COUNT(*) INTO n FROM alliance_pos_documents d JOIN alliance_pos_documents s ON s.business_id=d.business_id AND s.location_id=d.location_id AND s.entity='table_sessions' AND s.id=JSON_VALUE(d.data_json,'$.session_id') JOIN alliance_pos_documents r ON r.business_id=d.business_id AND r.location_id=d.location_id AND r.entity='op_recipes' AND r.id=JSON_VALUE(d.data_json,'$.menu_item_id') WHERE d.business_id=b AND d.location_id=l AND d.entity='session_items' AND NVL(JSON_VALUE(d.data_json,'$.status'),'confirmed')<>'cancelled' AND JSON_VALUE(s.data_json,'$.status')='open' AND JSON_VALUE(r.data_json,'$.managed')='true';
+      IF n>0 THEN alliance_security.fail(409,'OPEN_CONSUMPTION','Cobra o retira los consumos abiertos antes de vaciar los insumos.');END IF;
+      FOR x IN(SELECT id,quantity FROM alliance_raw_stock rs WHERE business_id=b AND location_id=l AND quantity<>0 AND NOT EXISTS(SELECT 1 FROM alliance_pos_documents d WHERE d.business_id=b AND d.location_id=l AND d.entity='op_archivedingredients' AND d.id=rs.id)) LOOP alliance_operations.raw_move(u,b,l,alliance_security.hash_text('empty:'||job||':'||x.id),x.id,-x.quantity,'out','Vaciado de macro confirmado por el jefe');END LOOP;
+      guard_open(b,l);
+      DELETE FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_recipesupplies';
+    ELSIF command_value='materials_capacity' THEN id_value:=alliance_security.text_value(p,'productId',80);increase_capacity(u,b,l,p);
     ELSIF command_value='materials_transfer_production' THEN result_json:=alliance_production.transfer_batch(u,b,l,p);RETURN alliance_operations.snapshot(u,b,l);ELSIF command_value='materials_link' THEN
-      alliance_security.require_location(u,b,l,'products.write');alliance_security.keys_only(p,'productId,recipeId,revision,salePortions,mappings,available,supplyRecipe');
+      alliance_security.require_location(u,b,l,'products.write');alliance_security.keys_only(p,'productId,recipeId,revision,salePortions,mappings,available,supplyRecipe');capacity_before:=recipe_capacity(b,l,alliance_operations.get_row(b,l,'recipes',p.get_string('productId')));
       id_value:=alliance_security.text_value(p,'productId',80);v:=alliance_pos_store.document(b,l,'menu_items',id_value);IF v IS NULL THEN alliance_security.fail(404,'NOT_FOUND','Producto no disponible.');END IF;
       SELECT COUNT(*) INTO n FROM alliance_pos_documents d JOIN alliance_pos_documents a ON a.business_id=d.business_id AND a.location_id=d.location_id AND a.entity='table_sessions' AND a.id=JSON_VALUE(d.data_json,'$.session_id') WHERE d.business_id=b AND d.location_id=l AND d.entity='session_items' AND JSON_VALUE(d.data_json,'$.menu_item_id')=id_value AND NVL(JSON_VALUE(d.data_json,'$.status'),'served')<>'cancelled' AND JSON_VALUE(a.data_json,'$.status')='open';IF n>0 THEN alliance_security.fail(409,'OPEN_RECIPE','Cobra o retira los consumos de este producto antes de cambiar su receta.');END IF;
       wrapper:=alliance_pos_store.document(b,l,'costing','primary');IF wrapper IS NULL OR wrapper.get_number('revision')<>alliance_operations.numeric_value(p,'revision') THEN alliance_security.fail(409,'VERSION_CONFLICT','La hoja cambio. Guarda y vuelve a abrir el vinculo.');END IF;
@@ -2128,7 +2164,7 @@ END;!');
           cost_value:=ing.get_number('purchasePrice');IF ing.get_boolean('recoverableTax') THEN cost_value:=cost_value/(1+ing.get_number('purchaseTaxRate')/100);END IF;cost_value:=cost_value/ing.get_number('quantity')*alliance_operations.convert_quantity(1,source_unit,ing.get_string('unit'));INSERT INTO alliance_raw_stock(business_id,location_id,id,name,unit_id,unit_cost) VALUES(b,l,raw_id,name_value,source_unit,cost_value);
         END IF;
         IF alliance_operations.get_row(b,l,'archivedingredients',raw_id) IS NOT NULL THEN alliance_security.fail(409,'MATERIALS_MISSING','El insumo esta retirado de la macro.');END IF;
-        raw:=alliance_operations.raw_item(b,l,raw_id);q:=alliance_operations.convert_quantity((CASE WHEN part.has('initialQuantity') THEN part.get_number('initialQuantity') ELSE part.get_number('quantity')/alliance_yield.factor(part) END),part.get_string('unit'),raw.get_string('unit'))*portions/CASE WHEN part.get_string('stage')='portion' THEN 1 ELSE r.get_number('output') END;
+        raw:=alliance_operations.raw_item(b,l,raw_id);q:=alliance_operations.convert_quantity((CASE WHEN part.has('initialQuantity') THEN part.get_number('initialQuantity') ELSE part.get_number('quantity')/alliance_yield.factor(part) END),part.get_string('unit'),raw.get_string('unit')!') || TO_CLOB(q'!)*portions/CASE WHEN part.get_string('stage')='portion' THEN 1 ELSE r.get_number('output') END;
         IF q>0 THEN row_json:=merged.get_object(raw_id);IF row_json IS NULL THEN row_json:=JSON_OBJECT_T();row_json.put('ingredientId',raw_id);row_json.put('name',raw.get_string('name'));row_json.put('unit',raw.get_string('unit'));row_json.put('quantity',q);ELSE row_json.put('quantity',row_json.get_number('quantity')+q);END IF;merged.put(raw_id,row_json);END IF;
         IF NVL(part.get_string('stage'),'batch')<>'portion' THEN
           IF part.has('manualCost') AND NOT part.get('manualCost').is_null THEN batch:=batch+part.get_number('manualCost')/alliance_yield.factor(part);ELSE cost_value:=ing.get_number('purchasePrice');IF ing.get_boolean('recoverableTax') THEN cost_value:=cost_value/(1+ing.get_number('purchaseTaxRate')/100);END IF;batch:=batch+alliance_operations.convert_quantity((CASE WHEN part.has('initialQuantity') THEN part.get_number('quantity') ELSE part.get_number('quantity')/alliance_yield.factor(part) END),part.get_string('unit'),ing.get_string('unit'))*cost_value/ing.get_number('quantity');END IF;
@@ -2137,7 +2173,7 @@ END;!');
       keys_value:=merged.get_keys;FOR k IN(SELECT column_value key_value FROM TABLE(keys_value) ORDER BY NLSSORT(column_value,'NLS_SORT=BINARY')) LOOP parts.append(merged.get_object(k.key_value));END LOOP;IF parts.get_size=0 THEN alliance_security.fail(400,'INVALID_INPUT','La receta necesita cantidades mayores que cero.');END IF;
       IF r.has('sheet') THEN s:=r.get_object('sheet');man:=s.get_array('management');FOR i IN 0..man.get_size-1 LOOP row_json:=TREAT(man.get(i) AS JSON_OBJECT_T);percent_value:=percent_value+row_json.get_number('percent');END LOOP;overhead:=batch*(s.get_number('unforeseenPercent')+percent_value)/100/r.get_number('output')*portions;ELSE overhead:=0;man:=m.get_array('expenses');FOR j IN 0..man.get_size-1 LOOP row_json:=TREAT(man.get(j) AS JSON_OBJECT_T);IF NOT row_json.get_boolean('includedElsewhere') AND (row_json.get_string('recipeId') IS NULL OR row_json.get_string('recipeId')=r.get_string('id')) THEN IF row_json.get_string('kind')='unit' THEN overhead:=overhead+row_json.get_number('amount')*portions;ELSIF row_json.get_string('kind')='batch' THEN overhead:=overhead+row_json.get_number('amount')/r.get_number('output')*portions;END IF;END IF;END LOOP;END IF;
       result_json.put('productId',id_value);result_json.put('name',v.get_string('name'));result_json.put('recipeId',r.get_string('id'));result_json.put('managed',TRUE);result_json.put('salePortions',portions);result_json.put('mappings',maps);result_json.put('overheadCost',overhead);result_json.put('lines',parts);alliance_operations.put_row(u,b,l,'recipes',id_value,result_json);
-      IF p.has('supplyRecipe') THEN n:=alliance_security.flag(p,'supplyRecipe');IF n=1 THEN supply_recipe(u,b,l,r,parts,portions);END IF;END IF;
+      IF p.has('supplyRecipe') THEN n:=alliance_security.flag(p,'supplyRecipe');IF n=1 THEN supply_recipe(u,b,l,r,parts,portions);IF slug_value IN('cafeteria','cocteleria') THEN capacity_entry(u,b,l,id_value,job,capacity_before,result_json);END IF;END IF;END IF;
       IF p.has('available') THEN
         n:=alliance_security.flag(p,'available');v.put('is_available',n=1);alliance_pos_store.put_document(b,l,'menu_items',id_value,v);
         IF slug_value IN('cafeteria','cocteleria') THEN
@@ -2149,7 +2185,7 @@ END;!');
       SELECT COUNT(*) INTO n FROM alliance_raw_stock WHERE business_id=b AND location_id=l AND id=id_value;
       IF n=0 THEN IF rev<>0 THEN alliance_security.fail(409,'VERSION_CONFLICT','El insumo cambio.');END IF;ELSE old:=alliance_operations.raw_item(b,l,id_value);IF old.get_number('revision')<>rev THEN alliance_security.fail(409,'VERSION_CONFLICT','El insumo cambio. Actualiza antes de guardar.');END IF;IF old.get_string('unit')<>unit_value THEN IF slug_value<>'gcobarf' THEN alliance_security.fail(409,'VERSION_CONFLICT','Conserva la unidad del insumo.');END IF;change_unit(b,l,id_value,old.get_string('unit'),unit_value);old:=alliance_operations.raw_item(b,l,id_value);END IF;END IF;
       IF old IS NOT NULL AND old.get_boolean('archived') THEN alliance_security.fail(409,'MATERIALS_MISSING','El insumo esta retirado de la macro.');END IF;
-      target_quantity:=CASE W!') || TO_CLOB(q'!HEN old IS NULL THEN 0 ELSE old.get_number('quantity') END;
+      target_quantity:=CASE WHEN old IS NULL THEN 0 ELSE old.get_number('quantity') END;
       IF p.has('quantity') THEN delta_quantity:=ROUND(alliance_operations.numeric_value(p,'quantity'),8)-target_quantity;ELSE delta_quantity:=0;END IF;
       SELECT COUNT(*) INTO n FROM alliance_raw_stock x WHERE x.business_id=b AND x.location_id=l AND x.id<>id_value AND LOWER(TRIM(x.name))=LOWER(TRIM(name_value)) AND x.unit_id=unit_value AND NOT EXISTS(SELECT 1 FROM alliance_pos_documents a WHERE a.business_id=b AND a.location_id=l AND a.entity='op_archivedingredients' AND a.id=x.id);IF n>0 THEN alliance_security.fail(409,'DUPLICATE_MATERIAL','Ya existe este insumo en la macro.');END IF;
       MERGE INTO alliance_raw_stock x USING(SELECT id_value id FROM dual)y ON(x.business_id=b AND x.location_id=l AND x.id=y.id) WHEN MATCHED THEN UPDATE SET name=name_value,min_stock=q,version=version+1 WHEN NOT MATCHED THEN INSERT(business_id,location_id,id,name,unit_id,min_stock)VALUES(b,l,id_value,name_value,unit_value,q);
@@ -2241,6 +2277,12 @@ END;!');
     END LOOP;new_model.put('ingredients',ingredients);
   END;
 END;!');
+  EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE alliance_notices AUTHID DEFINER AS
+ PROCEDURE changed(b VARCHAR2,l VARCHAR2);
+ PROCEDURE login_event(u VARCHAR2,b VARCHAR2,l VARCHAR2);
+ FUNCTION feed(u VARCHAR2,b VARCHAR2,l VARCHAR2) RETURN JSON_ARRAY_T;
+ PROCEDURE dispatch_pending;
+END;!';
   EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE alliance_stock_notifications AUTHID DEFINER AS
  FUNCTION is_boss(u VARCHAR2,b VARCHAR2,l VARCHAR2) RETURN BOOLEAN;
  FUNCTION boss_allowed(u VARCHAR2,b VARCHAR2,l VARCHAR2) RETURN NUMBER;
@@ -2301,7 +2343,7 @@ END;!';
   IF a='stock_alert_feed' THEN
    alliance_security.keys_only(p,'');
    FOR x IN(SELECT payload FROM alliance_stock_alerts WHERE business_id=b AND location_id=l AND active=1 ORDER BY CASE level_value WHEN 'out' THEN 0 ELSE 1 END,id) LOOP items.append(JSON_OBJECT_T(x.payload));END LOOP;
-   r.put('alerts',items);items:=JSON_ARRAY_T();FOR x IN(SELECT endpoint FROM alliance_push_subscriptions WHERE business_id=b AND location_id=l AND user_id=u AND active=1)LOOP items.append(alliance_security.hash_text(x.endpoint));END LOOP;r.put('subscriptionKeys',items);r.put('at',alliance_pos_store.stamp);RETURN r;
+   r.put('alerts',items);r.put('events',alliance_notices.feed(u,b,l));items:=JSON_ARRAY_T();FOR x IN(SELECT endpoint FROM alliance_push_subscriptions WHERE business_id=b AND location_id=l AND user_id=u AND active=1)LOOP items.append(alliance_security.hash_text(x.endpoint));END LOOP;r.put('subscriptionKeys',items);r.put('at',alliance_pos_store.stamp);RETURN r;
   ELSIF a='stock_alert_subscribe' THEN
    alliance_security.keys_only(p,'subscription');sub:=p.get_object('subscription');alliance_security.keys_only(sub,'endpoint,expirationTime,keys');keys_value:=sub.get_object('keys');alliance_security.keys_only(keys_value,'p256dh,auth');
    endpoint_value:=alliance_security.text_value(sub,'endpoint',2048);
@@ -2351,6 +2393,42 @@ END;!';
   END;
   COMMIT;RETURN claimed;
  EXCEPTION WHEN OTHERS THEN ROLLBACK;RAISE;
+ END;
+END;!';
+  EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE BODY alliance_notices AS
+ PROCEDURE changed(b VARCHAR2,l VARCHAR2) IS n NUMBER;
+ BEGIN
+  SELECT COUNT(*) INTO n FROM locations WHERE business_id=b AND id=l AND active=1 AND slug IN('cafeteria','cocteleria');IF n=0 THEN RETURN;END IF;
+  UPDATE alliance_notice_scopes SET version=version+1,updated_at=SYSTIMESTAMP WHERE business_id=b AND location_id=l;
+  IF SQL%ROWCOUNT=0 THEN BEGIN INSERT INTO alliance_notice_scopes(business_id,location_id)VALUES(b,l);EXCEPTION WHEN DUP_VAL_ON_INDEX THEN UPDATE alliance_notice_scopes SET version=version+1,updated_at=SYSTIMESTAMP WHERE business_id=b AND location_id=l;END;END IF;
+ END;
+ PROCEDURE login_event(u VARCHAR2,b VARCHAR2,l VARCHAR2) IS role_value VARCHAR2(30);name_value VARCHAR2(160);n NUMBER;event_value JSON_OBJECT_T:=JSON_OBJECT_T();event_id VARCHAR2(64):=alliance_security.new_id;body_value CLOB;
+ BEGIN
+  SELECT COUNT(*) INTO n FROM locations WHERE business_id=b AND id=l AND active=1 AND slug IN('cafeteria','cocteleria');IF n=0 OR alliance_security.location_owner(u,b,l) THEN RETURN;END IF;
+  SELECT CASE WHEN SUM(CASE WHEN role_code='ADMIN' THEN 1 ELSE 0 END)>0 THEN 'Administrador' WHEN SUM(CASE WHEN role_code='WAITER' THEN 1 ELSE 0 END)>0 THEN 'Mesero' END INTO role_value FROM user_location_roles WHERE business_id=b AND location_id=l AND user_id=u;IF role_value IS NULL THEN RETURN;END IF;
+  -- Refreshing a token does not emit an event. Repeated logins by the same person are grouped for two minutes.
+  SELECT COUNT(*) INTO n FROM alliance_notice_events WHERE business_id=b AND location_id=l AND actor_user_id=u AND kind='staff-login' AND created_at>SYSTIMESTAMP-INTERVAL '2' MINUTE;IF n>0 THEN RETURN;END IF;
+  SELECT full_name INTO name_value FROM users WHERE business_id=b AND id=u AND active=1 AND deleted_at IS NULL;
+  event_value.put('id',event_id);event_value.put('kind','staff-login');event_value.put('name',name_value);event_value.put('role',role_value);event_value.put('at',alliance_pos_store.stamp);event_value.put('body',name_value||' inició sesión como '||LOWER(role_value)||'. Tu equipo se está preparando para atender.');body_value:=event_value.to_clob;
+  event_id:=alliance_security.hash_text('login:'||b||':'||l||':'||u||':'||TRUNC((CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS DATE)-DATE '1970-01-01')*720));event_value.put('id',event_id);body_value:=event_value.to_clob;
+  BEGIN INSERT INTO alliance_notice_events(id,business_id,location_id,actor_user_id,kind,payload)VALUES(event_id,b,l,u,'staff-login',body_value);EXCEPTION WHEN DUP_VAL_ON_INDEX THEN RETURN;END;changed(b,l);
+ END;
+ FUNCTION feed(u VARCHAR2,b VARCHAR2,l VARCHAR2) RETURN JSON_ARRAY_T IS result_value JSON_ARRAY_T:=JSON_ARRAY_T();
+ BEGIN
+  IF NOT alliance_stock_notifications.is_boss(u,b,l) THEN alliance_security.fail(403,'FORBIDDEN','Estos avisos pertenecen al jefe del negocio.');END IF;
+  FOR x IN(SELECT payload FROM alliance_notice_events WHERE business_id=b AND location_id=l AND created_at>SYSTIMESTAMP-INTERVAL '7' DAY ORDER BY created_at DESC FETCH FIRST 30 ROWS ONLY) LOOP result_value.append(JSON_OBJECT_T(x.payload));END LOOP;RETURN result_value;
+ END;
+ PROCEDURE dispatch_pending IS
+  cfg alliance_notice_config%ROWTYPE;n NUMBER;request_value UTL_HTTP.req;response_value UTL_HTTP.resp;status_value NUMBER;pending_count NUMBER;body_value VARCHAR2(40):='{"ref":"main"}';
+ BEGIN
+  SELECT COUNT(*) INTO pending_count FROM alliance_notice_scopes d WHERE version>processed_version AND EXISTS(SELECT 1 FROM alliance_push_subscriptions s WHERE s.business_id=d.business_id AND s.location_id=d.location_id AND s.active=1);IF pending_count=0 THEN RETURN;END IF;
+  SELECT * INTO cfg FROM alliance_notice_config WHERE id=1 FOR UPDATE NOWAIT;
+  IF cfg.enabled<>1 OR cfg.dispatch_token IS NULL OR cfg.next_dispatch>SYSTIMESTAMP THEN ROLLBACK;RETURN;END IF;
+  -- A fixed repository/workflow allowlist prevents this private credential from being sent elsewhere.
+  IF cfg.dispatch_url<>'https://api.github.com/repos/devnnex/TC-DURVID-ALLIANCE.COM/actions/workflows/stock-notifications.yml/dispatches' THEN ROLLBACK;RETURN;END IF;
+  UTL_HTTP.set_transfer_timeout(8);request_value:=UTL_HTTP.begin_request(cfg.dispatch_url,'POST','HTTP/1.1');UTL_HTTP.set_header(request_value,'Authorization','Bearer '||cfg.dispatch_token);UTL_HTTP.set_header(request_value,'Accept','application/vnd.github+json');UTL_HTTP.set_header(request_value,'X-GitHub-Api-Version','2022-11-28');UTL_HTTP.set_header(request_value,'User-Agent','Alliance-Notifications');UTL_HTTP.set_header(request_value,'Content-Type','application/json');UTL_HTTP.set_header(request_value,'Content-Length',LENGTHB(body_value));UTL_HTTP.write_text(request_value,body_value);response_value:=UTL_HTTP.get_response(request_value);status_value:=response_value.status_code;UTL_HTTP.end_response(response_value);
+  UPDATE alliance_notice_config SET next_dispatch=SYSTIMESTAMP+INTERVAL '60' SECOND,last_status=status_value WHERE id=1;COMMIT;
+ EXCEPTION WHEN OTHERS THEN ROLLBACK;UPDATE alliance_notice_config SET next_dispatch=SYSTIMESTAMP+INTERVAL '60' SECOND,last_status=-1 WHERE id=1;COMMIT;
  END;
 END;!';
   EXECUTE IMMEDIATE q'!CREATE OR REPLACE PACKAGE alliance_pos AUTHID DEFINER AS
@@ -2419,7 +2497,7 @@ END;!';
     ELSIF a IN('tips_distribute','tips_void') THEN need('sales.read');need('sales.write');IF a='tips_void' THEN boss;END IF;
     ELSIF a='operations_apply' THEN
       command_value:=p.get_string('command');body:=p.get_object('payload');
-      IF command_value LIKE 'materials_%' THEN need('inventory.write');IF command_value='materials_link' THEN need('products.write');END IF;IF command_value='materials_delete' THEN boss;END IF;
+      IF command_value LIKE 'materials_%' THEN need('inventory.write');IF command_value='materials_link' THEN need('products.write');END IF;IF command_value IN('materials_delete','materials_empty') THEN boss;END IF;
       ELSIF command_value LIKE 'cash_%' THEN need('cash.write');
       ELSIF command_value LIKE 'ticket_%' THEN IF command_value='ticket_send' OR body.get_string('status')='delivered' THEN need('service.write');ELSE need('kitchen.write');END IF;
       ELSIF command_value LIKE 'customer_%' OR command_value LIKE 'debt_%' THEN IF command_value='debt_pay' THEN need('sales.write');ELSE need('customers.write');END IF;
@@ -2503,10 +2581,10 @@ END;!';
       IF action_value='sendChatMessage' THEN
         alliance_security.require_location(p_user,p_business,p_location,'service.write');q:=JSON_OBJECT_T();q.put('id',NVL(payload.get_string('p_message_id'),alliance_security.new_id));q.put('session_id',id_value);q.put('table_id',value_json.get_string('table_id'));q.put('sender_type','staff');q.put('sender_user_id',p_user);SELECT full_name INTO table_value FROM users WHERE id=p_user AND business_id=p_business;q.put('sender_name',table_value);q.put('body',alliance_security.text_value(payload,'p_body',600));q.put('created_at',alliance_pos_store.stamp);alliance_pos_store.put_document(p_business,p_location,'chat_messages',q.get_string('id'),q);value_json:=JSON_OBJECT_T();value_json.put('message',q);
       ELSIF action_value='closeChatSession' THEN alliance_security.require_location(p_user,p_business,p_location,'service.write');DELETE FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='chat_messages' AND JSON_VALUE(data_json,'$.session_id')=id_value;value_json:=JSON_OBJECT_T('{"closed":true}');
-      ELSE out_json:=JSON_ARRAY_T();FOR x IN(SELECT data_json FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='chat_messages' AND JSON_VALUE(data_json,'$.session_id')=id_value ORDER BY created_at,id) LOOP out_json.append(JSON_OBJECT_T(x.data_json));END LOOP;value_json:=JSON_OBJECT_T();value_json.put('messages',out_json);END IF;r.put('val!') || TO_CLOB(q'!ue',value_json);
+      ELSE out_json:=JSON_ARRAY_T();FOR x IN(SELECT data_json FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='chat_messages' AND JSON_VALUE(data_json,'$.session_id')=id_value ORDER BY created_at,id) LOOP out_json.append(JSON_OBJECT_T(x.data_json));END LOOP;value_json:=JSON_OBJECT_T();value_json.put('messages',out_j!') || TO_CLOB(q'!son);END IF;r.put('value',value_json);
     ELSE alliance_security.fail(404,'NOT_FOUND','Accion no disponible.');END IF;
     IF is_write AND action_value NOT IN('operations_apply','tips_distribute','tips_void') THEN alliance_activity.pos_event(p_user,p_business,p_location,action_value,payload);END IF;
-    IF is_write THEN alliance_pos_store.put_document(p_business,p_location,'op_reportsync','primary',JSON_OBJECT_T('{}'));END IF;
+    IF is_write THEN alliance_pos_store.put_document(p_business,p_location,'op_reportsync','primary',JSON_OBJECT_T('{}'));IF action_value IN('record_sale','edit_sale','upsert_inventory','adjust_inventory','set_inventory_stock','delete_inventory','clear_inventory','costing_save','costing_product_delete','operations_apply') OR action_value LIKE 'order_%' OR (action_value='query' AND payload.get_string('table') IN('menu_items','session_items','table_sessions')) THEN alliance_notices.changed(p_business,p_location);END IF;END IF;
     IF is_write AND job_id IS NOT NULL THEN cached_result:=JSON_OBJECT_T(r.to_clob);cached_result.put('_grants',grants_hash);save_value:=cached_result.to_clob;compressed_value:=alliance_receipt_storage.compress_result(save_value);IF compressed_value IS NOT NULL THEN save_value:='{"codec":"gzip-v1"}';END IF;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json,result_compressed)VALUES(p_business,p_location,job_id,p_user,digest,save_value,compressed_value);IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;END IF;RETURN r;
   END;
   FUNCTION public_dispatch(p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS
@@ -3089,6 +3167,7 @@ END;!';
         bootstrap_json:=alliance_pos.dispatch(login_user.get_string('id'),login_user.get_string('business_id'),location_value,bootstrap_json);
         data.put('bootstrap',bootstrap_json.get_object('value'));
       END IF;
+      alliance_notices.login_event(login_user.get_string('id'),login_user.get_string('business_id'),location_value);
       alliance_activity.record_event(login_user.get_string('id'),login_user.get_string('business_id'),location_value,CASE WHEN location_value IS NULL THEN 'users' ELSE 'dashboard' END,'LOGIN','Inició sesión');
     ELSIF method_value='POST' AND path_value='/auth/refresh' THEN data:=alliance_security.renew(req.get_string('refresh_token'));
     ELSIF method_value='POST' AND path_value='/auth/logout' THEN

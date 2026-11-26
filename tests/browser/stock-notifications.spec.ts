@@ -2,6 +2,8 @@ import {test,expect,type Page} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {backend,ready,branch,product} from './helpers/operational-backend';
 
+for(const slug of ['cafeteria','cocteleria'])test(slug+': el jefe ve el acceso de su equipo con nombre, rol y hora',async({page})=>{const server=await backend(page);server.context.locations[0].slug=slug;await page.route(/\/api\/v1\/(?:file\/)?rpc$/,async route=>{const r=route.request().postDataJSON();if(r.body?.action!=='stock_alert_feed'){await route.fallback();return;}await route.fulfill({contentType:'application/json',body:JSON.stringify({status:200,data:{value:{configured:false,subscriptionKeys:[],alerts:[],events:[{id:'staff',kind:'staff-login',name:'Ana de prueba',role:'Mesero',at:'2026-11-26T12:00:00Z',body:'Ana de prueba inició sesión como mesero. Tu equipo se está preparando para atender.'}]}}})});});await ready(page,'',slug);await page.locator('#stockAlertBell').click();await expect(page.locator('#stockAlertsDialog h2')).toHaveText('Avisos del negocio');await expect(page.locator('.stock-team-events')).toContainText('Ana de prueba');await expect(page.locator('.stock-team-events')).toContainText('Mesero');await expect(page.locator('.stock-team-events')).toContainText('7:00');await page.setViewportSize({width:390,height:700});expect(await page.locator('#stockAlertsDialog').evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);});
+
 for(const slug of ['cocteleria','cafeteria','gcobarf','sucursal'])test(slug+': bandeja de jefe explica faltantes y se actualiza al reponer',async({page})=>{
  const server=await backend(page);server.context.locations[0].slug=slug;
  server.state.units.push({id:'ml',dimension:'VOLUME',factor:1});

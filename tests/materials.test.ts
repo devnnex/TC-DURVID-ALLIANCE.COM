@@ -10,6 +10,17 @@ const link={productId:'product',recipeId:'recipe',revision:1,salePortions:1,mapp
 function ready(){let s=apply(initial(),'materials_link',link);for(const [id,unit]of [['raw-tartara','g'],['raw-milk','ml']])s=apply(s,'materials_adjust',{ingredientId:id,quantity:1000,unit,kind:'in',totalCost:10000,reason:'Abastecer'});return s;}
 
 describe('Existencias necesarias al costear una receta',()=>{
+  it('vacía sin eliminar recetas ni costos, y permite repetir el abastecimiento inicial',()=>{
+    ctx.BRANCH_CONFIG={slug:'cafeteria'};try{let s=apply(initial(),'materials_link',{...link,supplyRecipe:true});expect(M.portions(s,'product')).toBe(8);const costs=s.operations.ingredients.map((i:any)=>i.unitCost);
+      expect(s.movements[0]).toMatchObject({type:'CAPACIDAD_RECETA',delta:0,capacityAfter:8});const original=structuredClone(s.movements[0]);
+      s=apply(s,'materials_empty',{confirmation:'VACIAR'});expect(s.operations.ingredients).toHaveLength(2);expect(s.operations.ingredients.every((i:any)=>i.quantity===0)).toBe(true);expect(s.operations.ingredients.map((i:any)=>i.unitCost)).toEqual(costs);expect(s.operations.recipes).toHaveLength(1);expect(s.operations.recipeSupplies).toEqual([]);
+      s=apply(s,'materials_link',{...link,supplyRecipe:true});expect(M.portions(s,'product')).toBe(8);expect(s.movements[0]).toEqual(original);expect(s.movements.at(-1)).toMatchObject({type:'CAPACIDAD_RECETA',capacityAfter:8,delta:0});
+    }finally{delete ctx.BRANCH_CONFIG;}
+  });
+  it('protege el vaciado por rol, confirmación, sucursal y compromisos abiertos',()=>{
+    ctx.BRANCH_CONFIG={slug:'cocteleria'};try{const s=ready(),command={id:randomUUID(),command:'materials_empty',payload:{confirmation:'VACIAR'}};expect(()=>M.apply(structuredClone(s),command,{...actor,role:'admin'})).toThrow(/jefe/);expect(()=>apply(s,'materials_empty',{confirmation:'no'})).toThrow(/VACIAR/);s.docs.table_sessions=[{id:'open',status:'open'}];s.docs.session_items=[{id:'held',session_id:'open',menu_item_id:'product',quantity:1,status:'confirmed'}];expect(()=>apply(s,'materials_empty',{confirmation:'VACIAR'})).toThrow();expect(s.operations.ingredients.every((i:any)=>i.quantity>0)).toBe(true);ctx.BRANCH_CONFIG.slug='gcobarf';expect(()=>apply(s,'materials_empty',{confirmation:'VACIAR'})).toThrow(/jefe/);
+    }finally{delete ctx.BRANCH_CONFIG;}
+  });
   it('compara el lote completo y las adiciones por porción, descontando reservas abiertas',()=>{
     const s=ready(),recipe=s.costing.model.recipes[0];
     s.operations.ingredients.find((i:any)=>i.id==='raw-milk').quantity=700;

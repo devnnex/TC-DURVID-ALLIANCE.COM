@@ -1,5 +1,5 @@
 /* Cache public application files only. API requests and account data never enter this cache. */
-const BUILD_VERSION='acc856ef1786fe1cc3eb5760';
+const BUILD_VERSION='4dbce920fc7f2aa43277f0af';
 const ROOT=new URL(self.location.pathname.includes('/negocios/')?'../../':'./',self.location.href);
 const CACHE_PREFIX='alliance-portal-'+encodeURIComponent(ROOT.pathname)+':';
 const PORTAL_CACHE=CACHE_PREFIX+BUILD_VERSION;
@@ -7,13 +7,13 @@ const DEVELOPMENT=['localhost','127.0.0.1','[::1]'].includes(ROOT.hostname);
 self.addEventListener('push',event=>{
  event.waitUntil((async()=>{
   let data;try{data=event.data?.json();}catch{return;}
-  if(data?.type!=='stock-alert'||!/^[-a-z0-9]{3,80}$/.test(data.branch||'')||typeof data.body!=='string'||typeof data.title!=='string')return;
+  if(!['stock-alert','staff-login'].includes(data?.type)||!/^[-a-z0-9]{3,80}$/.test(data.branch||'')||typeof data.body!=='string'||typeof data.title!=='string')return;
   const folder=['cafeteria','cocteleria','gcobarf'].includes(data.branch)?data.branch:'sucursal';
-  const url=new URL('negocios/'+folder+'/admin.html',ROOT);if(folder==='sucursal')url.searchParams.set('branch',data.branch);url.searchParams.set('stock-alert','1');url.hash='inventory';
+  const url=new URL('negocios/'+folder+'/admin.html',ROOT);if(folder==='sucursal')url.searchParams.set('branch',data.branch);url.searchParams.set('stock-alert','1');url.hash=data.type==='staff-login'?'dashboard':['cafeteria','cocteleria'].includes(data.branch)?'materials':'inventory';
   let icon=new URL('assets/pwa-192.png',ROOT).href;
   if(typeof data.logo==='string'&&data.logo.length<1200&&/^https:\/\//.test(data.logo))icon=data.logo;
   else for(const name of await caches.keys()){if(name==='alliance-'+data.branch+'-pwa-brand-v1'){const cache=await caches.open(name),saved=await cache.match(new URL('negocios/'+folder+'/pwa-icon-192.png',ROOT));if(saved){const bytes=new Uint8Array(await saved.arrayBuffer());let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);icon='data:image/png;base64,'+btoa(binary);}break;}}
-  await self.registration.showNotification(data.title.slice(0,180),{body:data.body.slice(0,1600),icon,badge:new URL('assets/pwa-192.png',ROOT).href,tag:'stock-'+data.branch+'-'+String(data.id).slice(0,64),renotify:true,data:{kind:'stock-alert',url:url.href},actions:[{action:'inventory',title:'Revisar insumos'}]});
+  await self.registration.showNotification(data.title.slice(0,180),{body:data.body.slice(0,1600),icon,badge:new URL('assets/pwa-192.png',ROOT).href,tag:'stock-'+data.branch+'-'+String(data.id).slice(0,64),renotify:true,data:{kind:'stock-alert',url:url.href},actions:[{action:'inventory',title:data.type==='staff-login'?'Ver equipo':'Revisar insumos'}]});
  })());
 });
 self.addEventListener('notificationclick',event=>{

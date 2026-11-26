@@ -1,4 +1,4 @@
-name: Recordatorios de insumos
+name: Avisos inmediatos y recordatorios
 on:
   workflow_dispatch:
   schedule:
@@ -26,4 +26,4 @@ jobs:
           node-version: 22.23.3
           cache: npm
       - run: npm ci
-      - run: npm run notifications:once
+      - run: npm run notifications:once -- --burst

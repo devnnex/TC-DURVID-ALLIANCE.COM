@@ -65,7 +65,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     ELSIF a IN('tips_distribute','tips_void') THEN need('sales.read');need('sales.write');IF a='tips_void' THEN boss;END IF;
     ELSIF a='operations_apply' THEN
       command_value:=p.get_string('command');body:=p.get_object('payload');
-      IF command_value LIKE 'materials_%' THEN need('inventory.write');IF command_value='materials_link' THEN need('products.write');END IF;IF command_value='materials_delete' THEN boss;END IF;
+      IF command_value LIKE 'materials_%' THEN need('inventory.write');IF command_value='materials_link' THEN need('products.write');END IF;IF command_value IN('materials_delete','materials_empty') THEN boss;END IF;
       ELSIF command_value LIKE 'cash_%' THEN need('cash.write');
       ELSIF command_value LIKE 'ticket_%' THEN IF command_value='ticket_send' OR body.get_string('status')='delivered' THEN need('service.write');ELSE need('kitchen.write');END IF;
       ELSIF command_value LIKE 'customer_%' OR command_value LIKE 'debt_%' THEN IF command_value='debt_pay' THEN need('sales.write');ELSE need('customers.write');END IF;
@@ -152,7 +152,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
       ELSE out_json:=JSON_ARRAY_T();FOR x IN(SELECT data_json FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='chat_messages' AND JSON_VALUE(data_json,'$.session_id')=id_value ORDER BY created_at,id) LOOP out_json.append(JSON_OBJECT_T(x.data_json));END LOOP;value_json:=JSON_OBJECT_T();value_json.put('messages',out_json);END IF;r.put('value',value_json);
     ELSE alliance_security.fail(404,'NOT_FOUND','Accion no disponible.');END IF;
     IF is_write AND action_value NOT IN('operations_apply','tips_distribute','tips_void') THEN alliance_activity.pos_event(p_user,p_business,p_location,action_value,payload);END IF;
-    IF is_write THEN alliance_pos_store.put_document(p_business,p_location,'op_reportsync','primary',JSON_OBJECT_T('{}'));END IF;
+    IF is_write THEN alliance_pos_store.put_document(p_business,p_location,'op_reportsync','primary',JSON_OBJECT_T('{}'));IF action_value IN('record_sale','edit_sale','upsert_inventory','adjust_inventory','set_inventory_stock','delete_inventory','clear_inventory','costing_save','costing_product_delete','operations_apply') OR action_value LIKE 'order_%' OR (action_value='query' AND payload.get_string('table') IN('menu_items','session_items','table_sessions')) THEN alliance_notices.changed(p_business,p_location);END IF;END IF;
     IF is_write AND job_id IS NOT NULL THEN cached_result:=JSON_OBJECT_T(r.to_clob);cached_result.put('_grants',grants_hash);save_value:=cached_result.to_clob;compressed_value:=alliance_receipt_storage.compress_result(save_value);IF compressed_value IS NOT NULL THEN save_value:='{"codec":"gzip-v1"}';END IF;INSERT INTO alliance_pos_receipts(business_id,location_id,id,actor_user_id,fingerprint,result_json,result_compressed)VALUES(p_business,p_location,job_id,p_user,digest,save_value,compressed_value);IF DBMS_LOB.ISTEMPORARY(compressed_value)=1 THEN DBMS_LOB.FREETEMPORARY(compressed_value);END IF;END IF;RETURN r;
   END;
   FUNCTION public_dispatch(p_body JSON_OBJECT_T) RETURN JSON_OBJECT_T IS

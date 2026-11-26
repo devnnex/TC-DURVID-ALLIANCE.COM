@@ -21,6 +21,21 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
     AND NOT EXISTS(SELECT 1 FROM alliance_pos_documents prep WHERE prep.business_id=b AND prep.location_id=l AND prep.entity='op_preparations' AND prep.id=d.id AND JSON_VALUE(prep.data_json,'$.status')='active');
     RETURN held;
   END;
+  FUNCTION recipe_capacity(b VARCHAR2,l VARCHAR2,recipe JSON_OBJECT_T) RETURN NUMBER IS
+    parts JSON_ARRAY_T;part JSON_OBJECT_T;raw JSON_OBJECT_T;value NUMBER:=1e30;per_unit NUMBER;
+  BEGIN
+    IF recipe IS NULL THEN RETURN 0;END IF;parts:=recipe.get_array('lines');IF parts IS NULL OR parts.get_size=0 THEN RETURN 0;END IF;
+    FOR i IN 0..parts.get_size-1 LOOP part:=TREAT(parts.get(i) AS JSON_OBJECT_T);raw:=alliance_operations.raw_item(b,l,part.get_string('ingredientId'));per_unit:=alliance_operations.convert_quantity(part.get_number('quantity'),part.get_string('unit'),raw.get_string('unit'));IF per_unit>0 THEN value:=LEAST(value,FLOOR((GREATEST(0,raw.get_number('quantity')-held_quantity(b,l,raw.get_string('id')))+0.00000001)/per_unit));END IF;END LOOP;
+    RETURN CASE WHEN value=1e30 THEN 0 ELSE value END;
+  END;
+  PROCEDURE capacity_entry(u VARCHAR2,b VARCHAR2,l VARCHAR2,product_id VARCHAR2,job VARCHAR2,before_capacity NUMBER,recipe JSON_OBJECT_T) IS
+    details JSON_OBJECT_T:=JSON_OBJECT_T();items JSON_ARRAY_T:=JSON_ARRAY_T();parts JSON_ARRAY_T:=recipe.get_array('lines');part JSON_OBJECT_T;raw JSON_OBJECT_T;o JSON_OBJECT_T;after_capacity NUMBER:=recipe_capacity(b,l,recipe);event_value VARCHAR2(160):='RECIPE-'||alliance_security.hash_text(job);
+  BEGIN
+    FOR i IN 0..parts.get_size-1 LOOP part:=TREAT(parts.get(i) AS JSON_OBJECT_T);raw:=alliance_operations.raw_item(b,l,part.get_string('ingredientId'));o:=JSON_OBJECT_T();o.put('ingredientId',raw.get_string('id'));o.put('name',raw.get_string('name'));o.put('unit',raw.get_string('unit'));o.put('available',GREATEST(0,raw.get_number('quantity')-held_quantity(b,l,raw.get_string('id'))));o.put('perPreparation',alliance_operations.convert_quantity(part.get_number('quantity'),part.get_string('unit'),raw.get_string('unit')));items.append(o);END LOOP;
+    details.put('stockBasis','capacity');details.put('capacityBefore',before_capacity);details.put('capacityAfter',after_capacity);details.put('ingredients',items);details.put('recipeId',recipe.get_string('recipeId'));
+    INSERT INTO alliance_pos_movements(business_id,location_id,id,product_id,actor_user_id,delta,stock_before,stock_after,cost_minor,kind,reference,allow_negative)VALUES(b,l,event_value,product_id,u,0,0,0,0,'CAPACIDAD_RECETA','Registro desde costeo',0);
+    alliance_pos_store.put_document(b,l,'op_movementdetail',alliance_security.hash_text(event_value),details);
+  END;
   PROCEDURE increase_capacity(u VARCHAR2,b VARCHAR2,l VARCHAR2,p JSON_OBJECT_T) IS
     recipe JSON_OBJECT_T;raw JSON_OBJECT_T;part JSON_OBJECT_T;old JSON_OBJECT_T;ledger JSON_OBJECT_T;entry JSON_OBJECT_T;covered JSON_OBJECT_T:=JSON_OBJECT_T();lines JSON_ARRAY_T;old_parts JSON_ARRAY_T;parts JSON_ARRAY_T:=JSON_ARRAY_T();keys_value JSON_KEY_LIST;
     slug_value VARCHAR2(80);product_id VARCHAR2(80);recipe_id VARCHAR2(80);raw_id VARCHAR2(80);target NUMBER;expected NUMBER;current_value NUMBER:=1e30;per_unit NUMBER;delta NUMBER;q NUMBER;n NUMBER:=0;
@@ -76,7 +91,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
   FUNCTION run_action(u VARCHAR2,b VARCHAR2,l VARCHAR2,command_value VARCHAR2,p JSON_OBJECT_T,job VARCHAR2,sync_mode BOOLEAN DEFAULT FALSE) RETURN JSON_OBJECT_T IS
     history_before JSON_OBJECT_T;history_after JSON_OBJECT_T;history_row JSON_OBJECT_T;
     v JSON_OBJECT_T;old JSON_OBJECT_T;r JSON_OBJECT_T;m JSON_OBJECT_T;wrapper JSON_OBJECT_T;ing JSON_OBJECT_T;raw JSON_OBJECT_T;part JSON_OBJECT_T;mapping JSON_OBJECT_T;row_json JSON_OBJECT_T;result_json JSON_OBJECT_T:=JSON_OBJECT_T();lines JSON_ARRAY_T;ings JSON_ARRAY_T;recipes JSON_ARRAY_T;maps JSON_ARRAY_T;parts JSON_ARRAY_T:=JSON_ARRAY_T();merged JSON_OBJECT_T:=JSON_OBJECT_T();keys_value JSON_KEY_LIST;s JSON_OBJECT_T;man JSON_ARRAY_T;
-    id_value VARCHAR2(80);raw_id VARCHAR2(80);name_value VARCHAR2(1200);unit_value VARCHAR2(12);source_unit VARCHAR2(12);slug_value VARCHAR2(80);n NUMBER;rev NUMBER;q NUMBER;target_quantity NUMBER;delta_quantity NUMBER;portions NUMBER;batch NUMBER:=0;overhead NUMBER;percent_value NUMBER:=0;cost_value NUMBER;found BOOLEAN;
+    id_value VARCHAR2(80);raw_id VARCHAR2(80);name_value VARCHAR2(1200);unit_value VARCHAR2(12);source_unit VARCHAR2(12);slug_value VARCHAR2(80);n NUMBER;rev NUMBER;q NUMBER;target_quantity NUMBER;delta_quantity NUMBER;portions NUMBER;batch NUMBER:=0;overhead NUMBER;percent_value NUMBER:=0;cost_value NUMBER;found BOOLEAN;capacity_before NUMBER:=0;
   BEGIN
     SELECT slug INTO slug_value FROM locations WHERE business_id=b AND id=l;
     alliance_security.require_location(u,b,l,CASE WHEN sync_mode THEN 'products.write' ELSE 'inventory.write' END);alliance_pos_store.lock_scope(b,l);
@@ -87,9 +102,19 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
     END IF;
     IF slug_value IN('cafeteria','cocteleria') AND command_value IN('materials_save','materials_adjust','materials_delete') THEN SELECT COUNT(*) INTO n FROM alliance_material_entries WHERE business_id=b AND location_id=l AND id=alliance_security.hash_text('movement:'||job);IF n>0 THEN alliance_security.fail(409,'DUPLICATE_OPERATION','El movimiento ya fue registrado.');END IF;END IF;
     IF slug_value IN('cafeteria','cocteleria') AND command_value IN('materials_save','materials_adjust') AND p.has('totalCost') AND NOT alliance_material_ledger.allowed(u,b,l) THEN alliance_security.fail(403,'FORBIDDEN','Solo los jefes pueden registrar o cambiar costos de insumos.');END IF;
-    IF command_value='materials_capacity' THEN id_value:=alliance_security.text_value(p,'productId',80);increase_capacity(u,b,l,p);
+    IF command_value='materials_empty' THEN id_value:=l;
+      alliance_security.keys_only(p,'confirmation,expectedRevision');
+      IF slug_value NOT IN('cafeteria','cocteleria') OR NOT alliance_security.location_owner(u,b,l) THEN alliance_security.fail(403,'FORBIDDEN','Solo un jefe de cafetería o coctelería puede vaciar los insumos.');END IF;
+      IF p.get_string('confirmation')<>'VACIAR' OR p.get_string('confirmation') IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Escribe VACIAR para confirmar.');END IF;
+      IF NVL(p.get_string('expectedRevision'),'-')<>alliance_pos_store.report_revision(b,l) THEN alliance_security.fail(409,'VERSION_CONFLICT','Las existencias cambiaron. Actualiza antes de vaciar.');END IF;
+      SELECT COUNT(*) INTO n FROM alliance_pos_documents d JOIN alliance_pos_documents s ON s.business_id=d.business_id AND s.location_id=d.location_id AND s.entity='table_sessions' AND s.id=JSON_VALUE(d.data_json,'$.session_id') JOIN alliance_pos_documents r ON r.business_id=d.business_id AND r.location_id=d.location_id AND r.entity='op_recipes' AND r.id=JSON_VALUE(d.data_json,'$.menu_item_id') WHERE d.business_id=b AND d.location_id=l AND d.entity='session_items' AND NVL(JSON_VALUE(d.data_json,'$.status'),'confirmed')<>'cancelled' AND JSON_VALUE(s.data_json,'$.status')='open' AND JSON_VALUE(r.data_json,'$.managed')='true';
+      IF n>0 THEN alliance_security.fail(409,'OPEN_CONSUMPTION','Cobra o retira los consumos abiertos antes de vaciar los insumos.');END IF;
+      FOR x IN(SELECT id,quantity FROM alliance_raw_stock rs WHERE business_id=b AND location_id=l AND quantity<>0 AND NOT EXISTS(SELECT 1 FROM alliance_pos_documents d WHERE d.business_id=b AND d.location_id=l AND d.entity='op_archivedingredients' AND d.id=rs.id)) LOOP alliance_operations.raw_move(u,b,l,alliance_security.hash_text('empty:'||job||':'||x.id),x.id,-x.quantity,'out','Vaciado de macro confirmado por el jefe');END LOOP;
+      guard_open(b,l);
+      DELETE FROM alliance_pos_documents WHERE business_id=b AND location_id=l AND entity='op_recipesupplies';
+    ELSIF command_value='materials_capacity' THEN id_value:=alliance_security.text_value(p,'productId',80);increase_capacity(u,b,l,p);
     ELSIF command_value='materials_transfer_production' THEN result_json:=alliance_production.transfer_batch(u,b,l,p);RETURN alliance_operations.snapshot(u,b,l);ELSIF command_value='materials_link' THEN
-      alliance_security.require_location(u,b,l,'products.write');alliance_security.keys_only(p,'productId,recipeId,revision,salePortions,mappings,available,supplyRecipe');
+      alliance_security.require_location(u,b,l,'products.write');alliance_security.keys_only(p,'productId,recipeId,revision,salePortions,mappings,available,supplyRecipe');capacity_before:=recipe_capacity(b,l,alliance_operations.get_row(b,l,'recipes',p.get_string('productId')));
       id_value:=alliance_security.text_value(p,'productId',80);v:=alliance_pos_store.document(b,l,'menu_items',id_value);IF v IS NULL THEN alliance_security.fail(404,'NOT_FOUND','Producto no disponible.');END IF;
       SELECT COUNT(*) INTO n FROM alliance_pos_documents d JOIN alliance_pos_documents a ON a.business_id=d.business_id AND a.location_id=d.location_id AND a.entity='table_sessions' AND a.id=JSON_VALUE(d.data_json,'$.session_id') WHERE d.business_id=b AND d.location_id=l AND d.entity='session_items' AND JSON_VALUE(d.data_json,'$.menu_item_id')=id_value AND NVL(JSON_VALUE(d.data_json,'$.status'),'served')<>'cancelled' AND JSON_VALUE(a.data_json,'$.status')='open';IF n>0 THEN alliance_security.fail(409,'OPEN_RECIPE','Cobra o retira los consumos de este producto antes de cambiar su receta.');END IF;
       wrapper:=alliance_pos_store.document(b,l,'costing','primary');IF wrapper IS NULL OR wrapper.get_number('revision')<>alliance_operations.numeric_value(p,'revision') THEN alliance_security.fail(409,'VERSION_CONFLICT','La hoja cambio. Guarda y vuelve a abrir el vinculo.');END IF;
@@ -117,7 +142,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_materials AS
       keys_value:=merged.get_keys;FOR k IN(SELECT column_value key_value FROM TABLE(keys_value) ORDER BY NLSSORT(column_value,'NLS_SORT=BINARY')) LOOP parts.append(merged.get_object(k.key_value));END LOOP;IF parts.get_size=0 THEN alliance_security.fail(400,'INVALID_INPUT','La receta necesita cantidades mayores que cero.');END IF;
       IF r.has('sheet') THEN s:=r.get_object('sheet');man:=s.get_array('management');FOR i IN 0..man.get_size-1 LOOP row_json:=TREAT(man.get(i) AS JSON_OBJECT_T);percent_value:=percent_value+row_json.get_number('percent');END LOOP;overhead:=batch*(s.get_number('unforeseenPercent')+percent_value)/100/r.get_number('output')*portions;ELSE overhead:=0;man:=m.get_array('expenses');FOR j IN 0..man.get_size-1 LOOP row_json:=TREAT(man.get(j) AS JSON_OBJECT_T);IF NOT row_json.get_boolean('includedElsewhere') AND (row_json.get_string('recipeId') IS NULL OR row_json.get_string('recipeId')=r.get_string('id')) THEN IF row_json.get_string('kind')='unit' THEN overhead:=overhead+row_json.get_number('amount')*portions;ELSIF row_json.get_string('kind')='batch' THEN overhead:=overhead+row_json.get_number('amount')/r.get_number('output')*portions;END IF;END IF;END LOOP;END IF;
       result_json.put('productId',id_value);result_json.put('name',v.get_string('name'));result_json.put('recipeId',r.get_string('id'));result_json.put('managed',TRUE);result_json.put('salePortions',portions);result_json.put('mappings',maps);result_json.put('overheadCost',overhead);result_json.put('lines',parts);alliance_operations.put_row(u,b,l,'recipes',id_value,result_json);
-      IF p.has('supplyRecipe') THEN n:=alliance_security.flag(p,'supplyRecipe');IF n=1 THEN supply_recipe(u,b,l,r,parts,portions);END IF;END IF;
+      IF p.has('supplyRecipe') THEN n:=alliance_security.flag(p,'supplyRecipe');IF n=1 THEN supply_recipe(u,b,l,r,parts,portions);IF slug_value IN('cafeteria','cocteleria') THEN capacity_entry(u,b,l,id_value,job,capacity_before,result_json);END IF;END IF;END IF;
       IF p.has('available') THEN
         n:=alliance_security.flag(p,'available');v.put('is_available',n=1);alliance_pos_store.put_document(b,l,'menu_items',id_value,v);
         IF slug_value IN('cafeteria','cocteleria') THEN

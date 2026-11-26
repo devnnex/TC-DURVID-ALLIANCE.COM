@@ -20,10 +20,12 @@ export async function cycle(now=new Date()){
  if(!publicKey||!privateKey||!subject||!/^mailto:|^https:\/\//.test(subject))throw Error('Configura las claves VAPID y VAPID_SUBJECT en el servidor privado.');
  const pair=createECDH('prime256v1');pair.setPrivateKey(Buffer.from(privateKey,'base64url'));if(pair.getPublicKey().toString('base64url')!==publicKey)throw Error('Las claves VAPID no corresponden al mismo par.');
  webpush.setVapidDetails(subject,publicKey,privateKey);
+ await executeSql("BEGIN DELETE FROM alliance_notice_events WHERE created_at<SYSTIMESTAMP-INTERVAL '30' DAY;DELETE FROM alliance_notice_scopes d WHERE NOT EXISTS(SELECT 1 FROM locations l WHERE l.business_id=d.business_id AND l.id=d.location_id);COMMIT;END;");
  const config=await rows('SELECT public_key,enabled FROM alliance_push_config WHERE id=1');
  if(config[0]?.enabled!==1||config[0]?.public_key!==publicKey)throw Error('La clave pública o la activación de Oracle no coincide con el remitente.');
  const scopes=await rows(`SELECT l.business_id,l.id location_id,l.slug FROM locations l WHERE l.active=1 AND EXISTS(SELECT 1 FROM alliance_push_subscriptions s WHERE s.business_id=l.business_id AND s.location_id=l.id AND s.active=1)`);
  let sent=0,failed=0;
+ const dirty=await rows('SELECT business_id,location_id,version FROM alliance_notice_scopes WHERE version>processed_version');
  for(const scope of scopes){
   const b=literal(scope.business_id),l=literal(scope.location_id);
   // A valid boss is checked again on every cycle, including ownership and revocation.
@@ -55,7 +57,19 @@ export async function cycle(now=new Date()){
   };
   for(let offset=0;offset<jobs.length;offset+=4){const results=await Promise.allSettled(jobs.slice(offset,offset+4).map(deliver));failed+=results.filter(r=>r.status==='rejected').length;}
  }
+ // Login events have their own immutable identity; they are never repeated at reminder times.
+ const events=await rows(`SELECT e.id,e.business_id,e.location_id,e.payload,l.slug,s.id subscription_id,s.user_id,s.endpoint,s.p256dh,s.auth_key,JSON_VALUE(v.data_json,'$.business_name') business_name,JSON_VALUE(v.data_json,'$.logo_url' RETURNING VARCHAR2(2048) NULL ON ERROR) logo FROM alliance_notice_events e JOIN locations l ON l.business_id=e.business_id AND l.id=e.location_id AND l.active=1 JOIN alliance_push_subscriptions s ON s.business_id=e.business_id AND s.location_id=e.location_id AND s.active=1 LEFT JOIN alliance_pos_documents v ON v.business_id=e.business_id AND v.location_id=e.location_id AND v.entity='business_settings' AND v.id='primary' WHERE e.created_at>SYSTIMESTAMP-INTERVAL '30' MINUTE AND l.slug IN('cafeteria','cocteleria') ORDER BY e.created_at,e.id`);
+ for(const event of events){
+  const b=literal(event.business_id),l=literal(event.location_id),identifier=hash('event:'+event.id+':'+event.subscription_id);
+  const valid=await rows(`SELECT alliance_stock_notifications.boss_allowed(${literal(event.user_id)},${b},${l}) allowed FROM dual`);if(valid[0]?.allowed!==1)continue;
+  const claimed=await rows(`SELECT alliance_stock_notifications.claim_delivery(${literal(identifier)},${literal(event.subscription_id)}) claimed FROM dual`);if(claimed[0]?.claimed!==1)continue;
+  try{const entry=decode(event),time=new Date(entry.at).toLocaleTimeString('es-CO',{timeZone:'America/Bogota',hour:'numeric',minute:'2-digit'}),payload={type:'staff-login',id:hash(event.business_id+':'+event.location_id+':'+event.id),branch:event.slug,title:shorten((event.business_name||event.slug)+' · Tu equipo',400),body:shorten(entry.body+' '+time,1600),logo:typeof event.logo==='string'&&/^https:\/\//.test(event.logo)&&event.logo.length<800?event.logo:undefined};
+   const result=await webpush.sendNotification({endpoint:event.endpoint,keys:{p256dh:event.p256dh,auth:event.auth_key}},JSON.stringify(payload),{TTL:900,urgency:'high',topic:identifier.slice(0,32),timeout:15000});if(result.statusCode<200||result.statusCode>=300)throw Error('Entrega no confirmada.');
+   await executeSql(`BEGIN UPDATE alliance_push_deliveries SET status='sent',updated_at=SYSTIMESTAMP WHERE id=${literal(identifier)};COMMIT;END;`);sent++;
+  }catch(error){failed++;const status=(error as {statusCode?:number}).statusCode;await executeSql(`BEGIN ${status===404||status===410?`UPDATE alliance_push_subscriptions SET active=0 WHERE id=${literal(event.subscription_id)};`:''} UPDATE alliance_push_deliveries SET status='retry',lease_until=SYSTIMESTAMP+INTERVAL '1' MINUTE,updated_at=SYSTIMESTAMP WHERE id=${literal(identifier)};COMMIT;END;`);}
+ }
+ if(!failed)for(const scope of dirty)await executeSql(`BEGIN UPDATE alliance_notice_scopes SET processed_version=GREATEST(processed_version,${Number(scope.version)}) WHERE business_id=${literal(scope.business_id)} AND location_id=${literal(scope.location_id)};COMMIT;END;`);
  return {sent,failed};
 }
-async function main(){let stopped=false;process.on('SIGTERM',()=>{stopped=true;});process.on('SIGINT',()=>{stopped=true;});do{try{console.log(JSON.stringify({at:new Date().toISOString(),...await cycle()}));}catch(error){console.error('No se pudo ejecutar el envío: '+(error instanceof Error?error.message:'Error del servicio'));if(process.argv.includes('--once'))process.exitCode=1;}if(process.argv.includes('--once')||stopped)break;await new Promise(r=>setTimeout(r,30000));}while(!stopped);}
+async function main(){let stopped=false,runs=0;const burst=process.argv.includes('--burst');process.on('SIGTERM',()=>{stopped=true;});process.on('SIGINT',()=>{stopped=true;});do{try{console.log(JSON.stringify({at:new Date().toISOString(),...await cycle()}));}catch(error){console.error('No se pudo ejecutar el envío: '+(error instanceof Error?error.message:'Error del servicio'));if(process.argv.includes('--once'))process.exitCode=1;}runs++;if(stopped||(burst?runs>=4:process.argv.includes('--once')))break;await new Promise(r=>setTimeout(r,burst?10000:30000));}while(!stopped);}
 if(process.argv[1]?.replace(/\\/g,'/').endsWith('/stock-notification-worker.ts'))void main();

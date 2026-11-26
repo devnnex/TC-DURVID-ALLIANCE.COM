@@ -31,6 +31,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_api AS
         bootstrap_json:=alliance_pos.dispatch(login_user.get_string('id'),login_user.get_string('business_id'),location_value,bootstrap_json);
         data.put('bootstrap',bootstrap_json.get_object('value'));
       END IF;
+      alliance_notices.login_event(login_user.get_string('id'),login_user.get_string('business_id'),location_value);
       alliance_activity.record_event(login_user.get_string('id'),login_user.get_string('business_id'),location_value,CASE WHEN location_value IS NULL THEN 'users' ELSE 'dashboard' END,'LOGIN','Inició sesión');
     ELSIF method_value='POST' AND path_value='/auth/refresh' THEN data:=alliance_security.renew(req.get_string('refresh_token'));
     ELSIF method_value='POST' AND path_value='/auth/logout' THEN

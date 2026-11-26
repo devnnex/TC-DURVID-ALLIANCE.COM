@@ -204,3 +204,14 @@ Propinas incorpora tres pasos para indicar personas, revisar importes y registra
 - Las fuentes de propina se consultan en páginas de 25 y el historial de repartos en páginas de 20. La descarga general conserva solo referencias compactas a ventas recientes con reparto, evitando incorporar todos los repartos y sus fuentes en cada sincronización.
 
 Guía y límites del registro: [Clientes y propinas](tips-and-client-access.md).
+
+## Costeo, menú y avisos por evento — 26 de noviembre de 2026
+
+- Se comprobó el desplazamiento del abastecimiento automático con 24 ingredientes y botones de guardar accesibles en escritorio y móvil. Los selectores largos combinan búsqueda y selección, y los gastos mensuales añadidos admiten retirada individual.
+- La macro muestra las medidas junto al número disponible y ofrece vaciado confirmado exclusivamente al jefe/propietario. Se conservan costos y recetas, se registra cada salida y se impide el vaciado con consumos de recetas en cuentas abiertas o cambios locales pendientes.
+- Cada producto permite suspensión temporal independiente de la capacidad. El registro desde costeo conserva capacidad e insumos disponibles de ese momento sin crear compras ficticias. GCOBARF mantiene su entrada real de producción y omite la ficha adicional de cero al incorporarla.
+- 424 pruebas unitarias aprobadas, TypeScript y sintaxis verificados. 22 escenarios de navegador aprobados sobre los cambios, privacidad, notificaciones persistentes, dispositivos móviles y operación sin conexión de los cuatro negocios.
+- 71 comprobaciones reales en Oracle sobre abastecimiento, repetición de prácticas, vaciado, versiones, permisos, cuentas abiertas, movimientos históricos y avisos de acceso. Otras 61 comprobaron la producción de GCOBARF. Los negocios aislados fueron retirados y los paquetes compilaron sin errores.
+- El despachador privado de eventos usa una conexión HTTPS limitada a GitHub en el puerto 443 y un trabajo de Oracle separado de las solicitudes del usuario. Se verificó la conectividad y se conserva el envío periódico de respaldo y los recordatorios de Bogotá. No se publican credenciales en el frontend ni en los archivos del repositorio.
+
+Guía de funcionamiento: [Costeo, macro y menú](costing-menu-refinements.md).
