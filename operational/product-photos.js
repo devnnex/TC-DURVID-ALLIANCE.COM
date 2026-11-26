@@ -48,6 +48,18 @@ globalThis.AllianceProductPhotos = (() => {
     const choose=form.querySelector('[data-choose-product-photo]');if(choose)choose.querySelector('span').textContent=url?'Cambiar foto':'Elegir foto';
     const remove = form.querySelector('[data-remove-product-photo]');if (remove) remove.hidden = !url;
   }
+  function open({name,imageUrl='',save}){
+    let d=document.querySelector('#productPhotoDialog');if(!d){d=document.createElement('dialog');d.id='productPhotoDialog';d.className='menu-photo-dialog';document.body.append(d);}
+    d.innerHTML='<form data-no-draft><header><div><span class="eyebrow">Menú Digital</span><h2 id="menuPhotoTitle">Foto del producto</h2><p data-menu-photo-name></p></div><button type="button" class="icon-btn" data-photo-close aria-label="Cerrar foto">×</button></header><div class="menu-photo-preview" data-menu-photo-preview></div><input name="menu_photo" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Seleccionar foto del producto" hidden><div class="menu-photo-tools"><button type="button" class="ghost" data-photo-choose>Elegir foto</button><button type="button" class="ghost" data-photo-remove>Quitar foto</button></div><p class="menu-photo-help">JPG, PNG o WebP. Optimizamos la foto automáticamente a un máximo de 80 KB.</p><p data-menu-photo-status role="status"></p><footer><button type="button" class="ghost" data-photo-close>Cancelar</button><button type="submit" class="primary">Guardar foto</button></footer></form>';
+    d.setAttribute('aria-labelledby','menuPhotoTitle');d.querySelector('[data-menu-photo-name]').textContent=name;
+    const form=d.querySelector('form'),input=form.elements.menu_photo,status=d.querySelector('[data-menu-photo-status]');let value=imageUrl,generation=0,busy=false,pending=false;
+    const draw=()=>{const box=d.querySelector('[data-menu-photo-preview]');box.replaceChildren();if(value){const image=new Image();image.src=value;image.alt='Foto de '+name;box.append(image);}else{box.innerHTML='<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 6h4l2-3h4l2 3h4v15H4z"/><circle cx="12" cy="13" r="4"/></svg><span>Añade una foto de tu producto</span>';}d.querySelector('[data-photo-remove]').hidden=!value;d.querySelector('[data-photo-choose]').textContent=value?'Cambiar foto':'Elegir foto';form.querySelector('[type=submit]').disabled=pending||busy||value===imageUrl;};
+    d.querySelector('[data-photo-choose]').onclick=()=>input.click();d.querySelector('[data-photo-remove]').onclick=()=>{generation++;pending=false;value='';input.value='';status.textContent='La foto se quitará al guardar.';draw();};
+    input.onchange=async()=>{const file=input.files[0];if(!file)return;const version=++generation;pending=true;status.textContent='Optimizando foto…';draw();try{const result=await optimize(file);if(version!==generation||!d.open)return;value=result.dataUrl;status.textContent='Lista · '+Math.ceil(result.bytes/1024)+' KB · '+result.width+' × '+result.height+' px';}catch(error){if(version===generation){status.textContent=error.message;input.value='';}}finally{if(version===generation){pending=false;draw();}}};
+    d.querySelectorAll('[data-photo-close]').forEach(button=>button.onclick=()=>{if(!busy)d.close();});d.onclose=()=>generation++;d.oncancel=event=>{if(busy)event.preventDefault();};
+    form.onsubmit=async event=>{event.preventDefault();if(pending||busy||value===imageUrl)return;busy=true;form.querySelectorAll('button').forEach(button=>button.disabled=true);status.textContent='Guardando foto…';try{if(await save(value)!==false)d.close();}catch(error){status.textContent=error.message;}finally{busy=false;form.querySelectorAll('button').forEach(button=>button.disabled=false);draw();}};
+    draw();d.showModal();
+  }
   document.addEventListener('DOMContentLoaded', () => {
     const form = document.querySelector('#inventoryForm');if (!form) return;
     const compact=['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug);
@@ -74,5 +86,5 @@ globalThis.AllianceProductPhotos = (() => {
     });
     field.querySelector('[data-remove-product-photo]').onclick = () => {generation++;form.photoPending = false;input.value = '';preview(form);};
   });
-  return {optimize, preview};
+  return {optimize, preview,open};
 })();

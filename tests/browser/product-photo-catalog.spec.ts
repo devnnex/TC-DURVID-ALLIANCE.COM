@@ -12,13 +12,13 @@ for(const slug of ['cocteleria','cafeteria'])test(slug+': catálogo con fotos, c
   server.state.operations.recipes=[product,second].map((id,i)=>({id,productId:id,recipeId:'recipe-'+id,name:'Café',managed:true,salePortions:1,lines:[{ingredientId:'coffee',unit:'g',quantity:i?20:10}]}));
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.setViewportSize({width:1440,height:900});await ready(page,'',slug);
-  await expect(page.locator('#dashboard h1')).toHaveText('Mesas');
+  await expect(page.locator('#dashboard h1')).toHaveText('Prueba de trabajo local');
   await page.locator('.admin-sidebar [href="#inventory"]').click();
-  await page.locator('[data-edit-inventory="'+product+'"]').click();
+  await page.locator('[data-menu-photo="'+product+'"]').click();
   const photo=await page.evaluate(async()=>{const c=document.createElement('canvas');c.width=2000;c.height=1500;const x=c.getContext('2d')!;x.fillStyle='#b98136';x.fillRect(0,0,c.width,c.height);x.fillStyle='#382215';x.fillRect(300,200,1200,1000);const b=await new Promise<Blob>(r=>c.toBlob(b=>r(b!),'image/png'));return Array.from(new Uint8Array(await b.arrayBuffer()));});
-  await page.locator('[name=product_photo]').setInputFiles({name:'cafe.png',mimeType:'image/png',buffer:Buffer.from(photo)});
-  await expect(page.locator('[data-product-photo-status]')).toContainText('Lista');
-  await page.locator('#inventoryForm [type=submit]').click();await expect(page.locator('#inventoryDialog')).toBeHidden();
+  await page.locator('#productPhotoDialog [name=menu_photo]').setInputFiles({name:'cafe.png',mimeType:'image/png',buffer:Buffer.from(photo)});
+  await expect(page.locator('[data-menu-photo-status]')).toContainText('Lista');
+  await page.locator('#productPhotoDialog [type=submit]').click();await expect(page.locator('#productPhotoDialog')).toBeHidden();
   await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending)).toBe(0);
   expect(server.state.docs.menu_items[0].image_url).toMatch(/^data:image\/webp;base64,/);
   expect(Buffer.from(server.state.docs.menu_items[0].image_url.split(',')[1],'base64').length).toBeLessThanOrEqual(80*1024);
@@ -42,9 +42,9 @@ for(const slug of ['cocteleria','cafeteria'])test(slug+': catálogo con fotos, c
 
 test('una foto inválida conserva la anterior y permite retirarla sin cambiar existencias',async({page})=>{
   const server=await backend(page);server.state.docs.menu_items[0].image_url='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
-  await ready(page);await page.locator('.admin-sidebar [href="#inventory"]').click();await page.locator('[data-edit-inventory]').first().click();
-  await page.locator('[name=product_photo]').setInputFiles({name:'foto.webp',mimeType:'image/webp',buffer:Buffer.from('invalid')});await expect(page.locator('[data-product-photo-status]')).toContainText('No pudimos leer');await expect(page.locator('[data-product-photo-preview] img')).toBeVisible();
-  await page.locator('[data-remove-product-photo]').click();await page.locator('#inventoryForm [type=submit]').click();await expect(page.locator('#inventoryDialog')).toBeHidden();await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending)).toBe(0);expect(server.state.docs.menu_items[0].image_url).toBe('');expect(server.state.stock[product].stock).toBe(5000);
+  await ready(page);await page.locator('.admin-sidebar [href="#inventory"]').click();await page.locator('[data-menu-photo]').first().click();
+  await page.locator('#productPhotoDialog [name=menu_photo]').setInputFiles({name:'foto.webp',mimeType:'image/webp',buffer:Buffer.from('invalid')});await expect(page.locator('[data-menu-photo-status]')).toContainText('No pudimos leer');await expect(page.locator('[data-menu-photo-preview] img')).toBeVisible();
+  await page.locator('[data-photo-remove]').click();await page.locator('#productPhotoDialog [type=submit]').click();await expect(page.locator('#productPhotoDialog')).toBeHidden();await expect.poll(()=>page.evaluate(()=>(window as any).AllianceOffline.status().pending)).toBe(0);expect(server.state.docs.menu_items[0].image_url).toBe('');expect(server.state.stock[product].stock).toBe(5000);
 });
 
 test('GCOBARF muestra fidelización por días y distingue compras de abonos',async({page})=>{

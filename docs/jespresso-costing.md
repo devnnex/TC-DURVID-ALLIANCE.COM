@@ -24,6 +24,8 @@ Las recetas siguen en el documento `costing`, con una extensión `recipe.sheet` 
 
 Cada receta mantiene su borrador, incluidos campos incompletos. Guardar confirma solamente la receta seleccionada y sus ingredientes: un producto nuevo sin terminar no impide guardar otra receta. Historial muestra los datos confirmados; abrir una receta retoma su borrador si existe. El borrador se escribe con una espera de 100 ms y se vacía también al hacer clic, salir o ocultar la página.
 
+En cafetería y coctelería, las recetas confirmadas se consultan en **Recetas del Excel → Recetas Guardadas**. La biblioteca alterna entre plantillas y recetas guardadas con una transición de cristal y desenfoque, respetando la preferencia de movimiento reducido. Incluye búsqueda, desglose, edición y eliminación; la lista inferior y el acceso separado a Historial se sustituyen por esta biblioteca. Los negocios que utilizan el panel genérico conservan sus accesos anteriores.
+
 El guardado usa la cola existente de IndexedDB, los identificadores de operación y la revisión del documento. La reconexión confirma las operaciones y descarga la versión del backend. Un conflicto no sobrescribe otra edición. Las claves del borrador se aíslan por negocio, sucursal y usuario. El inventario continúa usando el modal existente, con costo por porción y precio final completados.
 
 ## Archivos y comprobación

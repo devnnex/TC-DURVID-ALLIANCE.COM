@@ -4,6 +4,12 @@ En cafetería y coctelería, el desglose del abastecimiento automático forma pa
 
 Las medidas de masa y volumen aparecen junto al número disponible; «unidades» conserva su posición inferior. Nuevo insumo y Vaciar todos los insumos ocupan la parte superior de la macro. El inicio muestra el nombre configurado en Marca y Mesas queda inmediatamente antes de Usuarios, incluso después de incorporar las secciones dinámicas.
 
+En cafetería y coctelería, el desglose de ingredientes de Movimientos utiliza filas con nombre y cantidades legibles, dentro de un área desplazable. La miniatura del Menú Digital permite añadir, cambiar o retirar la foto en una ficha independiente; se conserva la optimización a 80 KB y guardar la foto actualiza únicamente la imagen. El editor habitual omite la antigua franja de foto y muestra sus indicadores con cifras más grandes.
+
+Al agregar desde costeo, el bloque verde reúne la cantidad de la receta, el precio, el stock mínimo y la foto. La cantidad indica si corresponde a preparaciones disponibles o a las que se completarán al guardar. Esta referencia alimenta la vista previa monetaria; no crea productos terminados ni descuenta ingredientes por consultar la ficha. El aviso de abastecimiento y su desglose quedan en el mismo bloque.
+
+Buscar insumo permite escribir o elegir una opción de la macro en un desplegable inferior. El filtrado utiliza los datos cargados, sin otra consulta al servidor, y conserva el texto al cerrar con Escape.
+
 ## Vaciar las cantidades
 
 Vaciar todos los insumos requiere conexión, permiso de inventario y rol de jefe o propietario de esa sucursal. El sistema pide escribir VACIAR y confirma la revisión consultada en el servidor. No se puede vaciar con consumos de recetas en cuentas abiertas, incluyendo preparaciones que ya descontaron los ingredientes. Tampoco se ofrece mientras hay cambios locales pendientes de enviar.

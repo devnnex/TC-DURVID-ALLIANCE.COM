@@ -4378,8 +4378,8 @@ const App = (() => {
     if (!form || !box) return;
     const cost = currencyInputNumber(form.cost_price);
     const sale = currencyInputNumber(form.sale_price);
-    const stock = Math.max(0, Number(form.stock.value || 0));
-    const inline=form.querySelector('[data-costing-inventory-note] input');if(inline&&document.activeElement!==inline)setCurrencyInputValue(inline,sale);
+    const stock = Math.max(0, Number.isFinite(form.costedCapacity)?form.costedCapacity:Number(form.stock.value || 0));
+    const inline=form.querySelector('[data-costing-inventory-note] .costing-price-inline input');if(inline&&document.activeElement!==inline)setCurrencyInputValue(inline,sale);
     const finalCost=Number.isFinite(form.finalProductionCost)?form.finalProductionCost:cost;
     const profit = sale - finalCost;
     const margin = sale > 0 ? (profit / sale) * 100 : 0;
@@ -4436,7 +4436,7 @@ const App = (() => {
           return `
             <article class="inventory-row inventory-${status}">
               <div class="inventory-product-identity">
-                <span class="inventory-code${item.image_url?' has-product-photo':''}">${item.image_url?`<img src="${escapeHTML(item.image_url)}" alt="" loading="lazy" decoding="async" width="40" height="40">`:''}${escapeHTML(inventory.code)}</span>
+                ${['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug)?`<button type="button" class="menu-product-photo${item.image_url?' has-photo':''}" data-menu-photo="${escapeHTML(item.id)}" aria-label="${item.image_url?'Cambiar':'Añadir'} foto de ${escapeHTML(item.name)}" ${OracleDb.permission('products.write')?'':'disabled'}>${item.image_url?`<img src="${escapeHTML(item.image_url)}" alt="" loading="lazy" decoding="async" width="56" height="56">`:icon('image-plus',23)+'<span>Foto</span>'}</button>`:`<span class="inventory-code${item.image_url?' has-product-photo':''}">${item.image_url?`<img src="${escapeHTML(item.image_url)}" alt="" loading="lazy" decoding="async" width="40" height="40">`:''}${escapeHTML(inventory.code)}</span>`}
                 <div><strong>${escapeHTML(item.name)}</strong><small>${escapeHTML(item.menu_categories?.name || "Sin categoria")} · ${escapeHTML(inventory.unit)}</small></div>${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?`<button type="button" class="menu-availability-switch" role="switch" aria-checked="${item.is_available!==false}" aria-label="Ofrecer ${escapeHTML(item.name)} en el menú" data-menu-availability="${escapeHTML(item.id)}" ${OracleDb.permission("products.write")?"":"disabled"}><span aria-hidden="true"></span><small>${item.is_available!==false?"Activo":"Suspendido"}</small></button>`:""}
               </div>
               <div class="inventory-stock-block">
@@ -4747,7 +4747,7 @@ const App = (() => {
       const deliveryState=window.BRANCH_CONFIG?.slug==="gcobarf"?AllianceCustomerLedger.movement(ledgerData,movement):null;
       const ingredients=Array.isArray(movement.ingredients)?movement.ingredients:[];
       const capacityRecord=movement.stockBasis==='capacity';
-      const breakdown=ingredients.length?`<details class="movement-breakdown"><summary>Ver desglose de insumos · ${ingredients.length}</summary><div class="movement-breakdown-list">${ingredients.map(ingredient=>`<div><strong>${escapeHTML(ingredient.name||'Insumo')}</strong><span>${capacityRecord?'Disponible: ':delta<0?'−':'+'}${Number(capacityRecord?ingredient.available:ingredient.quantity||0).toLocaleString('es-CO',{maximumFractionDigits:3})} ${escapeHTML(['u','unit'].includes(ingredient.unit)?'unidades':ingredient.unit||'')}${capacityRecord?` · ${Number(ingredient.perPreparation||0).toLocaleString('es-CO',{maximumFractionDigits:3})} por preparación`:''}</span></div>`).join('')}</div></details>`:'';
+      const breakdown=ingredients.length?`<details class="movement-breakdown${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?' movement-ingredients-breakdown':''}" data-disclosure-key="movement-ingredients:${escapeHTML(movement.movementId)}"><summary>Ver desglose de insumos · ${ingredients.length}</summary><div class="movement-breakdown-list">${ingredients.map(ingredient=>`<div><strong>${escapeHTML(ingredient.name||'Insumo')}</strong><span>${capacityRecord?'Disponible: ':delta<0?'−':'+'}${Number(capacityRecord?ingredient.available:ingredient.quantity||0).toLocaleString('es-CO',{maximumFractionDigits:3})} ${escapeHTML(['u','unit'].includes(ingredient.unit)?'unidades':ingredient.unit||'')}${capacityRecord?` · ${Number(ingredient.perPreparation||0).toLocaleString('es-CO',{maximumFractionDigits:3})} por preparación`:''}</span></div>`).join('')}</div></details>`:'';
       return `<article class="movement-row ${kind}" data-movement-id="${escapeHTML(movement.movementId)}" data-movement-state="${deliveryState?.state||''}"><span class="movement-direction">${icon(kind === "entry" ? "arrow-down-left" : "arrow-up-right", 20)}</span><div class="movement-product"><strong>${escapeHTML(movement.product || "Producto")}</strong><small>${escapeHTML(movement.code || "")}${movement.reference ? ` · ${escapeHTML(deliveryState?.state==='sold'?'Venta a '+(movement.customerName||'cliente'):movement.reference)}` : ""}</small></div><div><small>Movimiento</small><strong>${escapeHTML(deliveryState?.label||({SALIDA_VENTA_RECETA:"SALIDA POR VENTA",DEVOLUCION_VENTA_RECETA:"DEVOLUCIÓN DE VENTA",...(window.BRANCH_CONFIG?.slug==="gcobarf"?{CONSUMO_MESA:"Apartado",DEVOLUCION_CONSUMO:"Devuelto"}:{})})[movement.type]||String(movement.type||(kind==="entry"?"ENTRADA":"SALIDA")).replaceAll("_"," "))}</strong>${deliveryState?`<span class="movement-payment-state is-${deliveryState.state}">${escapeHTML(deliveryState.paymentLabel)}</span>`:""}</div><div><small>${capacityRecord?'Capacidad al registrar':'Existencia'}</small><strong>${capacityRecord?`${Number(movement.capacityBefore||0).toLocaleString('es-CO')} → ${Number(movement.capacityAfter||0).toLocaleString('es-CO')}`:movement.stockBasis==='recipe'?'Según insumos':`${Number(movement.before || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })} → ${Number(movement.after || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })}`}</strong></div><strong class="movement-delta">${capacityRecord?Number(movement.capacityAfter||0).toLocaleString('es-CO'):(delta > 0 ? "+" : "")+delta.toLocaleString("es-CO", { maximumFractionDigits: 2 })}${capacityRecord?'<small>preparables</small>':''}</strong><div class="movement-audit"><strong>${escapeHTML(movement.user || "Sistema")}</strong><small>${escapeHTML(AllianceCustomerLedger.prettyMoment(movement.date))}</small></div>${movementCustomerMarkup(movement,deliveryState)}${breakdown}</article>`;
     }).join("") : appendOnly ? "" : emptyState("Sin movimientos", query ? "No hay coincidencias para este filtro." : "Las entradas y salidas apareceran aqui con su responsable.", "arrow-left-right");
     if (appendOnly) list.insertAdjacentHTML("beforeend", movementMarkup);
@@ -4841,6 +4841,7 @@ const App = (() => {
     const form = $("#inventoryForm");
     if (!form) return;
     window.MaterialsPanel?.resetInventory(form);
+    delete form.costedCapacity;
     if (costingInventoryLayout) {
       const grid = form.querySelector('.inventory-form');
       costingInventoryLayout.forEach(node => grid.append(node));
@@ -4888,6 +4889,7 @@ const App = (() => {
       form.category_id.add(new Option(assignedCategory.name || "Categoría actual", assignedCategory.id));
     }
     form.category_id.value = item.category_id || "";
+    form.category_id.allianceSearchSync?.();
     form.new_category.value = "";
     form.finalProductionCost=inventory.finalProductionCost;
     setCurrencyInputValue(form.cost_price, inventory.costPrice);
@@ -4959,11 +4961,14 @@ const App = (() => {
     }
     const assignment = categoryForCostedProduct(draft, existing);
     form.category_id.value = assignment.category?.id || '';
+    form.category_id.allianceSearchSync?.();
     form.new_category.value = assignment.category ? '' : assignment.name;
     form.finalProductionCost=draft.finalProductionCost;
     setCurrencyInputValue(form.cost_price, draft.cost);
     setCurrencyInputValue(form.sale_price, draft.price);
     const fromIngredients = recipeInventory() && !!draft.recipeId && !!window.MaterialsPanel;
+    const compactCosted=['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug);
+    if(compactCosted&&fromIngredients)form.costedCapacity=Math.max(0,Number(draft.recipeOutput)||0);
     const fromProduction = window.BRANCH_CONFIG?.slug==='gcobarf' && Number.isFinite(draft.productionOutput);
     form.stock.readOnly=false;form.stock.required = !fromIngredients;
     form.stock.disabled = fromIngredients;
@@ -4996,6 +5001,7 @@ const App = (() => {
       if(label==='Precio de venta'){dd.innerHTML='<span class="costing-price-inline"><input aria-label="Precio de venta desde costeo" type="text" inputmode="numeric" data-currency-input value="'+escapeHTML(AllianceMoney.format(draft.price))+'"><button type="button" class="icon-btn" aria-label="Editar precio de venta">'+icon('pencil',16)+'</button></span>';const quick=dd.querySelector('input');setCurrencyInputValue(quick,draft.price);quick.addEventListener('input',()=>{AllianceMoney.edit(quick);setCurrencyInputValue(form.sale_price,currencyInputNumber(quick));renderInventoryLiveCalculation();});dd.querySelector('button').onclick=()=>{quick.focus();quick.select();};}
       else dd.textContent=value;row.append(dt,dd);summary.append(row);
     }
+    if(compactCosted&&fromIngredients){const row=document.createElement('div');row.className='costing-current-stock';row.innerHTML='<dt>Existencia actual</dt><dd data-costing-capacity>'+Number(form.costedCapacity).toLocaleString('es-CO')+'</dd><small data-costing-capacity-caption>Cantidad de la receta</small>';summary.append(row);}
     note.append(title, detail, summary);
     const grid = form.querySelector('.inventory-form');
     costingInventoryLayout = [...grid.children];
@@ -5009,13 +5015,14 @@ const App = (() => {
     for (const child of costingInventoryLayout) {
       if (child.matches('label') && !child.contains(form.stock) && !child.contains(form.min_stock) || child.matches('datalist,.inventory-availability')) fields.append(child);
     }
+    if(compactCosted){const controls=document.createElement('div');controls.className='inventory-costing-controls';controls.append(form.min_stock.closest('label'));const photo=grid.querySelector('.inventory-photo-field');if(photo)controls.append(photo);note.append(controls);}
     details.append(toggle, fields, explanation);
     grid.prepend(note);
     $('#inventoryLiveCalculation').before(details);
     $('#inventoryFormTitle').textContent = existing ? 'Actualizar desde costeo' : 'Agregar desde costeo';
     renderInventoryLiveCalculation();
     if (!$('#inventoryDialog').open) $('#inventoryDialog').showModal();
-    requestAnimationFrame(() => (fromIngredients ? form.min_stock : form.stock).focus({ preventScroll: true }));
+    requestAnimationFrame(() => {const target=compactCosted&&fromIngredients?$('#inventoryFormTitle'):fromIngredients?form.min_stock:form.stock;if(compactCosted&&fromIngredients){target.tabIndex=-1;grid.scrollTop=0;}target.focus({preventScroll:true});});
   };
 
   const saveInventoryProduct = async (form) => {
@@ -5027,7 +5034,7 @@ const App = (() => {
     const name = form.product_name.value.trim();
     const costPrice = currencyInputNumber(form.cost_price);
     const salePrice = currencyInputNumber(form.sale_price);
-    const stock = form.materialCapacity?inventoryFor(state.items.find(i=>i.id===form.product_id.value)).stock:Number(form.stock.value || 0);
+    const stock = form.materialCapacity||form.materialScope&&!form.materialScope.production&&['cafeteria','cocteleria'].includes(window.BRANCH_CONFIG?.slug)?inventoryFor(state.items.find(i=>i.id===form.product_id.value)).stock:Number(form.stock.value || 0);
     const minStock = Number(form.min_stock.value || 0);
     if (!name || ![costPrice, salePrice, stock, minStock].every(Number.isFinite) || [costPrice, salePrice, stock, minStock].some((value) => value < 0)) {
       toast("Revisa nombre, precios y existencias antes de guardar.", "error", "invalid-inventory-product");
@@ -9349,6 +9356,7 @@ const App = (() => {
       if (target.dataset.editCategory) editCategory(target.dataset.editCategory);
       if (target.dataset.editItem) editItem(target.dataset.editItem);
       if(target.dataset.menuAvailability){const item=state.items.find(p=>p.id===target.dataset.menuAvailability);if(!item||!OracleDb.permission('products.write'))return;const next=item.is_available===false;target.disabled=true;target.setAttribute('aria-busy','true');const saved=await db(state.sb.from('menu_items').update({is_available:next}).eq('id',item.id).select('*').single(),null);if(saved){Object.assign(item,saved);persistBootstrapCache();renderInventory();renderAdminLive();toast(next?'Producto activo en el menú.':'Producto suspendido temporalmente.','ok','menu-availability');}else{target.disabled=false;target.removeAttribute('aria-busy');}return;}
+      if(target.dataset.menuPhoto){const item=state.items.find(row=>row.id===target.dataset.menuPhoto);if(!item||!OracleDb.permission('products.write'))return;const actor=state.currentUser?.id;AllianceProductPhotos.open({name:item.name,imageUrl:item.image_url||'',save:async image=>{if(actor!==state.currentUser?.id||!OracleDb.permission('products.write'))throw Error('La sesión cambió. Abre de nuevo la foto desde el Menú Digital.');const saved=await db(state.sb.from('menu_items').update({image_url:image}).eq('id',item.id).select('*').single(),null);if(!saved)throw Error('No se pudo guardar la foto. Intenta nuevamente.');const current=state.items.find(row=>row.id===item.id);if(current)current.image_url=saved.image_url;persistBootstrapCache();renderInventory();renderMenuManager();toast(image?'Foto del producto actualizada.':'Foto retirada del producto.','ok');}});return;}
       if (target.dataset.editInventory) editInventoryProduct(target.dataset.editInventory);
       if (target.dataset.inventoryAdjust) openInventoryAdjustment(target.dataset.inventoryAdjust);
       if (target.dataset.editUser) editUser(target.dataset.editUser);
