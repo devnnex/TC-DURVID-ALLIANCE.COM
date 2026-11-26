@@ -4415,7 +4415,7 @@ const App = (() => {
     const summary = inventorySummary();
     metrics.innerHTML = `
       <article><span>${icon("package-check", 19)} ${recipeInventory()?'Capacidad de preparación':'Unidades'}</span><strong>${summary.units.toLocaleString("es-CO", { maximumFractionDigits: 2 })}</strong><small>${recipeInventory()?'Potencial por receta; los insumos se comparten':'Existencia total registrada'}</small></article>
-      <article><span>${icon("circle-dollar-sign", 19)} ${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Costo de productos":"Inversion"}</span><strong>${summary.costsVisible===false?"Reservado":money(summary.costValue)}</strong><small>${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Capacidad disponible × costo unitario":"Inventario registrado"}</small></article>
+      <article><span>${icon("circle-dollar-sign", 19)} ${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Costo de productos":"Inversion"}</span><strong>${summary.costsVisible===false?"Reservado":money(summary.costValue)}</strong><small>${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Lo que cuesta preparar los productos disponibles aquí":"Inventario registrado"}</small></article>
       <article><span>${icon("trending-up", 19)} Venta potencial</span><strong>${money(summary.saleValue)}</strong><small>${["cafeteria","cocteleria"].includes(window.BRANCH_CONFIG?.slug)?"Por receta; comparten insumos":"Estimado al vender todo"}</small></article>
       <article class="${summary.low || summary.out ? "inventory-alert-metric" : ""}"><span>${icon("triangle-alert", 19)} Alertas</span><strong>${summary.low + summary.out}</strong><small>${summary.out} agotados · ${summary.low} por reponer</small></article>`;
 

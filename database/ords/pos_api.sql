@@ -60,7 +60,9 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     END;
   BEGIN
     is_boss:=ctx.get_boolean('is_owner');roles_value:=ctx.get_object('roles').get_array(l);IF roles_value IS NOT NULL THEN FOR i IN 0..roles_value.get_size-1 LOOP IF roles_value.get_string(i)='BOSS' THEN is_boss:=TRUE;END IF;END LOOP;END IF;
-    IF a='query' THEN
+    IF a IN('ingredient_transfer_send','ingredient_transfer_accept','ingredient_transfer_reject') THEN
+      IF alliance_transfers.eligible(u,b,l)<>1 THEN alliance_security.fail(403,'FORBIDDEN','Solo los jefes con permiso de inventario pueden enviar o recibir insumos.');END IF;
+    ELSIF a='query' THEN
       entity_value:=p.get_string('table');operation_value:=p.get_string('op');needed:=CASE entity_value WHEN 'business_settings' THEN 'brand.manage' WHEN 'restaurant_tables' THEN 'tables.manage' WHEN 'menu_categories' THEN 'products.write' WHEN 'menu_items' THEN 'products.write' ELSE 'service.write' END;need(needed);IF operation_value='delete' THEN boss;ELSIF p.has('values') THEN IF p.get('values').is_array THEN patches:=p.get_array('values');FOR i IN 0..patches.get_size-1 LOOP guard_patch(TREAT(patches.get(i) AS JSON_OBJECT_T));END LOOP;ELSE guard_patch(p.get_object('values'));END IF;END IF;
     ELSIF a IN('tips_distribute','tips_void') THEN need('sales.read');need('sales.write');IF a='tips_void' THEN boss;END IF;
     ELSIF a='operations_apply' THEN
@@ -90,11 +92,12 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     IF action_value='bootstrap' THEN
       initialize(p_business,p_location);r.put('business',alliance_pos_store.document(p_business,p_location,'business_settings','primary'));r.put('tables',alliance_pos_store.list_documents(p_business,p_location,'restaurant_tables'));r.put('categories',alliance_pos_store.list_documents(p_business,p_location,'menu_categories'));r.put('items',alliance_pos_store.list_documents(p_business,p_location,'menu_items'));arr:=JSON_ARRAY_T();FOR x IN(SELECT id FROM alliance_pos_documents WHERE business_id=p_business AND location_id=p_location AND entity='op_recipes') LOOP arr.append(x.id);END LOOP;r.put('preparedProductIds',arr);r.put('value',JSON_OBJECT_T(r.to_clob));RETURN r;
     END IF;
-    is_write:=action_value NOT IN('getAdminSnapshot','query','get_inventory','get_inventory_movements','get_income_report','status','remote_bootstrap','listChatMessages','getClientSnapshot','getEvents','costing_load','costing_product_load','operations_snapshot','operations_device','orders_revision','customer_history','stock_alert_feed','materials_ledger','tips_snapshot','tips_source');
+    is_write:=action_value NOT IN('getAdminSnapshot','query','get_inventory','get_inventory_movements','get_income_report','status','remote_bootstrap','listChatMessages','getClientSnapshot','getEvents','costing_load','costing_product_load','operations_snapshot','operations_device','orders_revision','customer_history','stock_alert_feed','ingredient_transfer_feed','materials_ledger','tips_snapshot','tips_source');
     IF action_value='query' THEN is_write:=payload.get_string('op')<>'select';END IF;
     IF is_write THEN
       grants_hash:=alliance_security.hash_text(q.get_array(p_location).to_string||CASE WHEN alliance_material_ledger.allowed(p_user,p_business,p_location) THEN ':private-costs' ELSE ':standard' END);
       authorize_write(p_user,p_business,p_location,action_value,payload,value_json);
+      IF action_value IN('ingredient_transfer_send','ingredient_transfer_accept','ingredient_transfer_reject') AND job_id IS NULL THEN alliance_security.fail(400,'INVALID_INPUT','Falta el identificador del envío. Vuelve a intentar.');END IF;
       alliance_pos_store.lock_scope(p_business,p_location);
       IF job_id IS NOT NULL THEN
         IF LENGTH(job_id)>160 THEN alliance_security.fail(400,'INVALID_INPUT','Operacion invalida.');END IF;
@@ -107,6 +110,7 @@ CREATE OR REPLACE PACKAGE BODY alliance_pos AS
     END IF;
     IF action_value IN('tips_snapshot','tips_source','tips_distribute','tips_void') THEN r.put('value',alliance_tips.run_action(p_user,p_business,p_location,action_value,payload));
     ELSIF action_value='materials_ledger' THEN r.put('value',alliance_material_ledger.report(p_user,p_business,p_location,payload));
+    ELSIF action_value IN('ingredient_transfer_feed','ingredient_transfer_send','ingredient_transfer_accept','ingredient_transfer_reject') THEN r.put('value',alliance_transfers.run_action(p_user,p_business,p_location,action_value,payload));
     ELSIF action_value IN('stock_alert_feed','stock_alert_subscribe','stock_alert_unsubscribe') THEN r.put('value',alliance_stock_notifications.run_action(p_user,p_business,p_location,action_value,payload));
     ELSIF action_value IN('operations_snapshot','operations_apply','operations_device','customer_history') THEN r.put('value',alliance_operations_commands.run_action(p_user,p_business,p_location,action_value,payload));
     ELSIF action_value IN('orders_revision','order_submit','order_accept','order_reject','order_cancel') THEN r.put('value',alliance_orders.run_action(p_user,p_business,p_location,action_value,payload));

@@ -37,7 +37,8 @@
     "notifications:configure": "tsx scripts/configure-stock-notifications.ts",
     "notifications:worker": "tsx scripts/stock-notification-worker.ts",
     "notifications:once": "tsx scripts/stock-notification-worker.ts --once",
-    "notifications:test:live": "tsx scripts/test-stock-notifications-live.ts"
+    "notifications:test:live": "tsx scripts/test-stock-notifications-live.ts",
+    "transfers:test:live": "tsx scripts/test-ingredient-transfers-live.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",

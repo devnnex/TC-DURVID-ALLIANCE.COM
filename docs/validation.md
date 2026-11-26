@@ -215,3 +215,11 @@ Guía y límites del registro: [Clientes y propinas](tips-and-client-access.md).
 - El despachador privado de eventos usa una conexión HTTPS limitada a GitHub en el puerto 443 y un trabajo de Oracle separado de las solicitudes del usuario. Se verificó la conectividad y se conserva el envío periódico de respaldo y los recordatorios de Bogotá. No se publican credenciales en el frontend ni en los archivos del repositorio.
 
 Guía de funcionamiento: [Costeo, macro y menú](costing-menu-refinements.md).
+
+## Estadísticas, contactos y envíos de sobrantes · 26 de noviembre de 2026
+
+- 433 pruebas unitarias aprobadas. Se verificaron el destinatario del aviso de recepción, la exclusión de envíos resueltos y la entrega de accesos sin repetir recordatorios.
+- 31 escenarios de navegador aprobados entre estadísticas, contactos, envíos y notificaciones: listado sin scroll interior ni solapamientos, móvil hasta 320 px, movimiento reducido, conservación del borrador, aceptación, respuesta perdida, actualización por push, separación de pestañas y permisos.
+- 53 comprobaciones mediante RPC real en negocios aislados: envío independiente del inventario emisor, aceptación simultánea sin duplicados, costo opcional, promedio ponderado e historial contable, rechazo, caducidad, paginación semanal, destinatario y tenant, revocación de permisos, contactos y avisos por cada acceso de un no jefe. Se retiraron los negocios temporales.
+- Migración y paquetes instalados en Oracle, sin errores de compilación. Retención horaria habilitada; borrar el historial del envío conserva el insumo recibido y sus movimientos. El instalador reproducible incluye la migración y el nuevo paquete.
+- Compilación de producción y TypeScript aprobados. Los avisos se registran con la operación y se procesan fuera de su solicitud; la entrega push conserva las dependencias de conectividad, proveedor y cola del remitente.
